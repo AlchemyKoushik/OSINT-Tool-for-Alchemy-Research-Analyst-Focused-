@@ -18,7 +18,7 @@ const html = htm.bind(React.createElement);
 const API_URL =
   typeof window !== "undefined" && typeof window.OSINT_API_URL === "string" && window.OSINT_API_URL.trim()
     ? window.OSINT_API_URL.trim().replace(/\/+$/, "")
-    : "http://127.0.0.1:8000";
+    : "https://osint-tool-for-alchemy-research-analyst.onrender.com/";
 const STATIC_ASSET_VERSION =
   typeof window !== "undefined" && typeof window.__STATIC_ASSET_VERSION__ === "string"
     ? window.__STATIC_ASSET_VERSION__
