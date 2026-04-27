@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/ui/pencil-loader.css" />
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #27433c;
+    }
+
+    .pencil {
+      display: block;
+      width: 10em;
+      height: 10em;
+    }
+  </style>
+</head>
+<body>
+  <svg
+    class="pencil"
+    viewBox="-28 0 228 200"
+    preserveAspectRatio="xMidYMid meet"
+    width="200px"
+    height="200px"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <defs>
+      <clipPath id="pencil-eraser">
+        <rect rx="5" ry="5" width="30" height="30"></rect>
+      </clipPath>
+    </defs>
+
+    <g>
+      <circle
+        id="pencil-stroke"
+        r="70"
+        cx="60"
+        cy="100"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-dasharray="439.82 439.82"
+        stroke-dashoffset="439.82"
+        stroke-linecap="round"
+      ></circle>
+
+      <g id="pencil-root" transform="translate(60,100)">
+        <g fill="none">
+          <circle
+            id="pencil-body1"
+            r="64"
+            cx="0"
+            cy="0"
+            stroke="hsl(30, 30%, 50%)"
+            stroke-width="30"
+            stroke-dasharray="402.12 402.12"
+            stroke-dashoffset="351.86"
+          ></circle>
+          <circle
+            id="pencil-body2"
+            r="74"
+            cx="0"
+            cy="0"
+            stroke="hsl(30, 30%, 60%)"
+            stroke-width="10"
+            stroke-dasharray="464.96 464.96"
+            stroke-dashoffset="406.84"
+          ></circle>
+          <circle
+            id="pencil-body3"
+            r="54"
+            cx="0"
+            cy="0"
+            stroke="hsl(30, 30%, 40%)"
+            stroke-width="10"
+            stroke-dasharray="339.29 339.29"
+            stroke-dashoffset="296.88"
+          ></circle>
+        </g>
+
+        <g id="pencil-eraser-wrap">
+          <g transform="translate(49,0)">
+            <g id="pencil-eraser-skew">
+              <rect
+                fill="hsl(30, 20%, 90%)"
+                rx="5"
+                ry="5"
+                width="30"
+                height="30"
+              ></rect>
+              <rect
+                fill="hsl(30, 20%, 85%)"
+                width="5"
+                height="30"
+                clip-path="url(#pencil-eraser)"
+              ></rect>
+              <rect fill="hsl(30, 20%, 80%)" width="30" height="20"></rect>
+              <rect fill="hsl(30, 20%, 75%)" width="15" height="20"></rect>
+              <rect fill="hsl(30, 20%, 85%)" width="5" height="20"></rect>
+              <rect fill="hsla(30, 20%, 75%, 0.2)" y="6" width="30" height="2"></rect>
+              <rect fill="hsla(30, 20%, 75%, 0.2)" y="13" width="30" height="2"></rect>
+            </g>
+          </g>
+        </g>
+
+        <g id="pencil-point-wrap">
+          <g transform="translate(49,-30)">
+            <polygon fill="hsl(33,90%,70%)" points="15 0,30 30,0 30"></polygon>
+            <polygon fill="hsl(33,90%,50%)" points="15 0,6 30,0 30"></polygon>
+            <polygon fill="hsl(223,10%,10%)" points="15 0,20 10,10 10"></polygon>
+          </g>
+        </g>
+      </g>
+    </g>
+  </svg>
+
+  <script>
+    const CENTER_X = 60;
+    const CENTER_Y = 100;
+    const DURATION = 3000;
+    const START_OFFSET = 900;
+    const stroke = document.getElementById("pencil-stroke");
+    const root = document.getElementById("pencil-root");
+    const body1 = document.getElementById("pencil-body1");
+    const body2 = document.getElementById("pencil-body2");
+    const body3 = document.getElementById("pencil-body3");
+    const eraserWrap = document.getElementById("pencil-eraser-wrap");
+    const eraserSkew = document.getElementById("pencil-eraser-skew");
+    const pointWrap = document.getElementById("pencil-point-wrap");
+
+    function lerp(start, end, amount) {
+      return start + (end - start) * amount;
+    }
+
+    function between(progress, start, end, fromValue, toValue) {
+      if (progress <= start) {
+        return fromValue;
+      }
+      if (progress >= end) {
+        return toValue;
+      }
+      return lerp(fromValue, toValue, (progress - start) / (end - start));
+    }
+
+    const skewStops = [
+      [0, 0],
+      [0.325, 0],
+      [0.35, -4],
+      [0.375, 8],
+      [0.4, -15],
+      [0.425, 15],
+      [0.45, -15],
+      [0.475, 15],
+      [0.5, -15],
+      [0.525, 15],
+      [0.55, -15],
+      [0.575, 15],
+      [0.6, -15],
+      [0.625, 8],
+      [0.65, -4],
+      [0.675, 0],
+      [1, 0],
+    ];
+
+    function valueFromStops(progress, stops) {
+      for (let index = 1; index < stops.length; index += 1) {
+        const [endTime, endValue] = stops[index];
+        if (progress <= endTime) {
+          const [startTime, startValue] = stops[index - 1];
+          return between(progress, startTime, endTime, startValue, endValue);
+        }
+      }
+      return stops[stops.length - 1][1];
+    }
+
+    function bodyAngle(progress) {
+      return progress < 0.5
+        ? between(progress, 0, 0.5, -90, -225)
+        : between(progress, 0.5, 1, -225, -90);
+    }
+
+    function bodyDash(progress, startValue, midpointValue) {
+      return progress < 0.5
+        ? between(progress, 0, 0.5, startValue, midpointValue)
+        : between(progress, 0.5, 1, midpointValue, startValue);
+    }
+
+    function strokeAngle(progress) {
+      if (progress < 0.5) {
+        return -113;
+      }
+      if (progress < 0.75) {
+        return between(progress, 0.5, 0.75, -113, 112);
+      }
+      return 112;
+    }
+
+    function strokeDash(progress) {
+      if (progress < 0.5) {
+        return between(progress, 0, 0.5, 439.82, 164.93);
+      }
+      if (progress < 0.75) {
+        return between(progress, 0.5, 0.75, 164.93, 439.82);
+      }
+      return 439.82;
+    }
+
+    function eraserAngle(progress) {
+      return progress < 0.5
+        ? between(progress, 0, 0.5, -45, 0)
+        : between(progress, 0.5, 1, 0, -45);
+    }
+
+    function renderFrame(now) {
+      const progress = (((now + START_OFFSET) % DURATION) + DURATION) % DURATION / DURATION;
+      const pencilRotation = lerp(0, 720, progress);
+      const ringAngle = bodyAngle(progress);
+      const pointAngle = bodyAngle(progress);
+
+      root.setAttribute("transform", `translate(${CENTER_X} ${CENTER_Y}) rotate(${pencilRotation})`);
+
+      body1.setAttribute("transform", `rotate(${ringAngle} 0 0)`);
+      body2.setAttribute("transform", `rotate(${ringAngle} 0 0)`);
+      body3.setAttribute("transform", `rotate(${ringAngle} 0 0)`);
+
+      body1.setAttribute("stroke-dashoffset", String(bodyDash(progress, 351.86, 150.8)));
+      body2.setAttribute("stroke-dashoffset", String(bodyDash(progress, 406.84, 174.36)));
+      body3.setAttribute("stroke-dashoffset", String(bodyDash(progress, 296.88, 127.23)));
+
+      stroke.setAttribute("transform", `rotate(${strokeAngle(progress)} ${CENTER_X} ${CENTER_Y})`);
+      stroke.setAttribute("stroke-dashoffset", String(strokeDash(progress)));
+
+      eraserWrap.setAttribute("transform", `rotate(${eraserAngle(progress)} 0 0)`);
+      eraserSkew.setAttribute("transform", `skewX(${valueFromStops(progress, skewStops)})`);
+
+      pointWrap.setAttribute("transform", `rotate(${pointAngle} 0 0)`);
+    }
+
+    renderFrame(0);
+
+    function tick(now) {
+      renderFrame(now);
+      window.requestAnimationFrame(tick);
+    }
+
+    window.requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
