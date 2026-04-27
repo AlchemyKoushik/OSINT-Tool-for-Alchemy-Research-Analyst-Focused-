@@ -36,7 +36,7 @@ A deployment-ready monorepo for an analyst-focused OSINT research workflow.
 
 ## Backend setup
 
-1. Create `backend/.env` from `backend/.env.example`.
+1. Create `backend/.env` with the required local secrets.
 2. Install dependencies:
 
 ```powershell
@@ -88,4 +88,3 @@ Before production deploy, replace the placeholder backend URL in `frontend/index
 ## Notes
 
 - `research_artifacts/`, `venv/`, local `.env` files, and generated cache files are intentionally excluded from git.
-- `backend/.env.example` is committed as the environment template.
