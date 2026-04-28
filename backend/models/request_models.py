@@ -14,6 +14,7 @@ class AnalyzeRequest(BaseModel):
     section: ResearchSection
     location_preference: LocationPreference = "global"
     location_value: str | None = None
+    session_id: str | None = None
     debug: bool = False
     queries: List[str] = []
     follow_up_mode: bool = False
@@ -32,6 +33,12 @@ class AnalyzeRequest(BaseModel):
     @field_validator("location_value")
     @classmethod
     def validate_location_value(cls, value: str | None) -> str | None:
+        normalized = str(value or "").strip()
+        return normalized or None
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, value: str | None) -> str | None:
         normalized = str(value or "").strip()
         return normalized or None
 
@@ -59,7 +66,8 @@ class AnalyzeRequest(BaseModel):
 
 class FollowUpRequest(BaseModel):
     follow_up_query: str
-    existing_chunks: List[Dict[str, Any]]
+    session_id: str | None = None
+    existing_chunks: List[Dict[str, Any]] = []
     metadata: Dict[str, Any] = {}
 
     model_config = ConfigDict(extra="forbid")
@@ -72,10 +80,17 @@ class FollowUpRequest(BaseModel):
             raise ValueError("follow_up_query is required.")
         return normalized
 
+    @field_validator("session_id")
+    @classmethod
+    def validate_follow_up_session_id(cls, value: str | None) -> str | None:
+        normalized = str(value or "").strip()
+        return normalized or None
+
 
 class AnalyzeExistingRequest(BaseModel):
     refined_query: str
-    existing_chunks: List[Dict[str, Any]]
+    session_id: str | None = None
+    existing_chunks: List[Dict[str, Any]] = []
     metadata: Dict[str, Any] = {}
 
     model_config = ConfigDict(extra="forbid")
@@ -87,4 +102,10 @@ class AnalyzeExistingRequest(BaseModel):
         if not normalized:
             raise ValueError("refined_query is required.")
         return normalized
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_existing_session_id(cls, value: str | None) -> str | None:
+        normalized = str(value or "").strip()
+        return normalized or None
 

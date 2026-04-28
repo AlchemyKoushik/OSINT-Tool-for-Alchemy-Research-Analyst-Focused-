@@ -1,12 +1,16 @@
 ﻿import logging
 import time
+import json
+import asyncio
 from typing import Any, Dict, List
 
 from services.content_processor import prepare_processed_content
 from services.location_service import LocationContext
+from services.redis_service import update_session
 from services.query_generator import generate_search_queries
 from services.scraper_service import collect_research_artifacts, load_saved_sources
 from services.search_service import search_queries
+from services.storage_service import upload_to_r2
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,7 @@ def _elapsed_ms(start_time: float) -> int:
 async def execute_pipeline(
     topic: str,
     section: str,
+    session_id: str,
     freshness: str = "high",
     location_context: LocationContext | None = None,
     provided_queries: List[str] | None = None,
@@ -93,6 +98,7 @@ async def execute_pipeline(
         artifact_bundle = await collect_research_artifacts(
             topic=topic,
             section=section,
+            session_id=session_id,
             location_context=resolved_location_context,
             search_results=search_results,
         )
@@ -103,13 +109,83 @@ async def execute_pipeline(
 
     process_start = time.perf_counter()
     try:
-        stored_sources = load_saved_sources(list(artifact_bundle.get("artifacts", [])))
+        stored_sources = await asyncio.to_thread(load_saved_sources, list(artifact_bundle.get("artifacts", [])))
+        scraped_results = list(stored_sources) if stored_sources else list(artifact_bundle.get("pages", []))
         if stored_sources:
             processed_payload = prepare_processed_content(
                 stored_sources,
             )
         else:
             _log("[PIPELINE] No stored sources passed content processing.")
+
+        cleaned_dump_payload = {
+            "existing_chunks": [
+                {
+                    "text": str(block.get("excerpt", "")).strip(),
+                    "source_id": str(block.get("source_id", "")).strip(),
+                    "source_title": str(block.get("title", "")).strip(),
+                    "source_url": str(block.get("url", "")).strip(),
+                    "source_domain": str(block.get("domain", "")).strip(),
+                    "source_date": str(block.get("date", "")).strip(),
+                }
+                for block in processed_payload.get("evidence_blocks", [])
+                if str(block.get("excerpt", "")).strip()
+            ],
+            "evidence_blocks": list(processed_payload.get("evidence_blocks", [])),
+            "selected_urls": list(processed_payload.get("selected_urls", [])),
+            "num_sources": int(processed_payload.get("num_sources", 0)),
+        }
+        cleaned_data = json.dumps(cleaned_dump_payload, indent=2) if cleaned_dump_payload["existing_chunks"] else ""
+
+        print("\n[DEBUG CLEANING]")
+        print("cleaned_data length:", len(cleaned_data) if cleaned_data else 0)
+
+        if not cleaned_data:
+            print("[WARNING] cleaned_data is empty -> using fallback")
+            try:
+                combined_text = ""
+                for item in scraped_results:
+                    if isinstance(item, dict):
+                        combined_text += str(item.get("content", "") or "") + "\n"
+
+                cleaned_data = combined_text[:50000]
+            except Exception as exc:
+                print("[ERROR] Fallback cleaning failed:", str(exc))
+                cleaned_data = "Fallback empty content"
+
+        if not cleaned_data:
+            print("[WARNING] Empty cleaned_data -> fallback applied")
+            cleaned_data = "No structured cleaned data available"
+
+        cleaned_key = await asyncio.to_thread(
+            upload_to_r2,
+            session_id,
+            "cleaned_dump.json",
+            cleaned_data,
+        )
+
+        if cleaned_key:
+            print("[SUCCESS] cleaned_dump.json uploaded:", cleaned_key)
+            update_session(session_id, {"cleaned_dump_key": cleaned_key})
+        else:
+            print("[ERROR] Failed to upload cleaned_dump.json")
+
+        update_session(
+            session_id,
+            {
+                "query": topic,
+                "queries_generated": queries,
+                "sources": list(processed_payload.get("selected_urls", [])),
+                "cleaned_dump_key": cleaned_key,
+                "artifacts": [
+                    str(artifact.get("text_key") or artifact.get("binary_key") or artifact.get("text_path") or "").strip()
+                    for artifact in artifact_bundle.get("artifacts", [])
+                    if str(artifact.get("text_key") or artifact.get("binary_key") or artifact.get("text_path") or "").strip()
+                ],
+            },
+        )
+        print("[DEBUG] Session updated with cleaned_dump_key")
+        processed_payload["cleaned_dump_key"] = cleaned_key
     except Exception as exc:
         logger.exception("Pipeline processing failed for topic %s section %s", topic, section)
         _log(f"[PIPELINE] Processing failed | error={exc}")

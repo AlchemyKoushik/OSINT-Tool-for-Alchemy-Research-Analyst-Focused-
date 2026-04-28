@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     OPENAI_TEST_MODEL: str = "gpt-4o-mini"
     SERPAPI_KEY: str = ""
     SCRAPEDO_KEY: str = ""
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CLOUDFLARE_R2_ACCOUNT_ID: str = ""
+    CLOUDFLARE_R2_ACCESS_KEY_ID: str = ""
+    CLOUDFLARE_R2_SECRET_ACCESS_KEY: str = ""
+    CLOUDFLARE_R2_BUCKET_NAME: str = ""
+    CLOUDFLARE_R2_REGION: str = "auto"
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE if ENV_FILE.exists() else ENV_EXAMPLE_FILE),

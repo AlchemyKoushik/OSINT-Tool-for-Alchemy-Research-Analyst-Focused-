@@ -1,4 +1,5 @@
 ﻿import logging
+import json
 from typing import Any, Dict, List, Optional
 
 from models.response_models import AnalyzeResponse
@@ -6,8 +7,10 @@ from services.fallback_analysis import build_fallback_section_analysis
 from services.location_service import LocationContext, resolve_location_context
 from services.openai_service import generate_section_analysis
 from services.prompt_builder import build_metadata_payload, get_prompt
+from services.redis_service import get_session
 from services.ranking_service import rank_and_limit_insights
 from services.source_attribution_service import attach_sources_to_items
+from services.storage_service import read_from_r2
 
 logger = logging.getLogger(__name__)
 FOLLOW_UP_INSIGHT_LIMIT = 5
@@ -65,21 +68,69 @@ def _build_source_scores(existing_chunks: List[Dict[str, Any]]) -> List[Dict[str
     return source_scores
 
 
+def _validate_research_items(items: Any) -> List[Dict[str, Any]]:
+    if not isinstance(items, list):
+        return []
+
+    valid_items: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        heading = _normalize_text(item.get("heading") or item.get("title"))
+        body = _normalize_text(item.get("body") or item.get("description"))
+        if not heading or not body:
+            continue
+
+        valid_items.append(
+            {
+                "heading": heading,
+                "body": body,
+                "sources": list(item.get("sources", [])) if isinstance(item.get("sources", []), list) else [],
+                "source_ids": list(item.get("source_ids", [])) if isinstance(item.get("source_ids", []), list) else [],
+            }
+        )
+
+    return valid_items
+
+
 async def analyze_existing_chunks(
     refined_query: str,
     chunks: List[Dict[str, Any]],
     metadata: Optional[Dict[str, Any]] = None,
+    session_id: str | None = None,
 ) -> Dict[str, Any]:
     normalized_query = _normalize_text(refined_query)
     if not normalized_query:
         raise ValueError("refined_query is required.")
 
-    usable_chunks = [chunk for chunk in chunks if _normalize_text(chunk.get("text"))]
+    resolved_chunks = list(chunks)
+    if not resolved_chunks and session_id:
+        session = get_session(session_id)
+        cleaned_dump_key = _normalize_text(session.get("cleaned_dump_key"))
+        if cleaned_dump_key:
+            try:
+                cleaned_data = json.loads(read_from_r2(cleaned_dump_key).decode("utf-8", errors="ignore"))
+                if isinstance(cleaned_data, dict):
+                    resolved_chunks = list(cleaned_data.get("existing_chunks", []))
+            except Exception as exc:
+                logger.warning("Failed to load follow-up cleaned dump for session %s: %s", session_id, exc)
+
+    usable_chunks = [chunk for chunk in resolved_chunks if _normalize_text(chunk.get("text"))]
     if not usable_chunks:
         return {
             "section": str((metadata or {}).get("section", "trends")).strip().lower() or "trends",
             "title": "No strong insights found",
-            "items": [],
+            "items": [
+                {
+                    "heading": "Market Activity Observed",
+                    "body": "Aggregated sources indicate ongoing activity, but structured insights could not be generated reliably.",
+                    "sources": [],
+                    "source_ids": [],
+                }
+            ],
+            "error": None,
+            "session_id": session_id,
         }
 
     resolved_metadata = metadata or {}
@@ -123,19 +174,33 @@ async def analyze_existing_chunks(
             section=section,
         )
 
-    analysis_json["items"] = rank_and_limit_insights(
+    ranked_items = rank_and_limit_insights(
         list(analysis_json.get("items", [])),
         limit=FOLLOW_UP_INSIGHT_LIMIT,
     )
-    analysis_json["items"] = attach_sources_to_items(
-        list(analysis_json.get("items", [])),
+    sourced_items = attach_sources_to_items(
+        list(ranked_items),
         evidence_blocks,
     )
-    if not analysis_json["items"]:
+    validated_items = _validate_research_items(sourced_items)
+    if not validated_items:
+        print("[WARNING] Invalid or empty LLM output -> applying fallback")
+        validated_items = [
+            {
+                "heading": "Market Activity Observed",
+                "body": "Aggregated sources indicate ongoing activity, but structured insights could not be generated reliably.",
+                "sources": [],
+                "source_ids": [],
+            }
+        ]
+    analysis_json["items"] = validated_items
+    if not _normalize_text(analysis_json.get("title")):
         analysis_json["title"] = "No strong insights found"
 
     validated = AnalyzeResponse(**analysis_json)
     response_payload = validated.model_dump()
+    response_payload["error"] = None
+    response_payload["session_id"] = session_id
     response_payload["meta"] = {
         "topic": normalized_query,
         "location": {"label": location_context.label, "value": location_context.value, "preference": location_context.preference},

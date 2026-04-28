@@ -4,10 +4,8 @@ import io
 import json
 import logging
 import re
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -18,6 +16,7 @@ from services.location_service import (
     assess_location_relevance,
     should_keep_scraped_content,
 )
+from services.storage_service import read_from_r2, upload_to_r2
 
 try:
     from pypdf import PdfReader
@@ -41,12 +40,10 @@ logger = logging.getLogger(__name__)
 DEBUG = True
 SCRAPE_TIMEOUT_SECONDS = 10
 SCRAPE_MAX_RETRIES = 2
-MAX_CONCURRENT_REQUESTS = 5
-TOTAL_URL_CAP = 225
+MAX_CONCURRENT_REQUESTS = 2
+TOTAL_URL_CAP = 25
 MIN_CONTENT_LENGTH = 500
 SCRAPLING_TIMEOUT_SECONDS = 10
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-ARTIFACT_ROOT = PROJECT_ROOT / "research_artifacts"
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
@@ -105,30 +102,10 @@ def _slugify(value: str) -> str:
 
 def _filename_seed(title: str, url: str, fallback: str) -> str:
     parsed = urlparse(url)
-    path_name = Path(unquote(parsed.path or "")).name
-    path_stem = Path(path_name).stem if path_name else ""
+    path_name = (parsed.path or "").rstrip("/").split("/")[-1]
+    path_stem = path_name.rsplit(".", 1)[0] if path_name else ""
     seed = title.strip() or path_stem.strip() or _extract_domain(url) or fallback
     return _slugify(seed)
-
-
-def _build_artifact_dir(topic: str) -> Path:
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
-    topic_slug = _slugify(topic)[:40] or "research"
-    artifact_dir = ARTIFACT_ROOT / f"{topic_slug}_{timestamp}"
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    return artifact_dir
-
-
-async def _write_bytes(path: Path, content: bytes) -> None:
-    await asyncio.to_thread(path.write_bytes, content)
-
-
-async def _write_text(path: Path, content: str) -> None:
-    await asyncio.to_thread(path.write_text, content, encoding="utf-8")
-
-
-def _read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore")
 
 
 def _normalize_whitespace(text: str) -> str:
@@ -382,6 +359,8 @@ def _empty_artifact(
         "domain": _extract_domain(url),
         "status": status,
         "error": error,
+        "binary_key": "",
+        "text_key": "",
         "binary_path": "",
         "text_path": "",
         "text_available": False,
@@ -397,7 +376,7 @@ async def scrape_url(
     topic: str,
     section: str,
     location_context: LocationContext,
-    artifact_dir: Path,
+    session_id: str,
     client: httpx.AsyncClient,
     semaphore: asyncio.Semaphore,
     index: int,
@@ -457,10 +436,18 @@ async def scrape_url(
                     )
 
                 file_seed = _filename_seed(title, url, artifact_id)
-                binary_path = artifact_dir / f"{index:02d}_{file_seed}.pdf"
-                text_path = artifact_dir / f"{index:02d}_{file_seed}.txt"
-                await _write_bytes(binary_path, raw_content)
-                await _write_text(text_path, extracted_text)
+                binary_key = await asyncio.to_thread(
+                    upload_to_r2,
+                    session_id,
+                    f"{index:02d}_{file_seed}.pdf",
+                    raw_content,
+                )
+                text_key = await asyncio.to_thread(
+                    upload_to_r2,
+                    session_id,
+                    f"{index:02d}_{file_seed}.txt",
+                    extracted_text,
+                )
                 _log(f"[SCRAPER] Success: {url}")
                 return {
                     "artifact_id": artifact_id,
@@ -472,8 +459,10 @@ async def scrape_url(
                     "domain": _extract_domain(url),
                     "status": "success",
                     "error": "",
-                    "binary_path": str(binary_path),
-                    "text_path": str(text_path),
+                    "binary_key": binary_key,
+                    "text_key": text_key,
+                    "binary_path": binary_key,
+                    "text_path": text_key,
                     "text_available": True,
                     "text_chars": len(extracted_text),
                     "content_signature": _content_signature(extracted_text),
@@ -524,8 +513,12 @@ async def scrape_url(
                 )
 
             file_seed = _filename_seed(title, url, artifact_id)
-            text_path = artifact_dir / f"{index:02d}_{file_seed}.txt"
-            await _write_text(text_path, content)
+            text_key = await asyncio.to_thread(
+                upload_to_r2,
+                session_id,
+                f"{index:02d}_{file_seed}.txt",
+                content,
+            )
             _log(f"[SCRAPER] Success: {url}")
             return {
                 "artifact_id": artifact_id,
@@ -537,8 +530,10 @@ async def scrape_url(
                 "domain": _extract_domain(url),
                 "status": "success",
                 "error": "",
+                "binary_key": "",
+                "text_key": text_key,
                 "binary_path": "",
-                "text_path": str(text_path),
+                "text_path": text_key,
                 "text_available": True,
                 "text_chars": len(content),
                 "content_signature": _content_signature(content),
@@ -564,6 +559,7 @@ async def scrape_all(
     results: List[Dict[str, Any]],
     topic: str,
     section: str,
+    session_id: str,
     location_context: LocationContext | None = None,
 ) -> Dict[str, Any]:
     resolved_location_context = location_context or LocationContext()
@@ -576,14 +572,13 @@ async def scrape_all(
         seen_urls.add(url)
         deduplicated_results.append(result)
 
-    artifact_dir = _build_artifact_dir(topic)
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
     timeout = httpx.Timeout(SCRAPE_TIMEOUT_SECONDS)
     limits = httpx.Limits(max_connections=MAX_CONCURRENT_REQUESTS, max_keepalive_connections=MAX_CONCURRENT_REQUESTS)
 
     async with httpx.AsyncClient(headers=DEFAULT_HEADERS, timeout=timeout, limits=limits, follow_redirects=True) as client:
         tasks = [
-            scrape_url(result, topic, section, resolved_location_context, artifact_dir, client, semaphore, index)
+            scrape_url(result, topic, section, resolved_location_context, session_id, client, semaphore, index)
             for index, result in enumerate(deduplicated_results, start=1)
         ]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -619,6 +614,7 @@ async def scrape_all(
             artifact["status"] = "filtered_out"
             artifact["error"] = "Duplicate content removed."
             artifact["text_available"] = False
+            artifact["text_key"] = ""
             artifact["text_path"] = ""
             artifact["text_chars"] = 0
         elif artifact.get("status") == "success" and signature:
@@ -629,10 +625,14 @@ async def scrape_all(
     for artifact in deduplicated_artifacts:
         if artifact.get("status") != "success" or not bool(artifact.get("text_available")):
             continue
-        text_path = Path(str(artifact.get("text_path", "")).strip())
-        if not text_path.exists():
+        text_key = str(artifact.get("text_key") or artifact.get("text_path") or "").strip()
+        if not text_key:
             continue
-        content = _read_text(text_path).strip()
+        try:
+            content = (await asyncio.to_thread(read_from_r2, text_key)).decode("utf-8", errors="ignore").strip()
+        except Exception as exc:
+            logger.warning("Failed to read stored artifact from R2 %s: %s", text_key, exc)
+            continue
         if len(_normalize_whitespace(content)) < MIN_CONTENT_LENGTH:
             continue
         structured_pages.append(
@@ -642,35 +642,41 @@ async def scrape_all(
                 "content": content,
                 "source_type": str(artifact.get("source_type", "")).strip() or str(artifact.get("artifact_type", "web")).strip(),
                 "artifact_type": str(artifact.get("artifact_type", "")).strip() or "web",
-                "artifact_path": str(artifact.get("text_path", "")).strip(),
+                "artifact_path": text_key,
                 "location_score": int(artifact.get("location_score", 0)),
                 "location_matches": list(artifact.get("location_matches", [])),
             }
         )
 
-    manifest_path = artifact_dir / "manifest.json"
     manifest_payload = {
         "topic": topic,
         "section": section,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "artifact_dir": str(artifact_dir),
+        "artifact_dir": f"sessions/{session_id}/",
         "counts": _artifact_counts(deduplicated_artifacts),
         "artifacts": deduplicated_artifacts,
     }
-    await _write_text(manifest_path, json.dumps(manifest_payload, indent=2))
+    manifest_key = await asyncio.to_thread(
+        upload_to_r2,
+        session_id,
+        "manifest.json",
+        json.dumps(manifest_payload, indent=2),
+    )
 
     return {
-        "artifact_dir": str(artifact_dir),
-        "manifest_path": str(manifest_path),
+        "artifact_dir": f"sessions/{session_id}/",
+        "manifest_path": manifest_key,
+        "manifest_key": manifest_key,
         "artifacts": deduplicated_artifacts,
         "counts": _artifact_counts(deduplicated_artifacts),
         "pages": structured_pages,
+        "manifest": manifest_payload,
     }
 
 
 async def collect_research_artifacts(
     topic: str,
     section: str,
+    session_id: str,
     location_context: LocationContext | None = None,
     pdf_results: Optional[List[Dict[str, Any]]] = None,
     web_results: Optional[List[Dict[str, Any]]] = None,
@@ -682,7 +688,7 @@ async def collect_research_artifacts(
             combined_results.append(dict(result))
 
     _log(f"[SCRAPER] Queue size: {len(combined_results[:TOTAL_URL_CAP])}")
-    return await scrape_all(combined_results, topic, section, location_context=location_context)
+    return await scrape_all(combined_results, topic, section, session_id, location_context=location_context)
 
 
 def load_saved_sources(artifacts: List[Dict[str, Any]]) -> List[Dict[str, str]]:
@@ -691,19 +697,14 @@ def load_saved_sources(artifacts: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         if artifact.get("status") != "success" or not bool(artifact.get("text_available")):
             continue
 
-        text_path_value = str(artifact.get("text_path", "")).strip()
-        if not text_path_value:
-            continue
-
-        text_path = Path(text_path_value)
-        if not text_path.exists():
-            logger.warning("Stored artifact text file is missing: %s", text_path)
+        text_key = str(artifact.get("text_key") or artifact.get("text_path") or "").strip()
+        if not text_key:
             continue
 
         try:
-            text_content = _read_text(text_path).strip()
+            text_content = read_from_r2(text_key).decode("utf-8", errors="ignore").strip()
         except Exception as exc:
-            logger.warning("Failed to read stored artifact %s: %s", text_path, exc)
+            logger.warning("Failed to read stored artifact %s: %s", text_key, exc)
             continue
 
         if len(_normalize_whitespace(text_content)) < MIN_CONTENT_LENGTH:
@@ -712,10 +713,11 @@ def load_saved_sources(artifacts: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         saved_sources.append(
             {
                 "url": str(artifact.get("url", "")).strip(),
+                "title": str(artifact.get("title", "")).strip(),
                 "content": text_content,
                 "artifact_type": str(artifact.get("artifact_type", "")).strip() or "web",
                 "source_type": str(artifact.get("source_type", "")).strip() or "general",
-                "artifact_path": text_path_value,
+                "artifact_path": text_key,
                 "location_score": int(artifact.get("location_score", 0)),
                 "location_matches": list(artifact.get("location_matches", [])),
             }

@@ -1,5 +1,6 @@
 ﻿import logging
 import time
+import json
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
@@ -29,8 +30,11 @@ from services.memory_service import (
 from services.openai_service import generate_section_analysis
 from services.pipeline_orchestrator import execute_pipeline
 from services.prompt_builder import build_metadata_payload, get_prompt
+from services.redis_service import delete_session, get_session, update_session
 from services.ranking_service import rank_and_limit_insights
+from services.session_service import create_session_id
 from services.source_attribution_service import attach_sources_to_items
+from services.storage_service import delete_session_prefix, read_from_r2
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -38,7 +42,7 @@ logger = logging.getLogger(__name__)
 PIPELINE_VERSION = "artifact_sot_v5_structured_insight_pipeline"
 INTERNAL_DEPTH = "high"
 INTERNAL_FRESHNESS = "high"
-MAX_WEB_SCRAPE_URLS = 225
+MAX_WEB_SCRAPE_URLS = 25
 INITIAL_INSIGHT_LIMIT = 10
 FOLLOW_UP_INSIGHT_LIMIT = 5
 
@@ -236,6 +240,33 @@ def _build_existing_chunks(evidence_blocks: List[Dict[str, Any]]) -> List[Dict[s
     return chunks
 
 
+def _load_session_cleaned_dump(session_id: str) -> Dict[str, Any]:
+    session = get_session(session_id)
+    cleaned_dump_key = str(session.get("cleaned_dump_key", "")).strip()
+    if not cleaned_dump_key:
+        raise HTTPException(status_code=404, detail="No cleaned session dump found for the provided session_id.")
+
+    try:
+        payload = read_from_r2(cleaned_dump_key).decode("utf-8", errors="ignore")
+        parsed = json.loads(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to load session cleaned dump: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=500, detail="Session cleaned dump is malformed.")
+    return parsed
+
+
+def _resolve_session_existing_chunks(session_id: str | None, provided_chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if provided_chunks:
+        return list(provided_chunks)
+    if not session_id:
+        return []
+    cleaned_dump = _load_session_cleaned_dump(session_id)
+    existing_chunks = cleaned_dump.get("existing_chunks", [])
+    return list(existing_chunks) if isinstance(existing_chunks, list) else []
+
+
 def _build_fail_safe_response(
     error_message: str,
     section: str = "",
@@ -249,6 +280,12 @@ def _build_fail_safe_response(
     }
     if debug_payload is not None:
         payload["debug"] = debug_payload
+    return payload
+
+
+def _attach_session_id(payload: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+    if session_id:
+        payload["session_id"] = session_id
     return payload
 
 
@@ -271,7 +308,7 @@ async def follow_up(request: Request) -> Dict[str, Any]:
 
     return handle_followup_query(
         follow_up_query=request_model.follow_up_query,
-        existing_filtered_chunks=request_model.existing_chunks,
+        existing_filtered_chunks=_resolve_session_existing_chunks(request_model.session_id, request_model.existing_chunks),
         existing_metadata=request_model.metadata,
     )
 
@@ -286,12 +323,17 @@ async def analyze_existing(request: Request) -> Dict[str, Any]:
 
     return await analyze_existing_chunks(
         refined_query=request_model.refined_query,
-        chunks=request_model.existing_chunks,
+        chunks=_resolve_session_existing_chunks(request_model.session_id, request_model.existing_chunks),
         metadata=request_model.metadata,
+        session_id=request_model.session_id,
     )
 
 
 @router.post("/research")
+async def research_topic(request: Request) -> Dict[str, Any]:
+    return await analyze_topic(request)
+
+
 @router.post("/analyze")
 async def analyze_topic(request: Request) -> Dict[str, Any]:
     total_start = time.perf_counter()
@@ -324,6 +366,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
     artifact_counts: Dict[str, Any] = {}
     existing_chunks: List[Dict[str, Any]] = []
     provided_queries: List[str] = []
+    session_id = ""
     follow_up_mode = False
     provided_existing_chunks: List[Dict[str, Any]] = []
 
@@ -344,11 +387,23 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         section = request_model.section
         debug_mode = bool(request_model.debug)
         provided_queries = list(request_model.queries)
+        session_id = request_model.session_id or create_session_id()
         follow_up_mode = bool(request_model.follow_up_mode)
-        provided_existing_chunks = list(request_model.existing_chunks)
+        provided_existing_chunks = (
+            _resolve_session_existing_chunks(session_id, list(request_model.existing_chunks))
+            if follow_up_mode or bool(request_model.existing_chunks)
+            else []
+        )
         location_context = resolve_location_context(
             request_model.location_preference,
             request_model.location_value,
+        )
+        update_session(
+            session_id,
+            {
+                "query": topic,
+                "queries_generated": provided_queries,
+            },
         )
         location_summary = describe_location_context(location_context)
         topic_key = build_location_topic_key(topic, location_context)
@@ -409,6 +464,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             cached_meta.setdefault("topic", topic)
             cached_meta.setdefault("location", dict(cached_result.get("location", location_summary)))
             cached_response["meta"] = cached_meta
+            cached_response["session_id"] = session_id
             if debug_mode:
                 execution_time["total_ms"] = _elapsed_ms(total_start)
                 cached_response["debug"] = _build_debug_payload(
@@ -436,13 +492,14 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     artifact_counts=dict(cached_result.get("artifact_counts", {})),
                     existing_chunks=list(cached_result.get("existing_chunks", [])),
                 )
-            return cached_response
+            return _attach_session_id(cached_response, session_id)
 
         pipeline_start = time.perf_counter()
         try:
             pipeline_payload = await execute_pipeline(
                 topic=topic,
                 section=section,
+                session_id=session_id,
                 freshness=freshness,
                 location_context=location_context,
                 provided_queries=provided_queries or None,
@@ -515,7 +572,10 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     freshness=freshness,
                     location=location_summary,
                 )
-            return _build_fail_safe_response("No search results found.", section=section, debug_payload=debug_payload)
+            return _attach_session_id(
+                _build_fail_safe_response("No search results found.", section=section, debug_payload=debug_payload),
+                session_id,
+            )
 
         artifact_dir = str(artifact_bundle.get("artifact_dir", ""))
         artifact_manifest = str(artifact_bundle.get("manifest_path", ""))
@@ -618,10 +678,13 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     artifact_counts=artifact_counts,
                     existing_chunks=existing_chunks,
                 )
-            return _build_fail_safe_response(
-                "No usable content extracted from stored research artifacts.",
-                section=section,
-                debug_payload=debug_payload,
+            return _attach_session_id(
+                _build_fail_safe_response(
+                    "No usable content extracted from stored research artifacts.",
+                    section=section,
+                    debug_payload=debug_payload,
+                ),
+                session_id,
             )
 
         try:
@@ -693,7 +756,10 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     artifact_counts=artifact_counts,
                     existing_chunks=existing_chunks,
                 )
-            return _build_fail_safe_response(f"Prompt building failed: {exc}", section=section, debug_payload=debug_payload)
+            return _attach_session_id(
+                _build_fail_safe_response(f"Prompt building failed: {exc}", section=section, debug_payload=debug_payload),
+                session_id,
+            )
         execution_time["prompt_ms"] = _elapsed_ms(prompt_start)
         prompt_chars = len(system_prompt) + len(metadata_payload)
 
@@ -760,10 +826,13 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     artifact_counts=artifact_counts,
                     existing_chunks=existing_chunks,
                 )
-            return _build_fail_safe_response(
-                f"Response validation failed: {exc}",
-                section=section,
-                debug_payload=debug_payload,
+            return _attach_session_id(
+                _build_fail_safe_response(
+                    f"Response validation failed: {exc}",
+                    section=section,
+                    debug_payload=debug_payload,
+                ),
+                session_id,
             )
         execution_time["validation_ms"] = _elapsed_ms(validation_start)
         execution_time["total_ms"] = _elapsed_ms(total_start)
@@ -773,6 +842,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             "topic": topic,
             "location": location_summary,
         }
+        response_payload["session_id"] = session_id
         trend_metadata = [
             {
                 "heading": str(item.get("heading", "")),
@@ -813,6 +883,25 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         except Exception as exc:
             logger.warning("Cache write failed for topic %s: %s", topic, exc)
 
+        try:
+            update_session(
+                session_id,
+                {
+                    "query": topic,
+                    "queries_generated": queries,
+                    "sources": selected_urls,
+                    "artifacts": [
+                        str(artifact.get("text_key") or artifact.get("binary_key") or artifact.get("text_path") or "").strip()
+                        for artifact in artifact_bundle.get("artifacts", [])
+                        if str(artifact.get("text_key") or artifact.get("binary_key") or artifact.get("text_path") or "").strip()
+                    ],
+                    "cleaned_dump_key": str(processed_payload.get("cleaned_dump_key", "")).strip(),
+                    "final_output": response_payload,
+                },
+            )
+        except Exception as exc:
+            logger.warning("Session update failed for session %s: %s", session_id, exc)
+
         if debug_mode:
             response_payload["debug"] = _build_debug_payload(
                 queries=queries,
@@ -840,7 +929,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 existing_chunks=existing_chunks,
             )
 
-        return response_payload
+        return _attach_session_id(response_payload, session_id)
     except Exception as exc:
         execution_time["total_ms"] = _elapsed_ms(total_start)
         print("Pipeline ERROR:", str(exc))
@@ -871,7 +960,10 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 artifact_manifest=artifact_manifest,
                 artifact_counts=artifact_counts,
             )
-        return _build_fail_safe_response(f"Pipeline failed: {exc}", section=section, debug_payload=debug_payload)
+        return _attach_session_id(
+            _build_fail_safe_response(f"Pipeline failed: {exc}", section=section, debug_payload=debug_payload),
+            session_id,
+        )
 
 
 @router.post("/feedback")
@@ -917,3 +1009,18 @@ async def submit_feedback(request: Request) -> Dict[str, Any]:
     )
     return {"status": "success"}
 
+
+@router.delete("/sessions/{session_id}")
+async def cleanup_session(session_id: str) -> Dict[str, str]:
+    normalized_session_id = session_id.strip()
+    if not normalized_session_id:
+        raise HTTPException(status_code=422, detail="session_id is required.")
+
+    try:
+        delete_session_prefix(normalized_session_id)
+        delete_session(normalized_session_id)
+    except Exception as exc:
+        logger.exception("Session cleanup failed for %s", normalized_session_id)
+        raise HTTPException(status_code=500, detail=f"Session cleanup failed: {exc}") from exc
+
+    return {"status": "deleted"}

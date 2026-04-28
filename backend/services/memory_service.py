@@ -1,17 +1,16 @@
 import copy
-import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from threading import RLock
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
+from services.redis_service import get_json_value, set_json_value
+
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MEMORY_FILE_PATH = PROJECT_ROOT / "query_memory.json"
 _MEMORY_LOCK = RLock()
+MEMORY_KEY = "osint:global_memory"
 
 
 def _utc_now() -> str:
@@ -39,24 +38,9 @@ def _extract_domain(value: str) -> str:
     return domain
 
 
-def _ensure_memory_file() -> None:
-    if MEMORY_FILE_PATH.exists():
-        return
-
-    MEMORY_FILE_PATH.write_text(json.dumps(_default_memory(), indent=2), encoding="utf-8")
-
-
 def _read_memory() -> Dict[str, Any]:
-    _ensure_memory_file()
     try:
-        raw_content = MEMORY_FILE_PATH.read_text(encoding="utf-8").strip()
-        if not raw_content:
-            return _default_memory()
-
-        parsed = json.loads(raw_content)
-        if not isinstance(parsed, dict):
-            return _default_memory()
-
+        parsed = get_json_value(MEMORY_KEY, default=_default_memory())
         defaults = _default_memory()
         defaults.update(parsed)
         defaults["query_memory"] = parsed.get("query_memory", {}) or {}
@@ -65,13 +49,12 @@ def _read_memory() -> Dict[str, Any]:
         defaults["topic_runs"] = parsed.get("topic_runs", {}) or {}
         return defaults
     except Exception as exc:
-        logger.warning("Failed to read memory file: %s", exc)
+        logger.warning("Failed to read Redis memory: %s", exc)
         return _default_memory()
 
 
 def _write_memory(memory: Dict[str, Any]) -> None:
-    _ensure_memory_file()
-    MEMORY_FILE_PATH.write_text(json.dumps(memory, indent=2), encoding="utf-8")
+    set_json_value(MEMORY_KEY, memory)
 
 
 def _query_limit(depth: str) -> int:
