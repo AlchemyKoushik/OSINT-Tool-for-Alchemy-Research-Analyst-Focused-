@@ -18,9 +18,7 @@ DEBUG = True
 
 
 def _log(message: str) -> None:
-    logger.info(message)
-    if DEBUG:
-        print(message)
+    logger.info("%s", message)
 
 
 def _elapsed_ms(start_time: float) -> int:
@@ -137,11 +135,10 @@ async def execute_pipeline(
         }
         cleaned_data = json.dumps(cleaned_dump_payload, indent=2) if cleaned_dump_payload["existing_chunks"] else ""
 
-        print("\n[DEBUG CLEANING]")
-        print("cleaned_data length:", len(cleaned_data) if cleaned_data else 0)
+        logger.info("cleaned_dump_prepared chars=%s session_id=%s", len(cleaned_data) if cleaned_data else 0, session_id)
 
         if not cleaned_data:
-            print("[WARNING] cleaned_data is empty -> using fallback")
+            logger.warning("cleaned_data empty; using fallback session_id=%s", session_id)
             try:
                 combined_text = ""
                 for item in scraped_results:
@@ -150,11 +147,11 @@ async def execute_pipeline(
 
                 cleaned_data = combined_text[:50000]
             except Exception as exc:
-                print("[ERROR] Fallback cleaning failed:", str(exc))
+                logger.warning("Fallback cleaning failed for session %s: %s", session_id, exc)
                 cleaned_data = "Fallback empty content"
 
         if not cleaned_data:
-            print("[WARNING] Empty cleaned_data -> fallback applied")
+            logger.warning("Empty cleaned_data after fallback for session %s", session_id)
             cleaned_data = "No structured cleaned data available"
 
         cleaned_key = await asyncio.to_thread(
@@ -165,10 +162,10 @@ async def execute_pipeline(
         )
 
         if cleaned_key:
-            print("[SUCCESS] cleaned_dump.json uploaded:", cleaned_key)
+            logger.info("cleaned_dump_uploaded session_id=%s key=%s", session_id, cleaned_key)
             update_session(session_id, {"cleaned_dump_key": cleaned_key})
         else:
-            print("[ERROR] Failed to upload cleaned_dump.json")
+            logger.warning("cleaned_dump_upload_failed session_id=%s", session_id)
 
         update_session(
             session_id,
@@ -184,7 +181,7 @@ async def execute_pipeline(
                 ],
             },
         )
-        print("[DEBUG] Session updated with cleaned_dump_key")
+        logger.info("session_updated_with_cleaned_dump session_id=%s", session_id)
         processed_payload["cleaned_dump_key"] = cleaned_key
     except Exception as exc:
         logger.exception("Pipeline processing failed for topic %s section %s", topic, section)

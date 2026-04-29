@@ -10,6 +10,11 @@ from services.openai_service import openai_key_loaded, test_openai_connection
 from services.redis_service import redis_client
 from services.search_service import test_ddg
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -31,9 +36,7 @@ app.include_router(router)
 
 @app.on_event("startup")
 async def startup_checks() -> None:
-    print("=================================")
-    print("SYSTEM START CHECK")
-    print("=================================")
+    logger.info("startup_check_begin")
     settings.validate_required(
         (
             "OPENAI_API_KEY",
@@ -62,10 +65,12 @@ async def startup_checks() -> None:
         logger.exception("Startup checks failed.")
         raise RuntimeError(f"Startup checks failed: {exc}") from exc
 
-    print(f"- OpenAI Key Loaded: {'YES' if openai_loaded else 'NO'}")
-    print(f"- OpenAI Test Result: {'SUCCESS' if openai_test_result else 'FAILED'}")
-    print(f"- DDG Test Result: {'SUCCESS' if ddg_test_result else 'FAILED'}")
-    print("=================================")
+    logger.info(
+        "startup_check_complete openai_key_loaded=%s openai_test=%s ddg_test=%s",
+        openai_loaded,
+        openai_test_result,
+        ddg_test_result,
+    )
 
 
 @app.get("/health")

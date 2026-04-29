@@ -186,7 +186,7 @@ async def analyze_existing_chunks(
     )
     validated_items = _validate_research_items(sourced_items)
     if not validated_items:
-        print("[WARNING] Invalid or empty LLM output -> applying fallback")
+        logger.warning("Invalid or empty LLM output for analyze_existing_chunks; applying fallback.")
         validated_items = [
             {
                 "heading": "Market Activity Observed",

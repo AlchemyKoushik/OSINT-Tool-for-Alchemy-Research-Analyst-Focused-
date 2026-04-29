@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from openai import AsyncOpenAI
 
 from config.settings import settings
+from services.external_client import call_openai
 
 logger = logging.getLogger(__name__)
 
@@ -169,14 +170,19 @@ async def rank_and_filter_results(results: List[Dict[str, Any]]) -> List[Dict[st
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     try:
         logger.info("Ranking started for %s search results.", len(results))
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
+        response = await call_openai(
+            "rank_search_results",
+            lambda: client.chat.completions.create(
                 model=RANKING_MODEL_NAME,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
             ),
+            fallback=None,
             timeout=RANKING_TIMEOUT_SECONDS,
+            context={"model": RANKING_MODEL_NAME, "result_count": len(results)},
         )
+        if response is None:
+            raise RuntimeError("Ranking returned no response.")
 
         content = response.choices[0].message.content or ""
         selected_ids = _parse_selected_ids(content, len(results))

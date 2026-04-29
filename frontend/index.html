@@ -50,18 +50,23 @@
   <body class="text-atelier-ink antialiased">
   <div id="root"></div>
   <script>
-    window.__STATIC_ASSET_VERSION__ = "__STATIC_ASSET_VERSION_VALUE__";
+    const isLocalHost =
+      window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+    const resolvedStaticVersion = isLocalHost
+      ? String(Date.now())
+      : "__STATIC_ASSET_VERSION_VALUE__";
+    window.__STATIC_ASSET_VERSION__ = resolvedStaticVersion;
     const configuredApiUrl =
       window.OSINT_API_URL ||
       window.__OSINT_API_URL__ ||
       document.querySelector('meta[name="osint-api-url"]')?.content?.trim();
     window.OSINT_API_URL = configuredApiUrl || (
-      window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+      isLocalHost
         ? "http://127.0.0.1:8000"
         : "https://osint-tool-for-alchemy-research-analyst.onrender.com/"
     );
     window.addEventListener("load", () => {
-      import("./ui/app.js?v=__STATIC_ASSET_VERSION_VALUE__");
+      import(`./ui/app.js?v=${encodeURIComponent(resolvedStaticVersion)}`);
     });
   </script>
 </body>

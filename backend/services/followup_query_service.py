@@ -3,10 +3,11 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Sequence
 
-from openai import APIError, APITimeoutError, OpenAI, RateLimitError
+from openai import OpenAI
 
 from config.settings import settings
 from models.response_models import FollowUpResponse
+from services.external_client import call_openai_sync
 from services.openai_service import OPENAI_TIMEOUT_SECONDS, can_use_openai, ensure_min_output_tokens
 
 logger = logging.getLogger(__name__)
@@ -394,14 +395,23 @@ def handle_followup_query(
     try:
         for attempt in range(1, FOLLOW_UP_MAX_RETRIES + 2):
             try:
-                response = client.responses.parse(
-                    model=FOLLOW_UP_MODEL,
-                    input=messages,
-                    text_format=FollowUpResponse,
-                    max_output_tokens=ensure_min_output_tokens(FOLLOW_UP_MAX_OUTPUT_TOKENS),
+                response = call_openai_sync(
+                    "followup_decision",
+                    lambda: client.responses.parse(
+                        model=FOLLOW_UP_MODEL,
+                        input=messages,
+                        text_format=FollowUpResponse,
+                        max_output_tokens=ensure_min_output_tokens(FOLLOW_UP_MAX_OUTPUT_TOKENS),
+                    ),
+                    fallback=None,
+                    timeout=OPENAI_TIMEOUT_SECONDS,
+                    max_retries=FOLLOW_UP_MAX_RETRIES,
+                    context={"model": FOLLOW_UP_MODEL, "query": normalized_query},
                 )
+                if response is None:
+                    raise RuntimeError("Follow-up query decision returned no response.")
                 return _parse_response(response)
-            except (APITimeoutError, RateLimitError, APIError, ValueError, RuntimeError) as exc:
+            except (ValueError, RuntimeError) as exc:
                 last_error = exc
                 logger.warning("Follow-up query attempt %s failed: %s", attempt, exc)
                 if attempt <= FOLLOW_UP_MAX_RETRIES:

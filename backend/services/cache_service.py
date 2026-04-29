@@ -1,26 +1,25 @@
 import copy
 import hashlib
 import logging
-from threading import RLock
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
+from config.settings import settings
+from services.redis_service import get_json_value, set_json_value
 
-_CACHE: Dict[str, Dict[str, Any]] = {}
-_CACHE_LOCK = RLock()
+logger = logging.getLogger(__name__)
+CACHE_KEY_PREFIX = "osint:cache:"
 
 
 def _topic_key(topic: str) -> str:
     normalized_topic = topic.strip().lower().encode("utf-8")
-    return hashlib.sha256(normalized_topic).hexdigest()
+    return f"{CACHE_KEY_PREFIX}{hashlib.sha256(normalized_topic).hexdigest()}"
 
 
 def get_cached_result(topic: str) -> Optional[Dict[str, Any]]:
     cache_key = _topic_key(topic)
-    with _CACHE_LOCK:
-        cached_value = _CACHE.get(cache_key)
+    cached_value = get_json_value(cache_key, default={})
 
-    if cached_value is None:
+    if not cached_value:
         logger.info("Cache miss for topic: %s", topic)
         return None
 
@@ -30,6 +29,5 @@ def get_cached_result(topic: str) -> Optional[Dict[str, Any]]:
 
 def set_cached_result(topic: str, data: Dict[str, Any]) -> None:
     cache_key = _topic_key(topic)
-    with _CACHE_LOCK:
-        _CACHE[cache_key] = copy.deepcopy(data)
+    set_json_value(cache_key, copy.deepcopy(data), ttl=settings.CACHE_TTL_SECONDS)
     logger.info("Cache updated for topic: %s", topic)

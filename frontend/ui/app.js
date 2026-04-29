@@ -50,6 +50,12 @@ const DEFAULT_LOCATIONS = {
   regions: ["Asia", "Europe", "North America", "South America", "Africa", "Oceania"],
   countries: [],
 };
+const LOCATION_CACHE_KEY = "osint-location-catalog-v1";
+const BUILT_IN_LOCATION_CATALOG_PATHS = [
+  "../location-catalog.json",
+  "/location-catalog.json",
+  "/frontend/location-catalog.json",
+];
 
 const SECTION_OPTIONS = [
   { value: "trends", label: "Trends" },
@@ -342,6 +348,79 @@ function isLocationCatalog(payload) {
     Array.isArray(payload.regions) &&
     Array.isArray(payload.countries)
   );
+}
+
+function normalizeLocationCatalog(payload) {
+  if (!isLocationCatalog(payload)) {
+    return null;
+  }
+
+  const normalizedCountries = Array.isArray(payload.countries) ? payload.countries : [];
+  if (!normalizedCountries.length) {
+    return null;
+  }
+
+  return {
+    preferences:
+      Array.isArray(payload.preferences) && payload.preferences.length
+        ? payload.preferences
+        : DEFAULT_LOCATIONS.preferences,
+    regions: Array.isArray(payload.regions) ? payload.regions : DEFAULT_LOCATIONS.regions,
+    countries: normalizedCountries,
+  };
+}
+
+function loadCachedLocationCatalog() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(LOCATION_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+    return normalizeLocationCatalog(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function persistLocationCatalog(catalog) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(catalog));
+  } catch {
+    // Ignore localStorage write failures and keep the in-memory catalog.
+  }
+}
+
+async function loadBuiltInLocationCatalog() {
+  for (const path of BUILT_IN_LOCATION_CATALOG_PATHS) {
+    try {
+      const response = await fetch(withStaticAssetVersion(path), {
+        cache: "no-store",
+      });
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      const normalizedCatalog = normalizeLocationCatalog(payload);
+      if (!response.ok || !normalizedCatalog) {
+        continue;
+      }
+      return normalizedCatalog;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function buildErrorMessage(payload, fallbackMessage) {
@@ -801,6 +880,7 @@ function RegionSelector({
 
 function CountrySelector({
   countries,
+  allCountriesCount = 0,
   searchValue,
   selectedValue,
   onSearchChange,
@@ -858,7 +938,9 @@ function CountrySelector({
               )
             : html`
                 <div className="rounded-[22px] border border-dashed border-atelier-line bg-white/70 px-4 py-5 text-sm text-atelier-moss">
-                  No countries match that search.
+                  ${allCountriesCount
+                    ? "No countries match that search."
+                    : "Countries are temporarily unavailable. The last location refresh did not return a usable country list."}
                 </div>
               `}
         </div>
@@ -881,6 +963,7 @@ function CommandDeck({
   countryQuery,
   filteredRegions,
   filteredCountries,
+  allCountriesCount,
   onTopicChange,
   onSectionChange,
   onPreferenceChange,
@@ -1081,6 +1164,7 @@ function CommandDeck({
                       </div>
                       <${CountrySelector}
                         countries=${filteredCountries}
+                        allCountriesCount=${allCountriesCount}
                         searchValue=${countryQuery}
                         selectedValue=${locationValue}
                         disabled=${isProcessing}
@@ -2086,7 +2170,7 @@ function App() {
   const [section, setSection] = useState("trends");
   const [locationPreference, setLocationPreference] = useState("global");
   const [locationValue, setLocationValue] = useState("");
-  const [locations, setLocations] = useState(DEFAULT_LOCATIONS);
+  const [locations, setLocations] = useState(() => loadCachedLocationCatalog() || DEFAULT_LOCATIONS);
   const [locationLoadError, setLocationLoadError] = useState("");
   const [regionQuery, setRegionQuery] = useState("");
   const [countryQuery, setCountryQuery] = useState("");
@@ -2125,29 +2209,40 @@ function App() {
           payload = null;
         }
 
-        if (!response.ok || !isLocationCatalog(payload)) {
+        const normalizedCatalog = normalizeLocationCatalog(payload);
+        if (!response.ok || !normalizedCatalog) {
           throw new Error("The location catalogue could not be loaded.");
         }
 
         if (!cancelled) {
+          persistLocationCatalog(normalizedCatalog);
           startTransition(() => {
-            setLocations({
-              preferences:
-                Array.isArray(payload.preferences) && payload.preferences.length
-                  ? payload.preferences
-                  : DEFAULT_LOCATIONS.preferences,
-              regions: payload.regions,
-              countries: payload.countries,
-            });
+            setLocations(normalizedCatalog);
             setLocationLoadError("");
           });
         }
       } catch {
         if (!cancelled) {
+          const cachedLocations = loadCachedLocationCatalog();
+          const builtInLocations = await loadBuiltInLocationCatalog();
+          const nextLocations =
+            cachedLocations ||
+            builtInLocations ||
+            (Array.isArray(locations?.countries) && locations.countries.length ? locations : null) ||
+            DEFAULT_LOCATIONS;
+
+          if (builtInLocations) {
+            persistLocationCatalog(builtInLocations);
+          }
+
           setLocationLoadError(
-            "The live location catalogue could not be refreshed, so the built-in location list is being used.",
+            cachedLocations
+              ? "The live location catalogue could not be refreshed, so the last saved location list is being used."
+              : builtInLocations
+                ? "The live location catalogue could not be refreshed, so the built-in location list is being used."
+                : "The live location catalogue could not be refreshed, and no usable built-in country list was found.",
           );
-          setLocations(DEFAULT_LOCATIONS);
+          setLocations(nextLocations);
         }
       }
     }
@@ -2236,6 +2331,7 @@ function App() {
     }
     return `${country.name} ${country.region}`.toLowerCase().includes(query);
   });
+  const allCountriesCount = Array.isArray(locations.countries) ? locations.countries.length : 0;
 
   const displayMeta =
     analysisState === "completed"
@@ -2636,6 +2732,7 @@ function App() {
           countryQuery=${countryQuery}
           filteredRegions=${filteredRegions}
           filteredCountries=${filteredCountries}
+          allCountriesCount=${allCountriesCount}
           onTopicChange=${setTopic}
           onSectionChange=${setSection}
           onPreferenceChange=${setLocationPreference}

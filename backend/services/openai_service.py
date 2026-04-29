@@ -4,10 +4,11 @@ import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Sequence
 
-from openai import APIError, APITimeoutError, AsyncOpenAI, OpenAI, RateLimitError
+from openai import AsyncOpenAI, OpenAI
 
 from config.settings import settings
 from models.response_models import Insight, Output
+from services.external_client import call_openai, call_openai_sync
 from services.prompt_builder import get_section_title
 from services.ranking_service import rank_and_limit_insights
 from services.source_attribution_service import attach_sources_to_items
@@ -16,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 MODEL_NAME = settings.OPENAI_ANALYSIS_MODEL or "gpt-5.5"
 OPENAI_TEST_MODEL = settings.OPENAI_TEST_MODEL or "gpt-4o-mini"
-OPENAI_TIMEOUT_SECONDS = 60
-OPENAI_MAX_RETRIES = 1
+OPENAI_TIMEOUT_SECONDS = settings.EXTERNAL_TIMEOUT_SECONDS
+OPENAI_MAX_RETRIES = settings.EXTERNAL_MAX_RETRIES
 MIN_OUTPUT_TOKENS = 16
 DEFAULT_MAX_OUTPUT_TOKENS = 256
 MAX_OUTPUT_TOKENS = 2600
@@ -90,7 +91,7 @@ def openai_key_loaded() -> bool:
         connection_ok=False if not loaded else _OPENAI_RUNTIME_STATE["connection_ok"],
         message="OPENAI_API_KEY missing" if not loaded else _OPENAI_RUNTIME_STATE["message"],
     )
-    print(f"OpenAI Key Loaded: {'YES' if loaded else 'NO'}")
+    logger.info("openai_key_loaded=%s", loaded)
     return loaded
 
 
@@ -108,7 +109,6 @@ def get_openai_status_message() -> str:
 
 def _log_openai_error(error: Exception, prefix: str = "OpenAI ERROR") -> None:
     error_message = str(error)
-    print(f"{prefix}: {error_message}")
     logger.error("%s: %s", prefix, error_message)
 
     lowered_message = error_message.lower()
@@ -122,7 +122,7 @@ def test_openai_connection() -> bool:
     api_key = settings.OPENAI_API_KEY.strip()
     if not api_key:
         message = "OPENAI_API_KEY missing"
-        print("OpenAI Connection FAILED:", message)
+        logger.error("OpenAI Connection FAILED: %s", message)
         _set_runtime_state(
             key_loaded=False,
             connection_tested=True,
@@ -133,12 +133,21 @@ def test_openai_connection() -> bool:
 
     client = OpenAI(api_key=api_key)
     try:
-        client.responses.create(
-            model=OPENAI_TEST_MODEL,
-            input="Reply with OK.",
-            max_output_tokens=ensure_min_output_tokens(8),
+        response = call_openai_sync(
+            "openai_connection_test",
+            lambda: client.responses.create(
+                model=OPENAI_TEST_MODEL,
+                input="Reply with OK.",
+                max_output_tokens=ensure_min_output_tokens(8),
+            ),
+            fallback=None,
+            timeout=OPENAI_TIMEOUT_SECONDS,
+            max_retries=OPENAI_MAX_RETRIES,
+            context={"model": OPENAI_TEST_MODEL},
         )
-        print("OpenAI Connection: SUCCESS")
+        if response is None:
+            raise RuntimeError("OpenAI connection test returned no response.")
+        logger.info("OpenAI Connection: SUCCESS")
         _set_runtime_state(
             key_loaded=True,
             connection_tested=True,
@@ -147,7 +156,7 @@ def test_openai_connection() -> bool:
         )
         return True
     except Exception as exc:
-        print("OpenAI Connection FAILED:", str(exc))
+        logger.error("OpenAI Connection FAILED: %s", exc)
         _log_openai_error(exc, prefix="OpenAI ERROR")
         _set_runtime_state(
             key_loaded=True,
@@ -275,41 +284,28 @@ def _validate_structured_output(parsed: Output) -> Output:
 
 
 async def _request_structured_completion(client: AsyncOpenAI, input_payload: List[Dict[str, str]]) -> Output:
-    last_error: Optional[Exception] = None
-
-    for attempt in range(1, OPENAI_MAX_RETRIES + 2):
-        try:
-            logger.info("OpenAI structured completion attempt %s started.", attempt)
-            response = await asyncio.wait_for(
-                client.responses.parse(
-                    model=MODEL_NAME,
-                    input=input_payload,
-                    text_format=Output,
-                    max_output_tokens=ensure_min_output_tokens(MAX_OUTPUT_TOKENS),
-                ),
-                timeout=OPENAI_TIMEOUT_SECONDS,
-            )
-            _set_runtime_state(
-                key_loaded=True,
-                connection_tested=True,
-                connection_ok=True,
-                message="OpenAI connection healthy.",
-            )
-            return _extract_parsed_output(response)
-        except asyncio.TimeoutError:
-            last_error = TimeoutError(f"OpenAI request timed out after {OPENAI_TIMEOUT_SECONDS} seconds.")
-            _log_openai_error(last_error)
-        except (APITimeoutError, RateLimitError, APIError) as exc:
-            last_error = exc
-            _log_openai_error(exc)
-        except Exception as exc:
-            last_error = exc
-            _log_openai_error(exc)
-
-        if attempt <= OPENAI_MAX_RETRIES:
-            await asyncio.sleep(1)
-
-    raise RuntimeError(f"Failed to generate structured analysis output: {last_error}") from last_error
+    response = await call_openai(
+        "structured_section_analysis",
+        lambda: client.responses.parse(
+            model=MODEL_NAME,
+            input=input_payload,
+            text_format=Output,
+            max_output_tokens=ensure_min_output_tokens(MAX_OUTPUT_TOKENS),
+        ),
+        fallback=None,
+        timeout=OPENAI_TIMEOUT_SECONDS,
+        max_retries=OPENAI_MAX_RETRIES,
+        context={"model": MODEL_NAME},
+    )
+    if response is None:
+        raise RuntimeError("Failed to generate structured analysis output.")
+    _set_runtime_state(
+        key_loaded=True,
+        connection_tested=True,
+        connection_ok=True,
+        message="OpenAI connection healthy.",
+    )
+    return _extract_parsed_output(response)
 
 
 async def generate_section_analysis(

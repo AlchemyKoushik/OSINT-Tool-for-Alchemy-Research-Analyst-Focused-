@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
 
+from config.settings import settings
 from models.request_models import AnalyzeExistingRequest, AnalyzeRequest, FollowUpRequest
 from models.response_models import AnalyzeResponse
 from services.cache_service import get_cached_result, set_cached_result
@@ -31,7 +32,7 @@ from services.memory_service import (
 from services.openai_service import generate_section_analysis
 from services.pipeline_orchestrator import execute_pipeline
 from services.prompt_builder import build_metadata_payload, get_prompt
-from services.redis_service import delete_session, get_session, update_session
+from services.redis_service import check_rate_limit, delete_session, get_session, update_session
 from services.ranking_service import rank_and_limit_insights
 from services.session_service import create_session_id
 from services.source_attribution_service import attach_sources_to_items
@@ -43,9 +44,53 @@ logger = logging.getLogger(__name__)
 PIPELINE_VERSION = "artifact_sot_v5_structured_insight_pipeline"
 INTERNAL_DEPTH = "high"
 INTERNAL_FRESHNESS = "high"
-MAX_WEB_SCRAPE_URLS = 25
+MAX_WEB_SCRAPE_URLS = 100
 INITIAL_INSIGHT_LIMIT = 10
 FOLLOW_UP_INSIGHT_LIMIT = 5
+
+
+def _sanitize_for_log(value: str, limit: int = 120) -> str:
+    normalized = " ".join(str(value or "").split())
+    return normalized[:limit] + ("..." if len(normalized) > limit else "")
+
+
+async def _read_json_payload(request: Request) -> Dict[str, Any]:
+    raw_body = await request.body()
+    if not raw_body:
+        raise ValueError("Empty request body.")
+    if len(raw_body) > settings.MAX_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="Request payload too large.")
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON payload: {exc}") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("JSON payload must be an object.")
+    return payload
+
+
+def _build_rate_limit_identity(request: Request, session_id: str | None) -> str:
+    normalized_session_id = str(session_id or "").strip()
+    if normalized_session_id:
+        return normalized_session_id
+
+    if request.client and request.client.host:
+        return str(request.client.host).strip()
+    return "unknown"
+
+
+def _enforce_rate_limit(request: Request, route_name: str, session_id: str | None) -> None:
+    allowed, retry_after = check_rate_limit(
+        _build_rate_limit_identity(request, session_id),
+        route_name=route_name,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Retry after {retry_after} seconds.",
+        )
 
 
 def _elapsed_ms(start_time: float) -> int:
@@ -302,11 +347,14 @@ async def get_locations() -> Dict[str, Any]:
 @router.post("/follow-up")
 async def follow_up(request: Request) -> Dict[str, Any]:
     try:
-        payload = await request.json()
+        payload = await _read_json_payload(request)
         request_model = FollowUpRequest(**payload)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid follow-up payload: {exc}") from exc
 
+    _enforce_rate_limit(request, "follow-up", request_model.session_id)
     return await asyncio.to_thread(
         handle_followup_query,
         follow_up_query=request_model.follow_up_query,
@@ -318,8 +366,10 @@ async def follow_up(request: Request) -> Dict[str, Any]:
 @router.post("/analyze-existing")
 async def analyze_existing(request: Request) -> Dict[str, Any]:
     try:
-        payload = await request.json()
+        payload = await _read_json_payload(request)
         request_model = AnalyzeExistingRequest(**payload)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid analyze-existing payload: {exc}") from exc
 
@@ -374,15 +424,15 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
 
     try:
         try:
-            payload = await request.json()
+            payload = await _read_json_payload(request)
         except Exception as exc:
-            print("Analyze ERROR:", str(exc))
+            logger.warning("Analyze payload read failed: %s", exc)
             return _build_fail_safe_response("Invalid JSON payload.", section=section)
 
         try:
             request_model = AnalyzeRequest(**payload)
         except Exception as exc:
-            print("Analyze ERROR:", str(exc))
+            logger.warning("Analyze payload validation failed: %s", exc)
             return _build_fail_safe_response(f"Invalid request payload: {exc}", section=section)
 
         topic = request_model.topic.strip()
@@ -391,6 +441,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         provided_queries = list(request_model.queries)
         session_id = request_model.session_id or create_session_id()
         follow_up_mode = bool(request_model.follow_up_mode)
+        _enforce_rate_limit(request, "analyze", session_id)
         provided_existing_chunks = (
             _resolve_session_existing_chunks(session_id, list(request_model.existing_chunks))
             if follow_up_mode or bool(request_model.existing_chunks)
@@ -412,10 +463,9 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         depth = INTERNAL_DEPTH
         freshness = INTERNAL_FRESHNESS
 
-        print(f"Topic received: {topic} | section={section} | location={location_summary['label']}")
         logger.info(
-            "Analyze request received for topic: %s with section %s and location %s",
-            topic,
+            "Analyze request received for topic=%s section=%s location=%s",
+            _sanitize_for_log(topic),
             section,
             location_summary["label"],
         )
@@ -507,8 +557,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 provided_queries=provided_queries or None,
             )
         except Exception as exc:
-            print("Pipeline Orchestrator ERROR:", str(exc))
-            logger.exception("Pipeline orchestrator failed for topic %s", topic)
+            logger.exception("Pipeline orchestrator failed for topic %s", _sanitize_for_log(topic))
             pipeline_payload = {
                 "queries": [],
                 "search_results": [],
@@ -546,8 +595,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         artifact_bundle = dict(pipeline_payload.get("artifact_bundle", {}))
         processed_payload = dict(pipeline_payload.get("processed_payload", {}))
 
-        print(f"Queries generated: {queries}")
-        print(f"Number of search results: {len(search_results)}")
+        logger.info("Pipeline output query_count=%s search_result_count=%s", len(queries), len(search_results))
 
         if not search_results:
             execution_time["total_ms"] = _elapsed_ms(total_start)
@@ -649,7 +697,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             source_scores = list(processed_payload.get("source_scores", []))
         signal_weights = list(processed_payload.get("signal_weights", []))
 
-        print(f"Length of processed text: {len(processed_text)}")
+        logger.info("Processed text prepared chars=%s", len(processed_text))
 
         if not processed_text:
             execution_time["total_ms"] = _elapsed_ms(total_start)
@@ -728,7 +776,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 max_items=insight_limit,
             )
         except Exception as exc:
-            print("Prompt Builder ERROR:", str(exc))
+            logger.warning("Prompt builder failed: %s", exc)
             execution_time["prompt_ms"] = _elapsed_ms(prompt_start)
             execution_time["total_ms"] = _elapsed_ms(total_start)
             debug_payload = None
@@ -775,8 +823,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 evidence_blocks=evidence_blocks,
             )
         except Exception as exc:
-            print("OpenAI ERROR:", str(exc))
-            logger.exception("OpenAI analysis failed for topic %s and section %s", topic, section)
+            logger.exception("OpenAI analysis failed for topic %s and section %s", _sanitize_for_log(topic), section)
             analysis_json = build_fallback_section_analysis(
                 topic=topic,
                 processed_text=processed_text,
@@ -798,7 +845,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         try:
             validated_response = AnalyzeResponse(**analysis_json)
         except Exception as exc:
-            print("Validation ERROR:", str(exc))
+            logger.warning("Analyze response validation failed: %s", exc)
             execution_time["validation_ms"] = _elapsed_ms(validation_start)
             execution_time["total_ms"] = _elapsed_ms(total_start)
             debug_payload = None
@@ -932,10 +979,11 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             )
 
         return _attach_session_id(response_payload, session_id)
+    except HTTPException:
+        raise
     except Exception as exc:
         execution_time["total_ms"] = _elapsed_ms(total_start)
-        print("Pipeline ERROR:", str(exc))
-        logger.exception("Analyze pipeline failed for topic: %s", topic)
+        logger.exception("Analyze pipeline failed for topic=%s", _sanitize_for_log(topic))
         debug_payload = None
         if debug_mode:
             debug_payload = _build_debug_payload(
@@ -1022,7 +1070,8 @@ async def cleanup_session(session_id: str) -> Dict[str, str]:
         await asyncio.to_thread(delete_session_prefix, normalized_session_id)
         await asyncio.to_thread(delete_session, normalized_session_id)
     except Exception as exc:
-        logger.exception("Session cleanup failed for %s", normalized_session_id)
+        logger.exception("Cleanup failed session_id=%s", normalized_session_id)
         raise HTTPException(status_code=500, detail=f"Session cleanup failed: {exc}") from exc
 
+    logger.info("Session deleted session_id=%s", normalized_session_id)
     return {"status": "deleted"}

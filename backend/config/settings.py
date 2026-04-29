@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Iterable
 
@@ -10,6 +11,25 @@ from pydantic_settings import (
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ENV_FILE = BACKEND_DIR / ".env"
 ENV_EXAMPLE_FILE = BACKEND_DIR / ".env.example"
+
+
+def _is_production_environment() -> bool:
+    environment = str(
+        os.getenv("APP_ENV")
+        or os.getenv("ENVIRONMENT")
+        or os.getenv("FASTAPI_ENV")
+        or os.getenv("RENDER")
+        or ""
+    ).strip().lower()
+    return environment in {"1", "true", "production", "prod", "render"}
+
+
+def _resolve_env_files() -> tuple[str, ...]:
+    if ENV_FILE.exists():
+        return (str(ENV_FILE),)
+    if not _is_production_environment() and ENV_EXAMPLE_FILE.exists():
+        return (str(ENV_EXAMPLE_FILE),)
+    return ()
 
 
 class Settings(BaseSettings):
@@ -25,9 +45,20 @@ class Settings(BaseSettings):
     CLOUDFLARE_R2_SECRET_ACCESS_KEY: str = ""
     CLOUDFLARE_R2_BUCKET_NAME: str = ""
     CLOUDFLARE_R2_REGION: str = "auto"
+    EXTERNAL_TIMEOUT_SECONDS: int = 20
+    EXTERNAL_MAX_RETRIES: int = 3
+    CACHE_TTL_SECONDS: int = 3600
+    SESSION_TTL_SECONDS: int = 3600
+    RATE_LIMIT_REQUESTS_PER_MINUTE: int = 10
+    MAX_REQUEST_BYTES: int = 250000
+    MAX_QUERY_LENGTH: int = 500
+    MAX_FOLLOW_UP_QUERY_LENGTH: int = 500
+    MAX_EXISTING_CHUNKS: int = 250
+    MAX_CHUNK_TEXT_LENGTH: int = 6000
+    CLEANUP_MAX_RETRIES: int = 2
 
     model_config = SettingsConfigDict(
-        env_file=str(ENV_FILE if ENV_FILE.exists() else ENV_EXAMPLE_FILE),
+        env_file=_resolve_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
     )

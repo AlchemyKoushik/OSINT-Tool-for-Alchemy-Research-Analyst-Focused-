@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 
 from config.settings import settings
 from models.response_models import GeneratedSearchQueries
+from services.external_client import call_openai
 from services.location_service import LocationContext
 from services.openai_service import can_use_openai, ensure_min_output_tokens
 from services.prompt_file_service import get_search_query_prompt_template
@@ -17,9 +18,27 @@ DEBUG = True
 QUERY_MODEL_NAME = settings.OPENAI_QUERY_MODEL or "gpt-4o-mini"
 QUERY_TIMEOUT_SECONDS = 25
 QUERY_MAX_RETRIES = 1
-MIN_QUERY_COUNT = 15
-MAX_QUERY_COUNT = 15
+MIN_QUERY_COUNT = 60
+MAX_QUERY_COUNT = 60
 DATA_TERMS = ("statistics", "report", "forecast", "data")
+QUERY_ANGLE_QUALIFIERS = (
+    "latest",
+    "2024",
+    "2025",
+    "recent",
+    "market size",
+    "investment",
+    "pricing",
+    "capacity",
+    "demand",
+    "policy",
+    "regulation",
+    "adoption",
+    "supply chain",
+    "competitive landscape",
+    "technology",
+    "consumer behavior",
+)
 BANNED_QUERY_PHRASES = (
     "analysis of",
     "overview of",
@@ -72,9 +91,7 @@ SECTION_QUERY_SUFFIXES = (
 
 
 def _log(message: str) -> None:
-    logger.info(message)
-    if DEBUG:
-        print(message)
+    logger.info("%s", message)
 
 
 def _extract_parsed_output(response: Any) -> GeneratedSearchQueries:
@@ -194,23 +211,30 @@ def build_fallback_queries(
     focus_terms = _build_query_focus_terms(normalized_section)
 
     fallback_queries: List[str] = []
-    for index, focus_term in enumerate(focus_terms):
-        suffix = SECTION_QUERY_SUFFIXES[index % len(SECTION_QUERY_SUFFIXES)]
-        fixed_parts = [part for part in [geo, focus_term, suffix] if part]
-        fixed_word_count = sum(_word_count(part) for part in fixed_parts)
-        compact_topic = _compact_topic_for_query(normalized_topic, 15 - fixed_word_count)
-        query_parts = [compact_topic, *fixed_parts]
-        normalized_query = _normalize_query(_trim_query_to_limit(query_parts))
-        try:
-            fallback_queries.append(
-                _validate_query(
-                    normalized_query,
-                    resolved_location_context,
-                    topic=normalized_topic,
-                )
-            )
-        except ValueError:
-            continue
+    seen_queries = set()
+    for focus_term in focus_terms:
+        for qualifier in QUERY_ANGLE_QUALIFIERS:
+            for suffix in SECTION_QUERY_SUFFIXES:
+                fixed_parts = [part for part in [geo, focus_term, qualifier, suffix] if part]
+                fixed_word_count = sum(_word_count(part) for part in fixed_parts)
+                compact_topic = _compact_topic_for_query(normalized_topic, 15 - fixed_word_count)
+                query_parts = [compact_topic, *fixed_parts]
+                normalized_query = _normalize_query(_trim_query_to_limit(query_parts))
+                normalized_key = normalized_query.lower()
+                if not normalized_query or normalized_key in seen_queries:
+                    continue
+                try:
+                    validated_query = _validate_query(
+                        normalized_query,
+                        resolved_location_context,
+                        topic=normalized_topic,
+                    )
+                except ValueError:
+                    continue
+                seen_queries.add(normalized_key)
+                fallback_queries.append(validated_query)
+                if len(fallback_queries) >= MAX_QUERY_COUNT:
+                    return fallback_queries[:MAX_QUERY_COUNT]
 
     return _deduplicate_queries(fallback_queries)[:MAX_QUERY_COUNT]
 
@@ -246,7 +270,7 @@ def _build_query_user_prompt(
         f"- Location: {location_mode} / {location_value}\n"
         "\n"
         "Task:\n"
-        f"- Generate exactly 15 search queries that reveal {section_focus}.\n"
+        f"- Generate exactly {MAX_QUERY_COUNT} search queries that reveal {section_focus}.\n"
         f"- Cover a diverse set of angles such as {focus_terms}.\n\n"
         "Runtime rules:\n"
         "- If Country is selected, every query must explicitly include the country name.\n"
@@ -256,7 +280,7 @@ def _build_query_user_prompt(
         '- Prefer geography-aware and data-focused wording.\n'
         '- Avoid vague phrases like "analysis of" and "overview of".\n'
         '- Avoid generic forecast headlines and vague academic wording.\n'
-        '- Use varied phrasing across the 15 queries; do not repeat the same frame.\n'
+        f'- Use varied phrasing across the {MAX_QUERY_COUNT} queries; do not repeat the same frame.\n'
         "- Keep each query to 15 words or fewer."
     ).strip()
 
@@ -330,16 +354,22 @@ async def generate_search_queries(
                         }
                     )
 
-                response = await asyncio.wait_for(
-                    client.responses.parse(
+                response = await call_openai(
+                    "generate_search_queries",
+                    lambda: client.responses.parse(
                         model=QUERY_MODEL_NAME,
                         input=input_payload,
                         text_format=GeneratedSearchQueries,
                         temperature=0.2,
                         max_output_tokens=ensure_min_output_tokens(500),
                     ),
+                    fallback=None,
                     timeout=QUERY_TIMEOUT_SECONDS,
+                    max_retries=QUERY_MAX_RETRIES,
+                    context={"model": QUERY_MODEL_NAME, "topic": normalized_topic, "section": normalized_section},
                 )
+                if response is None:
+                    raise RuntimeError("Query generation returned no response.")
                 parsed = _extract_parsed_output(response)
                 final_queries = _validate_query_batch(
                     list(parsed.queries),
@@ -361,8 +391,6 @@ async def generate_search_queries(
                     normalized_section,
                     exc,
                 )
-                if DEBUG:
-                    print(f"[QUERY] Failed | attempt={attempt} | error={exc}")
                 if attempt <= QUERY_MAX_RETRIES:
                     await asyncio.sleep(min(2 ** (attempt - 1), 4))
     finally:
@@ -375,9 +403,6 @@ async def generate_search_queries(
             normalized_section,
             last_error,
         )
-        if DEBUG:
-            print(f"[QUERY] Exhausted retries | error={last_error}")
-
     return build_fallback_queries(
         normalized_topic,
         normalized_section,

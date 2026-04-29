@@ -3,9 +3,10 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from openai import APIError, APITimeoutError, AsyncOpenAI, RateLimitError
+from openai import AsyncOpenAI
 
 from config.settings import settings
+from services.external_client import call_openai
 from services.openai_service import can_use_openai
 
 logger = logging.getLogger(__name__)
@@ -81,8 +82,9 @@ async def analyze_insights(sources_text: str) -> Dict[str, List[Any]]:
         for attempt in range(1, INSIGHT_MAX_RETRIES + 2):
             try:
                 logger.info("Insight analysis attempt %s started.", attempt)
-                response = await asyncio.wait_for(
-                    client.chat.completions.create(
+                response = await call_openai(
+                    "insight_analysis",
+                    lambda: client.chat.completions.create(
                         model=INSIGHT_MODEL_NAME,
                         messages=[
                             {
@@ -93,8 +95,13 @@ async def analyze_insights(sources_text: str) -> Dict[str, List[Any]]:
                         ],
                         response_format=INSIGHT_RESPONSE_FORMAT,
                     ),
+                    fallback=None,
                     timeout=INSIGHT_TIMEOUT_SECONDS,
+                    max_retries=INSIGHT_MAX_RETRIES,
+                    context={"model": INSIGHT_MODEL_NAME},
                 )
+                if response is None:
+                    raise RuntimeError("Insight analysis returned no response.")
 
                 content = response.choices[0].message.content
                 if not content:
@@ -117,15 +124,7 @@ async def analyze_insights(sources_text: str) -> Dict[str, List[Any]]:
                     "conflicts": conflicts,
                     "consensus_signals": [str(signal) for signal in consensus_signals],
                 }
-            except asyncio.TimeoutError:
-                last_error = TimeoutError(
-                    f"Insight analysis timed out after {INSIGHT_TIMEOUT_SECONDS} seconds."
-                )
-                logger.warning("Insight analysis attempt %s timed out.", attempt)
-            except (APITimeoutError, RateLimitError, APIError) as exc:
-                last_error = exc
-                logger.warning("Insight analysis attempt %s failed: %s", attempt, exc)
-            except (json.JSONDecodeError, ValueError) as exc:
+            except (json.JSONDecodeError, ValueError, RuntimeError) as exc:
                 last_error = exc
                 logger.warning("Insight analysis attempt %s returned invalid JSON: %s", attempt, exc)
             except Exception as exc:

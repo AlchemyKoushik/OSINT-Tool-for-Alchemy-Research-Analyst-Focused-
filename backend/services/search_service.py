@@ -13,8 +13,11 @@ except Exception:
         from duckduckgo_search import DDGS
     except Exception:
         DDGS = None  # type: ignore[assignment]
-        print("DDG Search client not installed")
+        logger = logging.getLogger(__name__)
+        logger.warning("DDG Search client not installed")
 
+from config.settings import settings
+from services.external_client import call_search, call_search_sync
 from services.memory_service import get_domain_authority_boosts, update_query_memory
 from services.location_service import (
     LocationContext,
@@ -26,11 +29,11 @@ from services.location_service import (
 logger = logging.getLogger(__name__)
 
 DEBUG = True
-SEARCH_TIMEOUT_SECONDS = 10
-SEARCH_MAX_RETRIES = 2
-MAX_RESULTS_PER_QUERY = 15
+SEARCH_TIMEOUT_SECONDS = settings.EXTERNAL_TIMEOUT_SECONDS
+SEARCH_MAX_RETRIES = settings.EXTERNAL_MAX_RETRIES
+MAX_RESULTS_PER_QUERY = 60
 MAX_CONCURRENT_REQUESTS = 2
-TOTAL_URL_CAP = 25
+TOTAL_URL_CAP = 100
 MIN_SNIPPET_LENGTH = 50
 CURRENT_YEAR = datetime.now(timezone.utc).year
 YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
@@ -54,9 +57,7 @@ SOCIAL_DOMAINS = (
 
 
 def _log(message: str) -> None:
-    logger.info(message)
-    if DEBUG:
-        print(message)
+    logger.info("%s", message)
 
 
 def _error_message(exc: Exception) -> str:
@@ -66,19 +67,24 @@ def _error_message(exc: Exception) -> str:
 
 def test_ddg() -> bool:
     if DDGS is None:
-        print("DDG Search FAILED: duckduckgo_search not installed")
+        logger.error("DDG Search FAILED: duckduckgo_search not installed")
         return False
 
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            with DDGS() as ddgs:
-                list(ddgs.text("test query", max_results=2))
-        print("DDG Search: SUCCESS")
+        results = call_search_sync(
+            "ddg_startup_test",
+            lambda: _run_ddg_search_sync("test query", 2),
+            fallback=[],
+            timeout=SEARCH_TIMEOUT_SECONDS,
+            max_retries=SEARCH_MAX_RETRIES,
+            context={"query": "test query"},
+        )
+        if not results:
+            raise RuntimeError("DDG startup test returned no results.")
+        logger.info("DDG Search: SUCCESS")
         return True
     except Exception as exc:
         error_message = _error_message(exc)
-        print("DDG Search FAILED:", error_message)
         logger.error("DDG Search FAILED: %s", error_message)
         return False
 
@@ -265,71 +271,58 @@ async def get_search_results(
     freshness_level = _normalize_freshness(freshness)
     resolved_location_context = location_context or LocationContext()
     authority_boosts = get_domain_authority_boosts()
-    last_error: Optional[Exception] = None
+    _log(f"[SEARCH] Query: {normalized_query}")
+    raw_results = await call_search(
+        "ddg_search",
+        lambda: asyncio.to_thread(
+            _run_ddg_search_sync,
+            normalized_query,
+            MAX_RESULTS_PER_QUERY,
+            None,
+            "auto",
+        ),
+        fallback=[],
+        timeout=SEARCH_TIMEOUT_SECONDS,
+        max_retries=SEARCH_MAX_RETRIES,
+        context={"query": normalized_query},
+    )
+    if not raw_results:
+        _log(f"[SEARCH] Failed: {normalized_query} | error=no results")
+        return []
 
-    for attempt in range(1, SEARCH_MAX_RETRIES + 2):
-        try:
-            _log(f"[SEARCH] Query: {normalized_query} | attempt={attempt}")
-            raw_results = await asyncio.wait_for(
-                asyncio.to_thread(
-                    _run_ddg_search_sync,
-                    normalized_query,
-                    MAX_RESULTS_PER_QUERY,
-                    None,
-                    "auto",
-                ),
-                timeout=SEARCH_TIMEOUT_SECONDS,
-            )
+    annotated_results: List[Dict[str, Any]] = []
+    for result in raw_results:
+        base_result = _score_result(_normalize_raw_result(result), authority_boosts, freshness_level)
+        location_payload = assess_location_relevance(
+            url=str(base_result.get("url", "")),
+            title=str(base_result.get("title", "")),
+            text=str(base_result.get("snippet", "")),
+            context=resolved_location_context,
+        )
+        annotated_results.append(
+            {
+                **base_result,
+                **location_payload,
+                "query": normalized_query,
+                "location_label": resolved_location_context.label,
+            }
+        )
 
-            annotated_results: List[Dict[str, Any]] = []
-            for result in raw_results:
-                base_result = _score_result(_normalize_raw_result(result), authority_boosts, freshness_level)
-                location_payload = assess_location_relevance(
-                    url=str(base_result.get("url", "")),
-                    title=str(base_result.get("title", "")),
-                    text=str(base_result.get("snippet", "")),
-                    context=resolved_location_context,
-                )
-                annotated_results.append(
-                    {
-                        **base_result,
-                        **location_payload,
-                        "query": normalized_query,
-                        "location_label": resolved_location_context.label,
-                    }
-                )
-
-            filtered_results = [result for result in annotated_results if _is_quality_result(result)]
-            filtered_results = [result for result in filtered_results if should_keep_search_result(result, resolved_location_context)]
-            filtered_results = _deduplicate_urls(filtered_results)
-            filtered_results.sort(
-                key=lambda item: (
-                    int(item.get("location_score", 0)),
-                    int(item.get("rank_score", 0)),
-                    int(item.get("temporal_boost", 0)),
-                    int(item.get("score", 0)),
-                ),
-                reverse=True,
-            )
-            limited_results = filtered_results[:MAX_RESULTS_PER_QUERY]
-            _log(f"[SEARCH] Results: {len(limited_results)} | query={normalized_query}")
-            return limited_results
-        except Exception as exc:
-            last_error = exc
-            logger.warning(
-                "Search failed for query %s on attempt %s: %s",
-                normalized_query,
-                attempt,
-                _error_message(exc),
-            )
-            if DEBUG:
-                print(f"[SEARCH] Failed: {normalized_query} | attempt={attempt} | error={_error_message(exc)}")
-            if attempt <= SEARCH_MAX_RETRIES:
-                await asyncio.sleep(min(2 ** (attempt - 1), 4))
-
-    failure_message = _error_message(last_error) if last_error is not None else "Unknown search error"
-    _log(f"[SEARCH] Failed: {normalized_query} | error={failure_message}")
-    return []
+    filtered_results = [result for result in annotated_results if _is_quality_result(result)]
+    filtered_results = [result for result in filtered_results if should_keep_search_result(result, resolved_location_context)]
+    filtered_results = _deduplicate_urls(filtered_results)
+    filtered_results.sort(
+        key=lambda item: (
+            int(item.get("location_score", 0)),
+            int(item.get("rank_score", 0)),
+            int(item.get("temporal_boost", 0)),
+            int(item.get("score", 0)),
+        ),
+        reverse=True,
+    )
+    limited_results = filtered_results[:MAX_RESULTS_PER_QUERY]
+    _log(f"[SEARCH] Results: {len(limited_results)} | query={normalized_query}")
+    return limited_results
 
 
 async def search_queries(

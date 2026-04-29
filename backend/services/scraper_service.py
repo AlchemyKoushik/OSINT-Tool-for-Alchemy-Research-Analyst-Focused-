@@ -11,6 +11,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from config.settings import settings
+from services.external_client import call_scraper
 from services.location_service import (
     LocationContext,
     assess_location_relevance,
@@ -38,10 +39,10 @@ except Exception as exc:
 logger = logging.getLogger(__name__)
 
 DEBUG = True
-SCRAPE_TIMEOUT_SECONDS = 10
-SCRAPE_MAX_RETRIES = 2
+SCRAPE_TIMEOUT_SECONDS = settings.EXTERNAL_TIMEOUT_SECONDS
+SCRAPE_MAX_RETRIES = settings.EXTERNAL_MAX_RETRIES
 MAX_CONCURRENT_REQUESTS = 2
-TOTAL_URL_CAP = 25
+TOTAL_URL_CAP = 100
 MIN_CONTENT_LENGTH = 500
 SCRAPLING_TIMEOUT_SECONDS = 10
 DEFAULT_HEADERS = {
@@ -77,9 +78,7 @@ STOPWORDS = {
 
 
 def _log(message: str) -> None:
-    logger.info(message)
-    if DEBUG:
-        print(message)
+    logger.info("%s", message)
 
 
 def _error_message(exc: Exception) -> str:
@@ -197,24 +196,26 @@ async def _extract_pdf_content(content: bytes) -> str:
 
 
 async def _download_pdf(url: str, client: httpx.AsyncClient) -> Tuple[str, bytes, str]:
-    last_error = "Unknown PDF download error"
+    response = await call_scraper(
+        "download_pdf",
+        lambda: client.get(url, timeout=SCRAPE_TIMEOUT_SECONDS, follow_redirects=True),
+        fallback=None,
+        timeout=SCRAPE_TIMEOUT_SECONDS,
+        max_retries=SCRAPE_MAX_RETRIES,
+        context={"url": url},
+    )
+    if response is None:
+        return "", b"", "PDF download failed."
 
-    for attempt in range(1, SCRAPE_MAX_RETRIES + 2):
-        try:
-            response = await client.get(url, timeout=SCRAPE_TIMEOUT_SECONDS, follow_redirects=True)
-            response.raise_for_status()
-            raw_content = response.content
-            extracted = await _extract_pdf_content(raw_content)
-            if len(_normalize_whitespace(extracted)) < MIN_CONTENT_LENGTH:
-                raise ValueError("PDF content too short after extraction.")
-            return extracted, raw_content, ""
-        except Exception as exc:
-            last_error = _error_message(exc)
-            logger.warning("PDF download failed for %s on attempt %s: %s", url, attempt, last_error)
-            if attempt <= SCRAPE_MAX_RETRIES:
-                await asyncio.sleep(min(2 ** (attempt - 1), 4))
-
-    return "", b"", last_error
+    try:
+        response.raise_for_status()
+        raw_content = response.content
+        extracted = await _extract_pdf_content(raw_content)
+        if len(_normalize_whitespace(extracted)) < MIN_CONTENT_LENGTH:
+            raise ValueError("PDF content too short after extraction.")
+        return extracted, raw_content, ""
+    except Exception as exc:
+        return "", b"", _error_message(exc)
 
 
 async def _scrape_with_scrapedo(url: str, client: httpx.AsyncClient) -> Tuple[str, str]:
@@ -228,28 +229,30 @@ async def _scrape_with_scrapedo(url: str, client: httpx.AsyncClient) -> Tuple[st
         "waitUntil": "domcontentloaded",
         "blockResources": "true",
     }
-    last_error = "Unknown Scrape.do error"
+    response = await call_scraper(
+        "scrape_do_request",
+        lambda: client.get(
+            "https://api.scrape.do/",
+            params=params,
+            timeout=SCRAPE_TIMEOUT_SECONDS,
+            follow_redirects=True,
+        ),
+        fallback=None,
+        timeout=SCRAPE_TIMEOUT_SECONDS,
+        max_retries=SCRAPE_MAX_RETRIES,
+        context={"url": url},
+    )
+    if response is None:
+        return "", "Scrape.do request failed."
 
-    for attempt in range(1, SCRAPE_MAX_RETRIES + 2):
-        try:
-            response = await client.get(
-                "https://api.scrape.do/",
-                params=params,
-                timeout=SCRAPE_TIMEOUT_SECONDS,
-                follow_redirects=True,
-            )
-            response.raise_for_status()
-            text = _extract_html_text(response.text)
-            if len(_normalize_whitespace(text)) < MIN_CONTENT_LENGTH:
-                raise ValueError("Scrape.do returned insufficient content.")
-            return text, ""
-        except Exception as exc:
-            last_error = _error_message(exc)
-            logger.warning("Scrape.do failed for %s on attempt %s: %s", url, attempt, last_error)
-            if attempt <= SCRAPE_MAX_RETRIES:
-                await asyncio.sleep(min(2 ** (attempt - 1), 4))
-
-    return "", last_error
+    try:
+        response.raise_for_status()
+        text = _extract_html_text(response.text)
+        if len(_normalize_whitespace(text)) < MIN_CONTENT_LENGTH:
+            raise ValueError("Scrape.do returned insufficient content.")
+        return text, ""
+    except Exception as exc:
+        return "", _error_message(exc)
 
 
 def _scrapling_markup(page: Any) -> str:
@@ -317,11 +320,17 @@ async def _scrape_with_scrapling(url: str) -> Tuple[str, str]:
 
     loop = asyncio.get_running_loop()
     try:
-        # Scrapling is sync, so keep it off the event loop and cap the await with a hard timeout.
-        content = await asyncio.wait_for(
-            loop.run_in_executor(None, _scrape_with_scrapling_sync, url),
+        # Scrapling is sync, so keep it off the event loop and route it through the shared retry wrapper.
+        content = await call_scraper(
+            "scrapling_fallback",
+            lambda: loop.run_in_executor(None, _scrape_with_scrapling_sync, url),
+            fallback="",
             timeout=SCRAPLING_TIMEOUT_SECONDS,
+            max_retries=SCRAPE_MAX_RETRIES,
+            context={"url": url},
         )
+        if not content:
+            raise RuntimeError("Scrapling returned no content.")
         return content, ""
     except Exception as exc:
         error_message = _error_message(exc)

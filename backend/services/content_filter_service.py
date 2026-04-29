@@ -3,10 +3,11 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from openai import APIError, APITimeoutError, OpenAI, RateLimitError
+from openai import OpenAI
 
 from config.settings import settings
 from models.response_models import ContentFilterResponse
+from services.external_client import call_openai_sync
 from services.openai_service import (
     OPENAI_TIMEOUT_SECONDS,
     can_use_openai,
@@ -350,17 +351,26 @@ def filter_content(scraped_data: List[str]) -> dict:
     try:
         for attempt in range(1, CONTENT_FILTER_MAX_RETRIES + 2):
             try:
-                response = client.responses.parse(
-                    model=CONTENT_FILTER_MODEL,
-                    input=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    text_format=ContentFilterResponse,
-                    max_output_tokens=ensure_min_output_tokens(CONTENT_FILTER_MAX_OUTPUT_TOKENS),
+                response = call_openai_sync(
+                    "content_filter",
+                    lambda: client.responses.parse(
+                        model=CONTENT_FILTER_MODEL,
+                        input=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        text_format=ContentFilterResponse,
+                        max_output_tokens=ensure_min_output_tokens(CONTENT_FILTER_MAX_OUTPUT_TOKENS),
+                    ),
+                    fallback=None,
+                    timeout=OPENAI_TIMEOUT_SECONDS,
+                    max_retries=CONTENT_FILTER_MAX_RETRIES,
+                    context={"model": CONTENT_FILTER_MODEL},
                 )
+                if response is None:
+                    raise RuntimeError("Content filtering returned no response.")
                 return _parse_llm_response(response)
-            except (APITimeoutError, RateLimitError, APIError, ValueError, RuntimeError) as exc:
+            except (ValueError, RuntimeError) as exc:
                 last_error = exc
                 logger.warning("Content filtering attempt %s failed: %s", attempt, exc)
                 if attempt <= CONTENT_FILTER_MAX_RETRIES:
