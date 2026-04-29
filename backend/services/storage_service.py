@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Union
 
 import boto3
@@ -7,6 +8,7 @@ import boto3
 from config.settings import settings
 
 _s3_client = None
+logger = logging.getLogger(__name__)
 
 
 def _ensure_r2_config() -> None:
@@ -27,7 +29,7 @@ def _get_s3_client():
         return _s3_client
 
     _ensure_r2_config()
-    endpoint = f"https://{settings.CLOUDFLARE_R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    endpoint = f"https://{settings.CLOUDFLARE_R2_ACCOUNT_ID.strip()}.r2.cloudflarestorage.com"
     _s3_client = boto3.client(
         "s3",
         endpoint_url=endpoint,
@@ -44,7 +46,7 @@ def _coerce_bytes(content: Union[bytes, str]) -> bytes:
     return content.encode("utf-8")
 
 
-def upload_to_r2(session_id: str, filename: str, content: Union[bytes, str]) -> str:
+def upload_to_r2(session_id: str, filename: str, content: Union[bytes, str]) -> str | None:
     key = f"sessions/{session_id}/{filename}"
     print("\n[DEBUG R2 UPLOAD]")
     print("session_id:", session_id)
@@ -64,32 +66,51 @@ def upload_to_r2(session_id: str, filename: str, content: Union[bytes, str]) -> 
         print("[SUCCESS] Uploaded to R2:", key)
         return key
     except Exception as exc:
+        logger.exception("R2 upload failed for key %s", key)
         print("[ERROR] R2 upload failed:", str(exc))
         return None
 
 
 def read_from_r2(key: str) -> bytes:
-    response = _get_s3_client().get_object(
-        Bucket=settings.CLOUDFLARE_R2_BUCKET_NAME,
-        Key=key,
-    )
-    return response["Body"].read()
+    try:
+        response = _get_s3_client().get_object(
+            Bucket=settings.CLOUDFLARE_R2_BUCKET_NAME,
+            Key=key,
+        )
+        return response["Body"].read()
+    except Exception:
+        logger.exception("R2 read failed for key %s", key)
+        raise
 
 
 def delete_session_prefix(session_id: str) -> None:
     prefix = f"sessions/{session_id}/"
     try:
-        response = _get_s3_client().list_objects_v2(
-            Bucket=settings.CLOUDFLARE_R2_BUCKET_NAME,
-            Prefix=prefix,
-        )
-        contents = response.get("Contents", [])
-        if not contents:
+        client = _get_s3_client()
+        continuation_token = None
+        objects = []
+
+        while True:
+            request_kwargs = {
+                "Bucket": settings.CLOUDFLARE_R2_BUCKET_NAME,
+                "Prefix": prefix,
+            }
+            if continuation_token:
+                request_kwargs["ContinuationToken"] = continuation_token
+
+            response = client.list_objects_v2(**request_kwargs)
+            contents = response.get("Contents", [])
+            objects.extend({"Key": item["Key"]} for item in contents if str(item.get("Key", "")).strip())
+
+            if not response.get("IsTruncated"):
+                break
+            continuation_token = response.get("NextContinuationToken")
+
+        if not objects:
             print("[CLEANUP] No files found for session:", session_id)
             return
 
-        objects = [{"Key": item["Key"]} for item in contents]
-        _get_s3_client().delete_objects(
+        client.delete_objects(
             Bucket=settings.CLOUDFLARE_R2_BUCKET_NAME,
             Delete={
                 "Objects": objects,
@@ -98,4 +119,5 @@ def delete_session_prefix(session_id: str) -> None:
         )
         print(f"[CLEANUP] Deleted {len(objects)} R2 files for session:", session_id)
     except Exception as exc:
+        logger.exception("R2 delete failed for session %s", session_id)
         print("[CLEANUP ERROR] R2 delete failed:", str(exc))

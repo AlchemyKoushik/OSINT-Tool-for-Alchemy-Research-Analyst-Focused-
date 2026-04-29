@@ -114,8 +114,8 @@ textarea:disabled {
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .atelier-panel-crisp {
@@ -367,8 +367,8 @@ textarea:disabled {
   box-shadow:
     0 20px 40px rgba(76, 68, 55, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .command-select__option {
@@ -616,7 +616,7 @@ textarea:disabled {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.68), transparent);
   will-change: transform;
   transform: translate3d(-100%, 0, 0);
-  animation: shimmer 1.8s linear infinite;
+  animation: shimmer 1.2s linear infinite;
 }
 
 .pencil-loader-shell {
@@ -653,8 +653,8 @@ textarea:disabled {
     0 8px 18px rgba(121, 102, 72, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.92);
   line-height: 1;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   will-change: transform, box-shadow, background-color, border-color;
   backface-visibility: hidden;
   transition:
@@ -714,17 +714,17 @@ textarea:disabled {
   overflow: hidden;
   position: relative;
   text-decoration: none !important;
-  will-change: width, transform, box-shadow, background;
+  will-change: transform, box-shadow, background, opacity;
   contain: layout paint;
   backface-visibility: hidden;
   transition:
-    width 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 180ms cubic-bezier(0.22, 1, 0.36, 1),
     gap 220ms cubic-bezier(0.16, 1, 0.3, 1),
     padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
     border-radius 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    background 220ms ease;
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 180ms ease;
 }
 
 .edit-filter-button__label {
@@ -737,13 +737,12 @@ textarea:disabled {
   font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.01em;
-  will-change: transform, opacity, max-width;
+  will-change: transform, opacity;
   backface-visibility: hidden;
   transform: translate3d(8px, 0, 0);
   transition:
-    max-width 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 180ms ease,
-    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 160ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .edit-filter-button__icon {
@@ -752,10 +751,7 @@ textarea:disabled {
   flex: 0 0 auto;
   will-change: transform;
   backface-visibility: hidden;
-  transition:
-    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    width 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    height 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .edit-filter-button__icon path {

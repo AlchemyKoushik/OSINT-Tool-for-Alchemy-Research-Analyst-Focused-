@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>The Intelligence Atelier</title>
+  <meta name="osint-api-url" content="" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -50,7 +51,11 @@
   <div id="root"></div>
   <script>
     window.__STATIC_ASSET_VERSION__ = "__STATIC_ASSET_VERSION_VALUE__";
-    window.OSINT_API_URL = window.OSINT_API_URL || (
+    const configuredApiUrl =
+      window.OSINT_API_URL ||
+      window.__OSINT_API_URL__ ||
+      document.querySelector('meta[name="osint-api-url"]')?.content?.trim();
+    window.OSINT_API_URL = configuredApiUrl || (
       window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
         ? "http://127.0.0.1:8000"
         : "https://osint-tool-for-alchemy-research-analyst.onrender.com/"

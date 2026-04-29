@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Iterable
 
 from pydantic_settings import (
     BaseSettings,
@@ -46,6 +47,11 @@ class Settings(BaseSettings):
             env_settings,
             file_secret_settings,
         )
+
+    def validate_required(self, keys: Iterable[str]) -> None:
+        missing = [key for key in keys if not str(getattr(self, key, "")).strip()]
+        if missing:
+            raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
 
 settings = Settings()

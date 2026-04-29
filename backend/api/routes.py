@@ -1,6 +1,7 @@
 ﻿import logging
 import time
 import json
+import asyncio
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
@@ -306,7 +307,8 @@ async def follow_up(request: Request) -> Dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid follow-up payload: {exc}") from exc
 
-    return handle_followup_query(
+    return await asyncio.to_thread(
+        handle_followup_query,
         follow_up_query=request_model.follow_up_query,
         existing_filtered_chunks=_resolve_session_existing_chunks(request_model.session_id, request_model.existing_chunks),
         existing_metadata=request_model.metadata,
@@ -1017,8 +1019,8 @@ async def cleanup_session(session_id: str) -> Dict[str, str]:
         raise HTTPException(status_code=422, detail="session_id is required.")
 
     try:
-        delete_session_prefix(normalized_session_id)
-        delete_session(normalized_session_id)
+        await asyncio.to_thread(delete_session_prefix, normalized_session_id)
+        await asyncio.to_thread(delete_session, normalized_session_id)
     except Exception as exc:
         logger.exception("Session cleanup failed for %s", normalized_session_id)
         raise HTTPException(status_code=500, detail=f"Session cleanup failed: {exc}") from exc

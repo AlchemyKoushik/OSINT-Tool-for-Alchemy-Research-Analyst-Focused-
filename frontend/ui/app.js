@@ -74,11 +74,11 @@ const LIVE_JOURNAL = [
   "Preparing the final briefing canvas...",
 ];
 
-const TRANSITION = { duration: 0.34, ease: [0.16, 1, 0.3, 1] };
+const TRANSITION = { duration: 0.22, ease: [0.22, 1, 0.36, 1] };
 const COMMAND_INPUT_CLASS = "command-control command-control--input";
 const COMMAND_SELECT_CLASS = "command-control command-control--select command-select__trigger";
 const MOTION_SMOOTH_STYLE = { willChange: "transform, opacity" };
-const MOTION_EXPAND_STYLE = { willChange: "transform, opacity, height" };
+const MOTION_EXPAND_STYLE = { willChange: "transform, opacity" };
 const MOTION_SCALE_X_STYLE = {
   willChange: "transform",
   transformOrigin: "0% 50%",
@@ -1010,12 +1010,12 @@ function CommandDeck({
               ? html`
                   <${motion.div}
                     key="region-selector"
-                    initial=${{ opacity: 0, height: 0, y: 10 }}
-                    animate=${{ opacity: 1, height: "auto", y: 0 }}
-                    exit=${{ opacity: 0, height: 0, y: -10 }}
+                    initial=${{ opacity: 0, y: 10, scale: 0.985 }}
+                    animate=${{ opacity: 1, y: 0, scale: 1 }}
+                    exit=${{ opacity: 0, y: -8, scale: 0.985 }}
                     transition=${TRANSITION}
                     style=${MOTION_EXPAND_STYLE}
-                    className="overflow-hidden"
+                    className="overflow-hidden origin-top"
                   >
                     <div className="atelier-panel-strong rounded-[28px] px-4 py-4">
                       <div className="mb-4 flex items-center justify-between gap-4">
@@ -1053,12 +1053,12 @@ function CommandDeck({
               ? html`
                   <${motion.div}
                     key="country-selector"
-                    initial=${{ opacity: 0, height: 0, y: 10 }}
-                    animate=${{ opacity: 1, height: "auto", y: 0 }}
-                    exit=${{ opacity: 0, height: 0, y: -10 }}
+                    initial=${{ opacity: 0, y: 10, scale: 0.985 }}
+                    animate=${{ opacity: 1, y: 0, scale: 1 }}
+                    exit=${{ opacity: 0, y: -8, scale: 0.985 }}
                     transition=${TRANSITION}
                     style=${MOTION_EXPAND_STYLE}
-                    className="overflow-hidden"
+                    className="overflow-hidden origin-top"
                   >
                     <div className="atelier-panel-strong rounded-[28px] px-4 py-4">
                       <div className="mb-4 flex items-center justify-between gap-4">
@@ -1473,7 +1473,7 @@ function WorkspaceTransitionShell() {
       initial=${{ opacity: 0 }}
       animate=${{ opacity: 1 }}
       exit=${{ opacity: 0 }}
-      transition=${{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      transition=${{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
       style=${MOTION_SMOOTH_STYLE}
       className="absolute inset-0 z-20 grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]"
     >
@@ -1490,7 +1490,7 @@ function WorkspaceTransitionShell() {
               className="progress-ribbon h-full w-full rounded-full"
               initial=${{ scaleX: 0.18 }}
               animate=${{ scaleX: [0.18, 0.54, 0.32] }}
-              transition=${{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              transition=${{ duration: 1.2, repeat: Infinity, ease: "linear" }}
               style=${MOTION_SCALE_X_STYLE}
             />
           </div>
@@ -1567,11 +1567,11 @@ function FollowUpTrigger({ open, onClick, disabled = false }) {
       type="button"
       disabled=${disabled}
       onClick=${onClick}
-      className="group inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/66 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-atelier-moss opacity-72 transition-all duration-300 hover:border-atelier-forest/22 hover:bg-white/92 hover:text-atelier-ink hover:opacity-100"
+      className="group inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/66 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-atelier-moss opacity-72 transition-colors duration-200 hover:border-atelier-forest/22 hover:bg-white/92 hover:text-atelier-ink hover:opacity-100"
       aria-expanded=${open ? "true" : "false"}
       title="Ask a follow-up question"
     >
-      <svg className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <svg className="h-4 w-4 transition-transform duration-200 group-hover:scale-105" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M7 17.5h3.2l3.9 3.1c.4.3.9 0 .9-.5v-2.6h2.5A3.5 3.5 0 0 0 21 14V7.5A3.5 3.5 0 0 0 17.5 4h-11A3.5 3.5 0 0 0 3 7.5V14A3.5 3.5 0 0 0 6.5 17.5H7Z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M8 9.5h8M8 12.5h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
@@ -1594,12 +1594,12 @@ function FollowUpInput({
         ? html`
             <${motion.div}
               key="followup-input"
-              initial=${{ opacity: 0, y: 10, height: 0 }}
-              animate=${{ opacity: 1, y: 0, height: "auto" }}
-              exit=${{ opacity: 0, y: 6, height: 0 }}
+              initial=${{ opacity: 0, y: 10, scale: 0.99 }}
+              animate=${{ opacity: 1, y: 0, scale: 1 }}
+              exit=${{ opacity: 0, y: 6, scale: 0.99 }}
               transition=${TRANSITION}
               style=${MOTION_EXPAND_STYLE}
-              className="overflow-hidden"
+              className="overflow-hidden origin-top"
             >
               <form onSubmit=${onSubmit} className=${cx("rounded-[24px] border border-atelier-line bg-white/72 px-4 py-4", disabled && "ui-disabled-shell")}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-end">
@@ -1620,7 +1620,7 @@ function FollowUpInput({
                   <button
                     type="submit"
                     disabled=${disabled || loading || !String(value || "").trim()}
-                    className="inline-flex h-[3.25rem] items-center justify-center rounded-full bg-atelier-ink px-5 text-xs font-bold uppercase tracking-[0.2em] text-atelier-paper transition-all duration-300 hover:bg-atelier-forest disabled:cursor-not-allowed disabled:opacity-45"
+                    className="inline-flex h-[3.25rem] items-center justify-center rounded-full bg-atelier-ink px-5 text-xs font-bold uppercase tracking-[0.2em] text-atelier-paper transition-colors duration-200 hover:bg-atelier-forest disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     ${loading ? "Processing..." : "Send"}
                   </button>
@@ -1770,12 +1770,12 @@ function SourceDisclosure({ sources }) {
           ? html`
               <${motion.div}
                 key="sources-panel"
-                initial=${{ opacity: 0, height: 0 }}
-                animate=${{ opacity: 1, height: "auto" }}
-                exit=${{ opacity: 0, height: 0 }}
+                initial=${{ opacity: 0, y: 8, scale: 0.99 }}
+                animate=${{ opacity: 1, y: 0, scale: 1 }}
+                exit=${{ opacity: 0, y: 6, scale: 0.99 }}
                 transition=${TRANSITION}
                 style=${MOTION_EXPAND_STYLE}
-                className="overflow-hidden border-t border-atelier-line"
+                className="overflow-hidden origin-top border-t border-atelier-line"
               >
                 <div className="space-y-3 px-4 py-4">
                   ${normalizedSources.map(
@@ -1785,7 +1785,7 @@ function SourceDisclosure({ sources }) {
                         href=${source.url || "#"}
                         target="_blank"
                         rel="noreferrer"
-                        className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3 no-underline transition-colors duration-300 hover:border-atelier-forest/24 hover:bg-white"
+                        className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3 no-underline transition-colors duration-200 hover:border-atelier-forest/24 hover:bg-white"
                       >
                         <p className="m-0 text-sm font-bold text-atelier-ink">
                           ${source.title || source.url || `Source ${index + 1}`}
@@ -2189,7 +2189,7 @@ function App() {
     let messageIndex = 1;
     const interval = window.setInterval(() => {
       progress = Math.min(progress + 13, 90);
-      setProgressValue(progress);
+      setProgressValue((current) => Math.max(current, progress));
       journalSeedRef.current += 1;
       setLiveJournal((previous) =>
         [
@@ -2530,7 +2530,7 @@ function App() {
     flushSync(() => {
       setIsProcessing(true);
       setAnalysisError("");
-      setProgressValue(12);
+      setProgressValue((current) => Math.max(current, 12));
       setLoaderFrameId((current) => current + 1);
       setWorkspaceSurfaceState("transitioning");
       setLiveJournal([
@@ -2594,7 +2594,7 @@ function App() {
         setAnalysisResult(payload);
         setAnalysisDebug(payload.debug || null);
         setAnalysisMeta(responseMeta);
-        setProgressValue(100);
+        setProgressValue((current) => Math.max(current, 100));
         setLiveJournal(buildCompletedJournal(payload, payload.debug || null, responseMeta));
         setAnalysisState("completed");
       });
@@ -2652,7 +2652,7 @@ function App() {
               <div className="relative min-h-0">
                 <div
                   className=${cx(
-                    "workspace-main grid min-h-0 gap-4 transition-opacity duration-300 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]",
+                    "workspace-main grid min-h-0 gap-4 transition-opacity duration-200 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]",
                     isWorkspaceTransitioning ? "opacity-0" : "opacity-100",
                   )}
                 >

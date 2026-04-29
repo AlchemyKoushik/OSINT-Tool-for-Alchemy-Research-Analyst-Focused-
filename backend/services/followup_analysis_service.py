@@ -1,5 +1,6 @@
 ﻿import logging
 import json
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from models.response_models import AnalyzeResponse
@@ -110,7 +111,8 @@ async def analyze_existing_chunks(
         cleaned_dump_key = _normalize_text(session.get("cleaned_dump_key"))
         if cleaned_dump_key:
             try:
-                cleaned_data = json.loads(read_from_r2(cleaned_dump_key).decode("utf-8", errors="ignore"))
+                cleaned_blob = await asyncio.to_thread(read_from_r2, cleaned_dump_key)
+                cleaned_data = json.loads(cleaned_blob.decode("utf-8", errors="ignore"))
                 if isinstance(cleaned_data, dict):
                     resolved_chunks = list(cleaned_data.get("existing_chunks", []))
             except Exception as exc:
