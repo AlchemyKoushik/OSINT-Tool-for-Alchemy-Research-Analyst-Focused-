@@ -28,7 +28,7 @@ Objective:
 
 Output:
 - Return strict JSON only in this exact shape: {"queries": ["..."]}.
-- Return exactly 15 queries.
+- Return exactly 8 queries.
 
 Rules:
 - Every query must be concise, data-seeking, and decision-useful.
@@ -48,7 +48,7 @@ Objective:
 
 Output:
 - Return strict JSON only in this exact shape: {"queries": ["..."]}.
-- Return exactly 15 queries.
+- Return exactly 8 queries.
 
 Rules:
 - Every query must be concise, data-seeking, and decision-useful.

@@ -14,8 +14,8 @@ class GeneratedSearchQueries(BaseModel):
     @classmethod
     def validate_queries(cls, value: List[str]) -> List[str]:
         normalized_queries = [str(query).strip() for query in value if str(query).strip()]
-        if len(normalized_queries) != 15:
-            raise ValueError("Search query generation must return exactly 15 queries.")
+        if len(normalized_queries) != 8:
+            raise ValueError("Search query generation must return exactly 8 queries.")
         return normalized_queries
 
 
@@ -47,6 +47,77 @@ class Insight(BaseModel):
                 continue
             normalized_ids.append(numeric_id)
         return normalized_ids[:20]
+
+
+def _normalize_text_value(value) -> str:
+    return str(value or "").strip()
+
+
+def _pick_first_text(payload, keys: List[str]) -> str:
+    for key in keys:
+        normalized = _normalize_text_value(payload.get(key))
+        if normalized:
+            return normalized
+    return ""
+
+
+def _normalize_sources(raw_sources) -> list[dict[str, str]]:
+    if not isinstance(raw_sources, list):
+        return []
+
+    normalized_sources: list[dict[str, str]] = []
+    seen_keys = set()
+
+    for index, source in enumerate(raw_sources, start=1):
+        if not isinstance(source, dict):
+            continue
+
+        normalized_source = {
+            "source_id": _pick_first_text(source, ["source_id", "id"]) or str(index),
+            "title": _pick_first_text(source, ["title", "name", "label"]) or f"Source {index}",
+            "url": _pick_first_text(source, ["url", "link", "href"]),
+            "domain": _pick_first_text(source, ["domain", "publisher", "site"]),
+            "date": _pick_first_text(source, ["date", "published_at", "publishedDate"]),
+        }
+        dedupe_key = (
+            normalized_source["source_id"],
+            normalized_source["title"],
+            normalized_source["url"],
+        )
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+        normalized_sources.append(normalized_source)
+
+    return normalized_sources[:20]
+
+
+def normalize_research_item_payload(item) -> dict[str, object] | None:
+    if not isinstance(item, dict):
+        return None
+
+    heading = _pick_first_text(item, ["heading", "title", "name", "label", "main_trend", "main_driver"])
+    body = _pick_first_text(item, ["body", "description", "details", "summary", "explanation"])
+    if not heading or not body:
+        return None
+
+    normalized_source_ids: List[int] = []
+    raw_source_ids = item.get("source_ids", [])
+    if isinstance(raw_source_ids, list):
+        for source_id in raw_source_ids:
+            try:
+                numeric_id = int(source_id)
+            except (TypeError, ValueError):
+                continue
+            if numeric_id > 0 and numeric_id not in normalized_source_ids:
+                normalized_source_ids.append(numeric_id)
+
+    return {
+        "heading": heading,
+        "body": body,
+        "sources": _normalize_sources(item.get("sources") or item.get("references") or item.get("evidence")),
+        "source_ids": normalized_source_ids[:20],
+    }
 
 
 class Output(BaseModel):
@@ -162,6 +233,34 @@ class AnalyzeResponse(BaseModel):
     @classmethod
     def validate_items(cls, value: List[ResearchItem]) -> List[ResearchItem]:
         return value
+
+
+def normalize_analyze_response_payload(payload, fallback_section: str = "trends") -> dict[str, object]:
+    normalized_payload = dict(payload) if isinstance(payload, dict) else {}
+    normalized_section = _normalize_text_value(normalized_payload.get("section")).lower()
+    if normalized_section not in {"trends", "drivers"}:
+        normalized_section = _normalize_text_value(fallback_section).lower() or "trends"
+
+    raw_items = normalized_payload.get("items")
+    if not isinstance(raw_items, list):
+        raw_items = normalized_payload.get(normalized_section)
+    if not isinstance(raw_items, list):
+        raw_items = []
+
+    normalized_items = [
+        normalized_item
+        for normalized_item in (normalize_research_item_payload(item) for item in raw_items)
+        if normalized_item
+    ]
+
+    normalized_title = _pick_first_text(normalized_payload, ["title", "heading"])
+    if not normalized_title:
+        normalized_title = "Market Drivers" if normalized_section == "drivers" else "Industry Trends"
+
+    normalized_payload["section"] = normalized_section
+    normalized_payload["title"] = normalized_title
+    normalized_payload["items"] = normalized_items
+    return normalized_payload
 
 
 FollowUpDecision = Literal["SUFFICIENT", "PARTIAL", "INSUFFICIENT"]

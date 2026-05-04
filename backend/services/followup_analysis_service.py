@@ -3,7 +3,7 @@ import json
 import asyncio
 from typing import Any, Dict, List, Optional
 
-from models.response_models import AnalyzeResponse
+from models.response_models import AnalyzeResponse, normalize_analyze_response_payload
 from services.fallback_analysis import build_fallback_section_analysis
 from services.location_service import LocationContext, resolve_location_context
 from services.openai_service import generate_section_analysis
@@ -176,6 +176,7 @@ async def analyze_existing_chunks(
             section=section,
         )
 
+    analysis_json = normalize_analyze_response_payload(analysis_json, fallback_section=section)
     ranked_items = rank_and_limit_insights(
         list(analysis_json.get("items", [])),
         limit=FOLLOW_UP_INSIGHT_LIMIT,

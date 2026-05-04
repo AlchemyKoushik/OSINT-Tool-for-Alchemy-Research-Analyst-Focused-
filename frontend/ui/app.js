@@ -196,6 +196,69 @@ function extractDomain(url) {
   }
 }
 
+function normalizeSourceList(rawSources) {
+  if (!Array.isArray(rawSources)) {
+    return [];
+  }
+
+  const normalizedSources = [];
+  const seenKeys = new Set();
+
+  rawSources.forEach((source, index) => {
+    if (!source || typeof source !== "object") {
+      return;
+    }
+
+    const normalizedSource = {
+      source_id: String(source.source_id || source.id || index + 1).trim(),
+      title: String(source.title || source.name || source.label || "").trim(),
+      url: String(source.url || source.link || source.href || "").trim(),
+      domain: String(source.domain || source.publisher || source.site || "").trim(),
+      date: String(source.date || source.published_at || source.publishedDate || "").trim(),
+    };
+
+    if (!normalizedSource.title && !normalizedSource.url) {
+      return;
+    }
+
+    const dedupeKey = `${normalizedSource.source_id}::${normalizedSource.title}::${normalizedSource.url}`;
+    if (seenKeys.has(dedupeKey)) {
+      return;
+    }
+    seenKeys.add(dedupeKey);
+    normalizedSources.push(normalizedSource);
+  });
+
+  return normalizedSources;
+}
+
+function normalizeResearchItem(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const heading = String(
+    item.heading || item.title || item.name || item.label || item.main_trend || item.main_driver || "",
+  ).trim();
+  const body = String(
+    item.body || item.description || item.details || item.summary || item.explanation || "",
+  ).trim();
+  if (!heading || !body) {
+    return null;
+  }
+
+  return {
+    heading,
+    body,
+    sources: normalizeSourceList(item.sources || item.references || item.evidence),
+    source_ids: Array.isArray(item.source_ids)
+      ? item.source_ids
+          .map((sourceId) => Number.parseInt(sourceId, 10))
+          .filter((sourceId, index, values) => Number.isInteger(sourceId) && sourceId > 0 && values.indexOf(sourceId) === index)
+      : [],
+  };
+}
+
 function buildExistingChunks(result, debug) {
   const debugChunks = Array.isArray(debug?.cleaned_chunks)
     ? debug.cleaned_chunks
@@ -235,25 +298,8 @@ function buildExistingChunks(result, debug) {
 }
 
 function extractResearchItems(payload) {
-  return Array.isArray(payload?.items)
-    ? payload.items
-        .map((item) => ({
-          heading: String(item?.heading || "").trim(),
-          body: String(item?.body || "").trim(),
-          sources: Array.isArray(item?.sources)
-            ? item.sources
-                .map((source) => ({
-                  source_id: String(source?.source_id || "").trim(),
-                  title: String(source?.title || "").trim(),
-                  url: String(source?.url || "").trim(),
-                  domain: String(source?.domain || "").trim(),
-                  date: String(source?.date || "").trim(),
-                }))
-                .filter((source) => source.title || source.url)
-            : [],
-        }))
-        .filter((item) => item.heading && item.body)
-    : [];
+  const normalizedPayload = normalizeResearchResponse(payload);
+  return normalizedPayload ? normalizedPayload.items : [];
 }
 
 function buildLocationPayload(preference, value) {
@@ -297,27 +343,37 @@ function deriveLocationMeta(preference, value, countries) {
   };
 }
 
+function normalizeResearchResponse(payload, fallbackSection = "trends") {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const inferredSection =
+    payload.section === "trends" || payload.section === "drivers"
+      ? payload.section
+      : Array.isArray(payload.drivers)
+        ? "drivers"
+        : Array.isArray(payload.trends)
+          ? "trends"
+          : fallbackSection;
+  const rawItems = Array.isArray(payload.items)
+    ? payload.items
+    : Array.isArray(payload[inferredSection])
+      ? payload[inferredSection]
+      : [];
+  const normalizedItems = rawItems.map(normalizeResearchItem).filter(Boolean);
+  const title = String(payload.title || payload.heading || sectionTitle(inferredSection)).trim() || sectionTitle(inferredSection);
+
+  return {
+    ...payload,
+    section: inferredSection,
+    title,
+    items: normalizedItems,
+  };
+}
+
 function isResearchResponse(payload) {
-  return (
-    payload &&
-    typeof payload === "object" &&
-    (payload.section === "trends" || payload.section === "drivers") &&
-    typeof payload.title === "string" &&
-    Array.isArray(payload.items) &&
-    payload.items.every(
-      (item) =>
-        item &&
-        typeof item.heading === "string" &&
-        typeof item.body === "string" &&
-        (!Array.isArray(item.sources) ||
-          item.sources.every(
-            (source) =>
-              source &&
-              typeof source.title === "string" &&
-              typeof source.url === "string",
-          )),
-    )
-  );
+  return Boolean(normalizeResearchResponse(payload));
 }
 
 function getLatestAnalysisContext(baseResult, baseDebug, followUps) {
@@ -1864,23 +1920,38 @@ function SourceDisclosure({ sources }) {
                 <div className="space-y-3 px-4 py-4">
                   ${normalizedSources.map(
                     (source, index) => html`
-                      <a
-                        key=${`${source.url || source.title}-${index}`}
-                        href=${source.url || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3 no-underline transition-colors duration-200 hover:border-atelier-forest/24 hover:bg-white"
-                      >
-                        <p className="m-0 text-sm font-bold text-atelier-ink">
-                          ${source.title || source.url || `Source ${index + 1}`}
-                        </p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/75">
-                          ${source.domain || extractDomain(source.url)}${source.date ? ` | ${source.date}` : ""}
-                        </p>
-                        <p className="mt-2 break-all text-xs leading-6 text-atelier-moss">
-                          ${source.url || "Source URL unavailable"}
-                        </p>
-                      </a>
+                      ${source.url
+                        ? html`<a
+                            key=${`${source.url || source.title}-${index}`}
+                            href=${source.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3 no-underline transition-colors duration-200 hover:border-atelier-forest/24 hover:bg-white"
+                          >
+                            <p className="m-0 text-sm font-bold text-atelier-ink">
+                              ${source.title || source.url || `Source ${index + 1}`}
+                            </p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/75">
+                              ${source.domain || extractDomain(source.url)}${source.date ? ` | ${source.date}` : ""}
+                            </p>
+                            <p className="mt-2 break-all text-xs leading-6 text-atelier-moss">
+                              ${source.url}
+                            </p>
+                          </a>`
+                        : html`<div
+                            key=${`${source.title || "source"}-${index}`}
+                            className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3"
+                          >
+                            <p className="m-0 text-sm font-bold text-atelier-ink">
+                              ${source.title || `Source ${index + 1}`}
+                            </p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/75">
+                              ${source.domain || "Source reference"}${source.date ? ` | ${source.date}` : ""}
+                            </p>
+                            <p className="mt-2 text-xs leading-6 text-atelier-moss">
+                              Source URL unavailable
+                            </p>
+                          </div>`}
                     `,
                   )}
                 </div>
@@ -2534,11 +2605,12 @@ function App() {
       if (!response.ok) {
         throw new Error(buildErrorMessage(responsePayload, "Follow-up research failed. Please try again."));
       }
-      if (!isResearchResponse(responsePayload)) {
+      const normalizedFollowUpPayload = normalizeResearchResponse(responsePayload, resultSection);
+      if (!normalizedFollowUpPayload) {
         throw new Error("Follow-up research returned an unexpected response shape.");
       }
 
-      const results = extractResearchItems(responsePayload);
+      const results = extractResearchItems(normalizedFollowUpPayload);
 
       const nextEntry = {
         id: `followup-${Date.now()}`,
@@ -2549,11 +2621,11 @@ function App() {
         reason: String(payload?.reason || "").trim(),
         new_queries: Array.isArray(payload?.new_queries) ? payload.new_queries : [],
         results,
-        result: responsePayload,
-        title: String(responsePayload?.title || followUpSectionTitle(payload.refined_query, resultSection)).trim(),
-        section: responsePayload?.section || resultSection,
-        meta: responsePayload?.meta || analysisMeta,
-        debug: responsePayload?.debug || analysisDebug,
+        result: normalizedFollowUpPayload,
+        title: String(normalizedFollowUpPayload?.title || followUpSectionTitle(payload.refined_query, resultSection)).trim(),
+        section: normalizedFollowUpPayload?.section || resultSection,
+        meta: normalizedFollowUpPayload?.meta || analysisMeta,
+        debug: normalizedFollowUpPayload?.debug || analysisDebug,
       };
 
       setFollowUps((current) => [...current, nextEntry]);
@@ -2678,20 +2750,21 @@ function App() {
         throw new Error(payload.error);
       }
 
-      if (!isResearchResponse(payload)) {
+      const normalizedPayload = normalizeResearchResponse(payload, section);
+      if (!normalizedPayload) {
         throw new Error("Analysis returned an unexpected response shape.");
       }
 
       startTransition(() => {
         const responseMeta = {
-          topic: payload?.meta?.topic || trimmedTopic,
-          location: payload?.meta?.location || requestedLocation,
+          topic: normalizedPayload?.meta?.topic || trimmedTopic,
+          location: normalizedPayload?.meta?.location || requestedLocation,
         };
-        setAnalysisResult(payload);
-        setAnalysisDebug(payload.debug || null);
+        setAnalysisResult(normalizedPayload);
+        setAnalysisDebug(normalizedPayload.debug || null);
         setAnalysisMeta(responseMeta);
         setProgressValue((current) => Math.max(current, 100));
-        setLiveJournal(buildCompletedJournal(payload, payload.debug || null, responseMeta));
+        setLiveJournal(buildCompletedJournal(normalizedPayload, normalizedPayload.debug || null, responseMeta));
         setAnalysisState("completed");
       });
     } catch (error) {

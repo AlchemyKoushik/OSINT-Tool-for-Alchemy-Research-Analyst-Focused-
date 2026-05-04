@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from config.settings import settings
 from models.request_models import AnalyzeExistingRequest, AnalyzeRequest, FollowUpRequest
-from models.response_models import AnalyzeResponse
+from models.response_models import AnalyzeResponse, normalize_analyze_response_payload
 from services.cache_service import get_cached_result, set_cached_result
 from services.fallback_analysis import build_fallback_section_analysis
 from services.followup_analysis_service import analyze_existing_chunks
@@ -41,7 +41,7 @@ from services.storage_service import delete_session_prefix, read_from_r2
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "artifact_sot_v5_structured_insight_pipeline"
+PIPELINE_VERSION = "artifact_sot_v6_bounded_interactive_pipeline"
 INTERNAL_DEPTH = "high"
 INTERNAL_FRESHNESS = "high"
 MAX_WEB_SCRAPE_URLS = 100
@@ -501,7 +501,10 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             cached_result = None
 
         if cached_result is not None and not follow_up_mode:
-            cached_response = dict(cached_result.get("response", {}))
+            cached_response = normalize_analyze_response_payload(
+                cached_result.get("response", {}),
+                fallback_section=section,
+            )
             cached_response["items"] = rank_and_limit_insights(
                 list(cached_response.get("items", [])),
                 limit=INITIAL_INSIGHT_LIMIT,
@@ -830,6 +833,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 section=section,
             )
         execution_time["openai_ms"] = _elapsed_ms(openai_start)
+        analysis_json = normalize_analyze_response_payload(analysis_json, fallback_section=section)
         analysis_json["items"] = rank_and_limit_insights(
             list(analysis_json.get("items", [])),
             limit=insight_limit,

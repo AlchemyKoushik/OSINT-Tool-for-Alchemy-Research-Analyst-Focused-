@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
 from config.settings import settings
 from services.openai_service import openai_key_loaded, test_openai_connection
-from services.redis_service import redis_client
+from services.redis_service import ping_redis
 from services.search_service import test_ddg
 
 logging.basicConfig(
@@ -49,11 +49,14 @@ async def startup_checks() -> None:
         )
     )
 
+    redis_available = False
     try:
-        await asyncio.to_thread(redis_client.ping)
+        redis_available = await asyncio.to_thread(ping_redis)
     except Exception as exc:
-        logger.exception("Redis startup validation failed.")
-        raise RuntimeError(f"Redis startup validation failed: {exc}") from exc
+        logger.warning("Redis startup validation failed. Continuing with in-memory fallback. error=%s", exc)
+
+    if not redis_available:
+        logger.warning("Redis unavailable at startup. Continuing with in-memory fallback.")
 
     try:
         openai_loaded, openai_test_result, ddg_test_result = await asyncio.gather(
@@ -66,7 +69,8 @@ async def startup_checks() -> None:
         raise RuntimeError(f"Startup checks failed: {exc}") from exc
 
     logger.info(
-        "startup_check_complete openai_key_loaded=%s openai_test=%s ddg_test=%s",
+        "startup_check_complete redis_available=%s openai_key_loaded=%s openai_test=%s ddg_test=%s",
+        redis_available,
         openai_loaded,
         openai_test_result,
         ddg_test_result,

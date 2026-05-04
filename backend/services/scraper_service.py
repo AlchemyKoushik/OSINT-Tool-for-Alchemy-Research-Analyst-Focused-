@@ -40,9 +40,9 @@ logger = logging.getLogger(__name__)
 
 DEBUG = True
 SCRAPE_TIMEOUT_SECONDS = settings.EXTERNAL_TIMEOUT_SECONDS
-SCRAPE_MAX_RETRIES = settings.EXTERNAL_MAX_RETRIES
-MAX_CONCURRENT_REQUESTS = 2
-TOTAL_URL_CAP = 100
+SCRAPE_MAX_RETRIES = min(settings.EXTERNAL_MAX_RETRIES, 1)
+MAX_CONCURRENT_REQUESTS = 4
+TOTAL_URL_CAP = 8
 MIN_CONTENT_LENGTH = 500
 SCRAPLING_TIMEOUT_SECONDS = 10
 DEFAULT_HEADERS = {
@@ -481,12 +481,10 @@ async def scrape_url(
 
             scrapedo_text, scrapedo_error = await _scrape_with_scrapedo(url, client)
             if not scrapedo_text:
-                scrapling_text, scrapling_error = await _scrape_with_scrapling(url)
-                content = scrapling_text
-                final_error = scrapling_error or scrapedo_error
-            else:
-                content = scrapedo_text
-                final_error = ""
+                raise RuntimeError(scrapedo_error or "Scrape.do request failed.")
+
+            content = scrapedo_text
+            final_error = ""
 
             normalized_content = _normalize_whitespace(content)
             if len(normalized_content) < MIN_CONTENT_LENGTH:
