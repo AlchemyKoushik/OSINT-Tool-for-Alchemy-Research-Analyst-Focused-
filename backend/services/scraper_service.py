@@ -42,7 +42,7 @@ DEBUG = True
 SCRAPE_TIMEOUT_SECONDS = settings.EXTERNAL_TIMEOUT_SECONDS
 SCRAPE_MAX_RETRIES = min(settings.EXTERNAL_MAX_RETRIES, 1)
 MAX_CONCURRENT_REQUESTS = 4
-TOTAL_URL_CAP = 8
+TOTAL_URL_CAP = 200
 MIN_CONTENT_LENGTH = 500
 SCRAPLING_TIMEOUT_SECONDS = 10
 DEFAULT_HEADERS = {
@@ -75,6 +75,12 @@ STOPWORDS = {
     "topic",
     "with",
 }
+BLOCKED_REFERENCE_DOMAINS = (
+    "wikipedia.org",
+    "wikimedia.org",
+    "wikia.com",
+    "fandom.com",
+)
 
 
 def _log(message: str) -> None:
@@ -92,6 +98,10 @@ def _extract_domain(url: str) -> str:
     if domain.startswith("www."):
         domain = domain[4:]
     return domain
+
+
+def _is_blocked_reference_domain(domain: str) -> bool:
+    return any(domain == blocked or domain.endswith(f".{blocked}") for blocked in BLOCKED_REFERENCE_DOMAINS)
 
 
 def _slugify(value: str) -> str:
@@ -405,6 +415,17 @@ async def scrape_url(
             title=title,
             query=query,
             error="Missing URL.",
+        )
+    if _is_blocked_reference_domain(_extract_domain(url)):
+        return _empty_artifact(
+            artifact_id=artifact_id,
+            artifact_type="pdf" if _is_probable_pdf_url(url) else "web",
+            source_type=source_type,
+            url=url,
+            title=title,
+            query=query,
+            error="Blocked low-signal reference domain.",
+            status="filtered_out",
         )
 
     _log(f"[SCRAPER] Start: {url}")

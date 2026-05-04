@@ -41,6 +41,7 @@ async def execute_pipeline(
     queries: List[str] = []
     search_results: List[Dict[str, Any]] = []
     query_performance: Dict[str, Any] = {}
+    stage_errors: Dict[str, str] = {}
     artifact_bundle: Dict[str, Any] = {
         "artifact_dir": "",
         "manifest_path": "",
@@ -72,7 +73,10 @@ async def execute_pipeline(
     except Exception as exc:
         logger.exception("Pipeline query generation failed for topic %s section %s", topic, section)
         _log(f"[PIPELINE] Query generation failed | error={exc}")
+        stage_errors["query_generation"] = str(exc)
         queries = []
+    if not queries:
+        stage_errors.setdefault("query_generation", "Query generation returned no usable queries.")
     execution_time["query_ms"] = _elapsed_ms(query_start)
 
     search_start = time.perf_counter()
@@ -89,6 +93,12 @@ async def execute_pipeline(
     except Exception as exc:
         logger.exception("Pipeline search failed for topic %s section %s", topic, section)
         _log(f"[PIPELINE] Search failed | error={exc}")
+        stage_errors["search"] = str(exc)
+    if queries and not search_results:
+        stage_errors.setdefault(
+            "search",
+            f"Search returned no usable results after filtering across {len(queries)} queries.",
+        )
     execution_time["search_ms"] = _elapsed_ms(search_start)
 
     scrape_start = time.perf_counter()
@@ -103,6 +113,16 @@ async def execute_pipeline(
     except Exception as exc:
         logger.exception("Pipeline scraping failed for topic %s section %s", topic, section)
         _log(f"[PIPELINE] Scraping failed | error={exc}")
+        stage_errors["scraping"] = str(exc)
+    if search_results:
+        successful_artifacts = sum(
+            1 for artifact in artifact_bundle.get("artifacts", []) if str(artifact.get("status", "")).strip() == "success"
+        )
+        if successful_artifacts == 0:
+            stage_errors.setdefault(
+                "scraping",
+                f"Scraping completed without any successful artifacts from {len(search_results)} candidate results.",
+            )
     execution_time["scrape_ms"] = _elapsed_ms(scrape_start)
 
     process_start = time.perf_counter()
@@ -115,6 +135,11 @@ async def execute_pipeline(
             )
         else:
             _log("[PIPELINE] No stored sources passed content processing.")
+            if scraped_results:
+                stage_errors.setdefault(
+                    "processing",
+                    "Stored artifacts were created, but none produced usable processed content.",
+                )
 
         cleaned_dump_payload = {
             "existing_chunks": [
@@ -186,6 +211,12 @@ async def execute_pipeline(
     except Exception as exc:
         logger.exception("Pipeline processing failed for topic %s section %s", topic, section)
         _log(f"[PIPELINE] Processing failed | error={exc}")
+        stage_errors["processing"] = str(exc)
+    if not str(processed_payload.get("processed_text", "")).strip():
+        stage_errors.setdefault(
+            "processing",
+            "Processing finished without any usable text in the final evidence bundle.",
+        )
     execution_time["processing_ms"] = _elapsed_ms(process_start)
 
     _log("[PIPELINE] Completed")
@@ -195,6 +226,7 @@ async def execute_pipeline(
         "query_performance": query_performance,
         "artifact_bundle": artifact_bundle,
         "processed_payload": processed_payload,
+        "stage_errors": stage_errors,
         "execution_time": execution_time,
     }
 

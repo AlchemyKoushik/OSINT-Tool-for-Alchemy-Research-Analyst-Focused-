@@ -230,6 +230,7 @@ def _build_debug_payload(
     artifact_manifest: str = "",
     artifact_counts: Optional[Dict[str, Any]] = None,
     existing_chunks: Optional[List[Dict[str, Any]]] = None,
+    stage_errors: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     payload = {
         "queries": queries,
@@ -260,6 +261,8 @@ def _build_debug_payload(
         payload["artifact_counts"] = artifact_counts
     if existing_chunks:
         payload["existing_chunks"] = existing_chunks
+    if stage_errors:
+        payload["stage_errors"] = stage_errors
     return payload
 def _empty_insight_analysis() -> Dict[str, List[Any]]:
     return {"conflicts": [], "consensus_signals": []}
@@ -412,6 +415,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
     signal_weights: List[Dict[str, Any]] = []
     trend_metadata: List[Dict[str, Any]] = []
     query_performance: Dict[str, Any] = {}
+    stage_errors: Dict[str, Any] = {}
     stability_actions: List[Dict[str, Any]] = []
     artifact_dir = ""
     artifact_manifest = ""
@@ -565,6 +569,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 "queries": [],
                 "search_results": [],
                 "query_performance": {},
+                "stage_errors": {"pipeline": str(exc)},
                 "artifact_bundle": {
                     "artifact_dir": "",
                     "manifest_path": "",
@@ -595,6 +600,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         search_results = list(pipeline_payload.get("search_results", []))
         queries = [str(query) for query in pipeline_payload.get("queries", [])]
         query_performance = dict(pipeline_payload.get("query_performance", {}))
+        stage_errors = dict(pipeline_payload.get("stage_errors", {}))
         artifact_bundle = dict(pipeline_payload.get("artifact_bundle", {}))
         processed_payload = dict(pipeline_payload.get("processed_payload", {}))
 
@@ -624,9 +630,16 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     depth=depth,
                     freshness=freshness,
                     location=location_summary,
+                    stage_errors=stage_errors,
                 )
             return _attach_session_id(
-                _build_fail_safe_response("No search results found.", section=section, debug_payload=debug_payload),
+                _build_fail_safe_response(
+                    stage_errors.get("search")
+                    or stage_errors.get("query_generation")
+                    or "No search results found.",
+                    section=section,
+                    debug_payload=debug_payload,
+                ),
                 session_id,
             )
 
@@ -730,10 +743,13 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     artifact_manifest=artifact_manifest,
                     artifact_counts=artifact_counts,
                     existing_chunks=existing_chunks,
+                    stage_errors=stage_errors,
                 )
             return _attach_session_id(
                 _build_fail_safe_response(
-                    "No usable content extracted from stored research artifacts.",
+                    stage_errors.get("processing")
+                    or stage_errors.get("scraping")
+                    or "No usable content extracted from stored research artifacts.",
                     section=section,
                     debug_payload=debug_payload,
                 ),

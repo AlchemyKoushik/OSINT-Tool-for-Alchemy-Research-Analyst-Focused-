@@ -14,8 +14,8 @@ class GeneratedSearchQueries(BaseModel):
     @classmethod
     def validate_queries(cls, value: List[str]) -> List[str]:
         normalized_queries = [str(query).strip() for query in value if str(query).strip()]
-        if len(normalized_queries) != 8:
-            raise ValueError("Search query generation must return exactly 8 queries.")
+        if len(normalized_queries) != 10:
+            raise ValueError("Search query generation must return exactly 10 queries.")
         return normalized_queries
 
 
@@ -296,5 +296,5 @@ class FollowUpResponse(BaseModel):
             seen_queries.add(normalized_key)
             normalized_queries.append(normalized)
 
-        return normalized_queries[:8]
+        return normalized_queries[:10]
 

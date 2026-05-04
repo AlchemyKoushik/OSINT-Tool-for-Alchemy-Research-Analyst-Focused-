@@ -18,8 +18,8 @@ DEBUG = True
 QUERY_MODEL_NAME = settings.OPENAI_QUERY_MODEL or "gpt-4o-mini"
 QUERY_TIMEOUT_SECONDS = 25
 QUERY_MAX_RETRIES = 1
-MIN_QUERY_COUNT = 8
-MAX_QUERY_COUNT = 8
+MIN_QUERY_COUNT = 10
+MAX_QUERY_COUNT = 10
 DATA_TERMS = ("statistics", "report", "forecast", "data")
 QUERY_ANGLE_QUALIFIERS = (
     "latest",

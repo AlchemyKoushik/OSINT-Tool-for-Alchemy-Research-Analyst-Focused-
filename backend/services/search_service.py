@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 DEBUG = True
 SEARCH_TIMEOUT_SECONDS = settings.EXTERNAL_TIMEOUT_SECONDS
 SEARCH_MAX_RETRIES = settings.EXTERNAL_MAX_RETRIES
-MAX_RESULTS_PER_QUERY = 6
+MAX_RESULTS_PER_QUERY = 20
 MAX_CONCURRENT_REQUESTS = 4
-TOTAL_URL_CAP = 8
+TOTAL_URL_CAP = 200
 MIN_SNIPPET_LENGTH = 50
 CURRENT_YEAR = datetime.now(timezone.utc).year
 YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
@@ -53,6 +53,12 @@ SOCIAL_DOMAINS = (
     "tiktok.com",
     "x.com",
     "youtube.com",
+)
+BLOCKED_REFERENCE_DOMAINS = (
+    "wikipedia.org",
+    "wikimedia.org",
+    "wikia.com",
+    "fandom.com",
 )
 
 
@@ -103,6 +109,10 @@ def _extract_domain(url: str) -> str:
 
 def _is_social_or_low_value_domain(domain: str) -> bool:
     return any(domain == blocked or domain.endswith(f".{blocked}") for blocked in SOCIAL_DOMAINS)
+
+
+def _is_blocked_reference_domain(domain: str) -> bool:
+    return any(domain == blocked or domain.endswith(f".{blocked}") for blocked in BLOCKED_REFERENCE_DOMAINS)
 
 
 def _normalize_raw_result(result: Dict[str, Any]) -> Dict[str, str]:
@@ -222,6 +232,8 @@ def _is_quality_result(result: Dict[str, Any]) -> bool:
     source_type = str(result.get("source_type", "")).strip()
 
     if not url or len(snippet) < MIN_SNIPPET_LENGTH:
+        return False
+    if _is_blocked_reference_domain(domain):
         return False
     if _is_social_or_low_value_domain(domain):
         return False
