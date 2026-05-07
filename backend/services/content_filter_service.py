@@ -13,6 +13,7 @@ from services.openai_service import (
     can_use_openai,
     ensure_min_output_tokens,
 )
+from services.prompt_file_service import get_content_filter_prompt_template
 
 logger = logging.getLogger(__name__)
 
@@ -256,46 +257,7 @@ def _fallback_filter(prepared_docs: Sequence[Dict[str, Any]]) -> Dict[str, List[
 
 
 def _build_messages(prepared_docs: Sequence[Dict[str, Any]]) -> Tuple[str, str]:
-    system_prompt = """
-You are a content filtering layer for an AI OSINT research system.
-
-Your job is to extract only high-signal text relevant for later trends and drivers generation.
-Do not summarize the full document.
-Do not rewrite the meaning.
-Keep only chunks that are analytically useful.
-
-Keep:
-- change over time
-- trend signals
-- cause-effect relationships
-- statistics, data, observations
-- market, technology, behavioral, operational, investment, or regulatory shifts
-
-Remove:
-- promotions, ads, marketing fluff
-- thank-you text, subscribe prompts, contact prompts
-- navigation, headers, footers, menus
-- generic filler, SEO filler, duplicated statements
-- opinionated fluff with no analytical signal
-
-Return strict JSON only in this exact shape:
-{
-  "cleaned_chunks": [
-    {
-      "text": "relevant extracted text",
-      "reason": "why this is relevant for trends or drivers",
-      "source_id": "doc_1"
-    }
-  ]
-}
-
-Rules:
-- Be aggressive in filtering.
-- Prefer fewer strong chunks over many weak ones.
-- Preserve the original wording as much as possible.
-- Each chunk should stay concise.
-- Remove duplicates and near-duplicates.
-""".strip()
+    system_prompt = get_content_filter_prompt_template()
 
     input_payload = {
         "documents": [

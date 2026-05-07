@@ -199,6 +199,26 @@ def _compact_topic_for_query(topic: str, remaining_words: int) -> str:
     return " ".join(words[:target_words])
 
 
+def _ensure_required_terms(query: str, *, topic: str, context: LocationContext) -> str:
+    normalized = _normalize_query(query)
+    lowered = normalized.lower()
+    rebuilt_parts: List[str] = []
+
+    if not _contains_topic_signal(normalized, topic):
+        rebuilt_parts.append(topic)
+
+    if not _contains_location(normalized, context) and not context.is_global:
+        rebuilt_parts.append(context.value)
+
+    rebuilt_parts.append(normalized)
+    candidate = _normalize_query(" ".join(part for part in rebuilt_parts if part))
+
+    if not any(term in lowered for term in DATA_TERMS):
+        candidate = _normalize_query(f"{candidate} statistics")
+
+    return _trim_query_to_limit(candidate.split())
+
+
 def build_fallback_queries(
     topic: str,
     section: str,
@@ -291,13 +311,21 @@ def _validate_query_batch(
     topic: str,
     location_context: LocationContext,
 ) -> List[str]:
+    repaired_queries = [
+        _ensure_required_terms(
+            query,
+            topic=topic,
+            context=location_context,
+        )
+        for query in _deduplicate_queries(queries)
+    ]
     validated_queries = [
         _validate_query(
             query,
             location_context,
             topic=topic,
         )
-        for query in _deduplicate_queries(queries)
+        for query in repaired_queries
     ]
 
     if len(validated_queries) != MAX_QUERY_COUNT:

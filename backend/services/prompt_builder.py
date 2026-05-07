@@ -28,32 +28,7 @@ def get_prompt(section: str, max_items: int = 10) -> str:
     if normalized_section not in SECTION_TITLES:
         raise ValueError("Invalid section")
 
-    base_prompt = get_main_output_prompt_template()
-
-    return (
-        f"{base_prompt}\n\n"
-        "Task:\n"
-        "- Read the full evidence bundle before writing.\n"
-        "- Synthesize all meaningful insights supported by the evidence.\n"
-        "- Group scattered facts into clear patterns where appropriate.\n\n"
-        "Section logic:\n"
-        f"- {SECTION_DEFINITIONS[normalized_section]}\n\n"
-        "Writing rules:\n"
-        "- Produce only topic-relevant insights.\n"
-        "- Combine evidence when multiple sources point to the same pattern.\n"
-        "- Explain the implication of the evidence instead of paraphrasing it.\n"
-        "- Avoid generic market commentary, filler, and repeated wording.\n"
-        "- Do not echo source titles, URLs, scraped labels, or report boilerplate.\n"
-        "- Do not write questions, raw source snippets, or future-outlook fluff.\n"
-        "- Each title must be specific, 3 to 12 words, and should stand on its own.\n"
-        "- Each description must be 2 to 4 sentences and explain the signal clearly.\n"
-        "- Every item must include source_ids that directly support the insight.\n"
-        "- source_ids must refer only to the numbered evidence blocks provided below.\n"
-        "- Prefer breadth across distinct insights, but do not invent unsupported ideas.\n"
-        f"- Rank insights by importance and return no more than {max(1, int(max_items or 1))} items.\n\n"
-        "Output JSON:\n"
-        '{\n  "items": [\n    {\n      "title": "Specific insight title",\n      "description": "2 to 4 sentence explanation grounded in the evidence.",\n      "source_ids": [1, 4, 7]\n    }\n  ]\n}'
-    )
+    return get_main_output_prompt_template().replace("{max_items}", str(max(1, int(max_items or 1))))
 
 
 def get_section_title(section: str) -> str:
