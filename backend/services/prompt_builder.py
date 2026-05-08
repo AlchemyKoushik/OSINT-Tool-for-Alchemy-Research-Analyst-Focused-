@@ -1,8 +1,11 @@
-﻿import json
+import json
 from typing import Any, Dict, Final, List, Optional
 
 from services.location_service import LocationContext
-from services.prompt_file_service import get_main_output_prompt_template
+from services.prompt_file_service import (
+    get_example_extraction_prompt_template,
+    get_main_output_prompt_template,
+)
 
 SECTION_DEFINITIONS: Final[Dict[str, str]] = {
     "trends": (
@@ -29,6 +32,13 @@ def get_prompt(section: str, max_items: int = 10) -> str:
         raise ValueError("Invalid section")
 
     return get_main_output_prompt_template().replace("{max_items}", str(max(1, int(max_items or 1))))
+
+
+def get_example_extraction_prompt(section: str) -> str:
+    normalized_section = str(section or "").strip().lower()
+    if normalized_section not in SECTION_TITLES:
+        raise ValueError("Invalid section")
+    return get_example_extraction_prompt_template()
 
 
 def get_section_title(section: str) -> str:
@@ -113,7 +123,7 @@ def build_metadata_payload(
 
     resolved_location_context = location_context or LocationContext()
 
-    return (
+    payload = (
         "INPUT\n"
         f"- Topic: {topic.strip()}\n"
         f"- Section: {normalized_section.title()}\n"
@@ -132,5 +142,65 @@ def build_metadata_payload(
         f"{_format_source_metadata(source_scores, artifact_counts)}\n\n"
         "EVIDENCE\n"
         f"{_format_evidence_blocks(evidence_blocks)}"
+    )
+    return payload.strip()
+
+
+def build_example_extraction_payload(
+    *,
+    topic: str,
+    section: str,
+    location_context: Optional[LocationContext] = None,
+    evidence_blocks: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    normalized_section = str(section or "").strip().lower()
+    if normalized_section not in SECTION_TITLES:
+        raise ValueError("Invalid section")
+
+    resolved_location_context = location_context or LocationContext()
+    return (
+        "INPUT\n"
+        f"- Topic: {topic.strip()}\n"
+        f"- Section: {normalized_section.title()}\n"
+        f"{_format_location_line(resolved_location_context)}\n"
+        f"- Section focus: {SECTION_DEFINITIONS[normalized_section]}\n\n"
+        "TASK\n"
+        "- Review the evidence bundle and extract only explicit, factual examples that could support later synthesis.\n"
+        "- Return no examples if the evidence does not support any concrete examples safely.\n\n"
+        "EVIDENCE\n"
+        f"{_format_evidence_blocks(evidence_blocks)}"
     ).strip()
 
+
+def build_trend_example_extraction_payload(
+    *,
+    topic: str,
+    section: str,
+    trend_heading: str,
+    trend_body: str,
+    location_context: Optional[LocationContext] = None,
+    evidence_blocks: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    normalized_section = str(section or "").strip().lower()
+    if normalized_section not in SECTION_TITLES:
+        raise ValueError("Invalid section")
+
+    resolved_location_context = location_context or LocationContext()
+    return (
+        "INPUT\n"
+        f"- Topic: {topic.strip()}\n"
+        f"- Section: {normalized_section.title()}\n"
+        f"{_format_location_line(resolved_location_context)}\n"
+        f"- Written trend title: {trend_heading.strip()}\n"
+        f"- Written trend description: {trend_body.strip()}\n\n"
+        "TASK\n"
+        "- Use only the newly researched evidence below.\n"
+        "- Extract only factual examples that directly support the written trend or driver above.\n"
+        "- An example must be a concrete company-level or organization-level event, not a generic market statement.\n"
+        "- Prefer examples shaped like: Company A acquired Company B, Company C launched X, Company D raised funding, Company E expanded capacity.\n"
+        "- Include the most specific event date available in the `year` field, such as `March 2026` or `2026-03-14`; use just the year only if the source does not provide a better date.\n"
+        "- The `text` field should read like a short factual event line and should name the company and action explicitly.\n"
+        "- If the evidence is not clearly tied to the written trend or driver, return no examples.\n\n"
+        "EVIDENCE\n"
+        f"{_format_evidence_blocks(evidence_blocks)}"
+    ).strip()

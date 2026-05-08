@@ -247,9 +247,28 @@ function normalizeResearchItem(item) {
     return null;
   }
 
+  const examples = Array.isArray(item.examples)
+    ? item.examples
+        .map((example) => {
+          if (!example || typeof example !== "object") {
+            return null;
+          }
+          const text = String(
+            example.text || example.description || example.body || example.example || "",
+          ).trim();
+          const year = String(example.year || example.date || "").trim();
+          if (!text) {
+            return null;
+          }
+          return { text, year };
+        })
+        .filter(Boolean)
+    : [];
+
   return {
     heading,
     body,
+    examples,
     sources: normalizeSourceList(item.sources || item.references || item.evidence),
     source_ids: Array.isArray(item.source_ids)
       ? item.source_ids
@@ -1882,10 +1901,60 @@ function FollowUpCard({ entry }) {
 }
 
 function SourceDisclosure({ sources }) {
-  const [open, setOpen] = useState(false);
   const normalizedSources = Array.isArray(sources) ? sources.filter((source) => source?.title || source?.url) : [];
 
   if (!normalizedSources.length) {
+    return null;
+  }
+
+  return html`
+    <div className="space-y-3">
+      ${normalizedSources.map(
+        (source, index) => html`
+          ${source.url
+            ? html`<a
+                key=${`${source.url || source.title}-${index}`}
+                href=${source.url}
+                target="_blank"
+                rel="noreferrer"
+                className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3 no-underline transition-colors duration-200 hover:border-atelier-forest/24 hover:bg-white"
+              >
+                <p className="m-0 text-sm font-bold text-atelier-ink">
+                  ${source.title || source.url || `Source ${index + 1}`}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/75">
+                  ${source.domain || extractDomain(source.url)}${source.date ? ` | ${source.date}` : ""}
+                </p>
+                <p className="mt-2 break-all text-xs leading-6 text-atelier-moss">
+                  ${source.url}
+                </p>
+              </a>`
+            : html`<div
+                key=${`${source.title || "source"}-${index}`}
+                className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3"
+              >
+                <p className="m-0 text-sm font-bold text-atelier-ink">
+                  ${source.title || `Source ${index + 1}`}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/75">
+                  ${source.domain || "Source reference"}${source.date ? ` | ${source.date}` : ""}
+                </p>
+                <p className="mt-2 text-xs leading-6 text-atelier-moss">
+                  Source URL unavailable
+                </p>
+              </div>`}
+        `,
+      )}
+    </div>
+  `;
+}
+
+function ExamplesAndSourcesDisclosure({ examples, sources }) {
+  const [open, setOpen] = useState(false);
+  const normalizedExamples = Array.isArray(examples) ? examples.filter((example) => example?.text) : [];
+  const normalizedSources = Array.isArray(sources) ? sources.filter((source) => source?.title || source?.url) : [];
+
+  if (!normalizedSources.length && !normalizedExamples.length) {
     return null;
   }
 
@@ -1897,9 +1966,14 @@ function SourceDisclosure({ sources }) {
         aria-expanded=${open ? "true" : "false"}
         className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
       >
-        <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-atelier-moss">
-          Sources (${normalizedSources.length})
-        </span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-atelier-moss">
+            Sources (${normalizedSources.length})
+          </span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-atelier-moss/70">
+            Examples (${normalizedExamples.length})
+          </span>
+        </div>
         <span className="text-xs font-bold uppercase tracking-[0.2em] text-atelier-forest">
           ${open ? "Hide" : "Show"}
         </span>
@@ -1918,42 +1992,60 @@ function SourceDisclosure({ sources }) {
                 className="overflow-hidden origin-top border-t border-atelier-line"
               >
                 <div className="space-y-3 px-4 py-4">
-                  ${normalizedSources.map(
-                    (source, index) => html`
-                      ${source.url
-                        ? html`<a
-                            key=${`${source.url || source.title}-${index}`}
-                            href=${source.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3 no-underline transition-colors duration-200 hover:border-atelier-forest/24 hover:bg-white"
-                          >
-                            <p className="m-0 text-sm font-bold text-atelier-ink">
-                              ${source.title || source.url || `Source ${index + 1}`}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">
+                        Recent Examples
+                      </p>
+                      <p className="m-0 text-[11px] font-bold uppercase tracking-[0.18em] text-atelier-moss/55">
+                        ${normalizedExamples.length ? `${normalizedExamples.length} available` : "Not generated"}
+                      </p>
+                    </div>
+                    ${normalizedExamples.length
+                      ? html`
+                          <div className="space-y-3">
+                            ${normalizedExamples.map(
+                              (example, index) => html`
+                                <div
+                                  key=${`${example.text}-${index}`}
+                                  className="rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <p className="m-0 text-sm leading-7 text-atelier-ink">
+                                      ${example.text}
+                                    </p>
+                                    ${example.year
+                                      ? html`
+                                          <span className="inline-flex flex-none items-center rounded-full border border-atelier-forest/12 bg-atelier-forest/[0.05] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-forest">
+                                            ${example.year}
+                                          </span>
+                                        `
+                                      : null}
+                                  </div>
+                                </div>
+                              `,
+                            )}
+                          </div>
+                        `
+                      : html`
+                          <div className="rounded-[18px] border border-dashed border-atelier-line bg-white/70 px-4 py-3">
+                            <p className="m-0 text-sm leading-7 text-atelier-moss">
+                              No explicit recent examples were generated for this insight from the current evidence set.
                             </p>
-                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/75">
-                              ${source.domain || extractDomain(source.url)}${source.date ? ` | ${source.date}` : ""}
-                            </p>
-                            <p className="mt-2 break-all text-xs leading-6 text-atelier-moss">
-                              ${source.url}
-                            </p>
-                          </a>`
-                        : html`<div
-                            key=${`${source.title || "source"}-${index}`}
-                            className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3"
-                          >
-                            <p className="m-0 text-sm font-bold text-atelier-ink">
-                              ${source.title || `Source ${index + 1}`}
-                            </p>
-                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/75">
-                              ${source.domain || "Source reference"}${source.date ? ` | ${source.date}` : ""}
-                            </p>
-                            <p className="mt-2 text-xs leading-6 text-atelier-moss">
-                              Source URL unavailable
-                            </p>
-                          </div>`}
-                    `,
-                  )}
+                          </div>
+                        `}
+                  </div>
+
+                  ${normalizedSources.length
+                    ? html`
+                        <div className="space-y-3">
+                          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">
+                            Sources
+                          </p>
+                          <${SourceDisclosure} sources=${normalizedSources} />
+                        </div>
+                      `
+                    : null}
                 </div>
               </${motion.div}>
             `
@@ -1987,7 +2079,7 @@ function BriefItemCard({ item, index, section, title }) {
           <p className="mt-4 text-sm leading-8 text-atelier-moss">
             ${item.body}
           </p>
-          <${SourceDisclosure} sources=${item.sources} />
+          <${ExamplesAndSourcesDisclosure} examples=${item.examples} sources=${item.sources} />
         </div>
       </div>
     </${motion.article}>

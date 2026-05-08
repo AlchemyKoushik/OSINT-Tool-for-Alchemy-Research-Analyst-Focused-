@@ -12,6 +12,7 @@ from services.redis_service import get_session
 from services.ranking_service import rank_and_limit_insights
 from services.source_attribution_service import attach_sources_to_items
 from services.storage_service import read_from_r2
+from services.trend_example_research_service import enrich_items_with_researched_examples
 
 logger = logging.getLogger(__name__)
 FOLLOW_UP_INSIGHT_LIMIT = 5
@@ -87,6 +88,7 @@ def _validate_research_items(items: Any) -> List[Dict[str, Any]]:
             {
                 "heading": heading,
                 "body": body,
+                "examples": list(item.get("examples", [])) if isinstance(item.get("examples", []), list) else [],
                 "sources": list(item.get("sources", [])) if isinstance(item.get("sources", []), list) else [],
                 "source_ids": list(item.get("source_ids", [])) if isinstance(item.get("source_ids", []), list) else [],
             }
@@ -184,6 +186,13 @@ async def analyze_existing_chunks(
     sourced_items = attach_sources_to_items(
         list(ranked_items),
         evidence_blocks,
+    )
+    sourced_items = await enrich_items_with_researched_examples(
+        items=list(sourced_items),
+        topic=normalized_query,
+        section=section,
+        location_context=location_context,
+        session_id=session_id or "followup_examples",
     )
     validated_items = _validate_research_items(sourced_items)
     if not validated_items:

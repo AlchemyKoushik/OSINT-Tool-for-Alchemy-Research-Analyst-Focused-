@@ -37,11 +37,12 @@ from services.ranking_service import rank_and_limit_insights
 from services.session_service import create_session_id
 from services.source_attribution_service import attach_sources_to_items
 from services.storage_service import delete_session_prefix, read_from_r2
+from services.trend_example_research_service import enrich_items_with_researched_examples
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "artifact_sot_v6_bounded_interactive_pipeline"
+PIPELINE_VERSION = "artifact_sot_v8_company_event_examples"
 INTERNAL_DEPTH = "high"
 INTERNAL_FRESHNESS = "high"
 MAX_WEB_SCRAPE_URLS = 100
@@ -505,6 +506,17 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             cached_result = None
 
         if cached_result is not None and not follow_up_mode:
+            cached_items_raw = cached_result.get("response", {}).get("items", [])
+            cache_has_examples_shape = (
+                isinstance(cached_items_raw, list)
+                and bool(cached_items_raw)
+                and all(isinstance(item, dict) and "examples" in item for item in cached_items_raw)
+            )
+            if not cache_has_examples_shape:
+                logger.info("Bypassing stale cached response without examples for topic %s", topic)
+                cached_result = None
+
+        if cached_result is not None and not follow_up_mode:
             cached_response = normalize_analyze_response_payload(
                 cached_result.get("response", {}),
                 fallback_section=section,
@@ -857,6 +869,13 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         analysis_json["items"] = attach_sources_to_items(
             list(analysis_json.get("items", [])),
             evidence_blocks,
+        )
+        analysis_json["items"] = await enrich_items_with_researched_examples(
+            items=list(analysis_json.get("items", [])),
+            topic=topic,
+            section=section,
+            location_context=location_context,
+            session_id=session_id,
         )
         if not analysis_json["items"]:
             analysis_json["title"] = "No strong insights found"

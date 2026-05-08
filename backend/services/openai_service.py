@@ -1,4 +1,4 @@
-﻿import asyncio
+import json
 import logging
 import re
 from difflib import SequenceMatcher
@@ -7,9 +7,10 @@ from typing import Any, Dict, List, Optional, Sequence
 from openai import AsyncOpenAI, OpenAI
 
 from config.settings import settings
-from models.response_models import Insight, Output
+from models.response_models import ExampleExtractionResponse, ExtractedExample, Insight, Output
+from services.example_validation_service import evidence_has_strong_example_signals, validate_examples
 from services.external_client import call_openai, call_openai_sync
-from services.prompt_builder import get_section_title
+from services.prompt_builder import get_example_extraction_prompt, get_section_title
 from services.ranking_service import rank_and_limit_insights
 from services.source_attribution_service import attach_sources_to_items
 
@@ -22,6 +23,8 @@ OPENAI_MAX_RETRIES = settings.EXTERNAL_MAX_RETRIES
 MIN_OUTPUT_TOKENS = 16
 DEFAULT_MAX_OUTPUT_TOKENS = 256
 MAX_OUTPUT_TOKENS = 2600
+EXTRACTION_MAX_OUTPUT_TOKENS = 1800
+STRUCTURED_TEMPERATURE = 0.1
 GENERIC_DESCRIPTION_MARKERS = (
     "the market is growing",
     "the industry is evolving",
@@ -139,6 +142,7 @@ def test_openai_connection() -> bool:
                 model=OPENAI_TEST_MODEL,
                 input="Reply with OK.",
                 max_output_tokens=ensure_min_output_tokens(8),
+                temperature=STRUCTURED_TEMPERATURE,
             ),
             fallback=None,
             timeout=OPENAI_TIMEOUT_SECONDS,
@@ -169,19 +173,16 @@ def test_openai_connection() -> bool:
         client.close()
 
 
-def _extract_parsed_output(response: Any) -> Output:
+def _extract_parsed_output(response: Any, expected_type: type[Any]) -> Any:
     for output in getattr(response, "output", []):
         if getattr(output, "type", "") != "message":
             continue
-
         for item in getattr(output, "content", []):
             if getattr(item, "type", "") == "refusal":
                 raise RuntimeError(str(getattr(item, "refusal", "OpenAI refused the request.")))
-
             parsed = getattr(item, "parsed", None)
-            if isinstance(parsed, Output):
+            if isinstance(parsed, expected_type):
                 return parsed
-
     raise ValueError("Structured response did not contain parsed content.")
 
 
@@ -275,7 +276,14 @@ def _validate_structured_output(parsed: Output) -> Output:
         ):
             continue
 
-        filtered_items.append(Insight(title=title, description=description, source_ids=list(item.source_ids)))
+        filtered_items.append(
+            Insight(
+                title=title,
+                description=description,
+                examples=[],
+                source_ids=list(item.source_ids),
+            )
+        )
 
     if not filtered_items:
         raise ValueError("Structured output did not contain any usable insights.")
@@ -283,19 +291,27 @@ def _validate_structured_output(parsed: Output) -> Output:
     return Output(items=filtered_items)
 
 
-async def _request_structured_completion(client: AsyncOpenAI, input_payload: List[Dict[str, str]]) -> Output:
+async def _request_structured_completion(
+    client: AsyncOpenAI,
+    *,
+    operation: str,
+    input_payload: List[Dict[str, str]],
+    response_model: type[Any],
+    max_output_tokens: int,
+) -> Any:
     response = await call_openai(
-        "structured_section_analysis",
+        operation,
         lambda: client.responses.parse(
             model=MODEL_NAME,
             input=input_payload,
-            text_format=Output,
-            max_output_tokens=ensure_min_output_tokens(MAX_OUTPUT_TOKENS),
+            text_format=response_model,
+            max_output_tokens=ensure_min_output_tokens(max_output_tokens),
+            temperature=STRUCTURED_TEMPERATURE,
         ),
         fallback=None,
         timeout=OPENAI_TIMEOUT_SECONDS,
         max_retries=OPENAI_MAX_RETRIES,
-        context={"model": MODEL_NAME},
+        context={"model": MODEL_NAME, "response_model": response_model.__name__},
     )
     if response is None:
         raise RuntimeError("Failed to generate structured analysis output.")
@@ -305,7 +321,86 @@ async def _request_structured_completion(client: AsyncOpenAI, input_payload: Lis
         connection_ok=True,
         message="OpenAI connection healthy.",
     )
-    return _extract_parsed_output(response)
+    return _extract_parsed_output(response, response_model)
+
+
+async def _extract_candidate_examples(
+    client: AsyncOpenAI,
+    *,
+    metadata: str,
+    section: str,
+) -> List[ExtractedExample]:
+    extraction_prompt = get_example_extraction_prompt(section)
+    parsed = await _request_structured_completion(
+        client,
+        operation="structured_example_extraction",
+        input_payload=[
+            {"role": "system", "content": extraction_prompt},
+            {"role": "user", "content": metadata},
+        ],
+        response_model=ExampleExtractionResponse,
+        max_output_tokens=EXTRACTION_MAX_OUTPUT_TOKENS,
+    )
+    return list(parsed.examples or [])
+
+
+async def extract_validated_examples_from_evidence(
+    *,
+    metadata: str,
+    section: str,
+    evidence_blocks: Sequence[Dict[str, Any]],
+    log_context: str = "",
+) -> List[ExtractedExample]:
+    api_key = settings.OPENAI_API_KEY.strip()
+    if not api_key:
+        logger.warning("Example extraction skipped because OPENAI_API_KEY is not configured.")
+        return []
+    if not can_use_openai():
+        logger.warning("Example extraction skipped because OpenAI is not available: %s", get_openai_status_message())
+        return []
+
+    resolved_evidence_blocks = list(evidence_blocks or [])
+    if not resolved_evidence_blocks:
+        return []
+
+    client = AsyncOpenAI(api_key=api_key)
+    try:
+        candidate_examples = await _extract_candidate_examples(
+            client,
+            metadata=metadata,
+            section=section,
+        )
+        logger.info(
+            "Extracted %s candidate examples context=%s section=%s",
+            len(candidate_examples),
+            log_context,
+            section,
+        )
+
+        validated_examples, discard_reasons = validate_examples(candidate_examples, resolved_evidence_blocks)
+        if discard_reasons:
+            logger.info(
+                "Discarded %s extracted examples context=%s section=%s reasons=%s",
+                len(discard_reasons),
+                log_context,
+                section,
+                discard_reasons,
+            )
+        logger.info(
+            "Validated %s extracted examples context=%s section=%s",
+            len(validated_examples),
+            log_context,
+            section,
+        )
+        if not validated_examples and evidence_has_strong_example_signals(resolved_evidence_blocks):
+            logger.warning(
+                "Example extraction returned zero validated examples despite strong evidence signals context=%s section=%s",
+                log_context,
+                section,
+            )
+        return validated_examples
+    finally:
+        await client.close()
 
 
 async def generate_section_analysis(
@@ -314,7 +409,10 @@ async def generate_section_analysis(
     section: str,
     max_items: int = 10,
     evidence_blocks: Optional[Sequence[Dict[str, Any]]] = None,
+    example_metadata: Optional[str] = None,
 ) -> Dict[str, Any]:
+    del example_metadata
+
     api_key = settings.OPENAI_API_KEY.strip()
     if not api_key:
         error = ValueError("OPENAI_API_KEY is not configured")
@@ -324,16 +422,16 @@ async def generate_section_analysis(
     if not can_use_openai():
         raise RuntimeError(get_openai_status_message())
 
+    resolved_evidence_blocks = list(evidence_blocks or [])
     client = AsyncOpenAI(api_key=api_key)
-    base_input = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": metadata},
-    ]
     validation_error: Optional[str] = None
 
     try:
         for attempt in range(1, OPENAI_MAX_RETRIES + 2):
-            input_payload = list(base_input)
+            input_payload: List[Dict[str, str]] = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": metadata},
+            ]
             if validation_error:
                 input_payload.append(
                     {
@@ -345,7 +443,14 @@ async def generate_section_analysis(
                     }
                 )
 
-            parsed = await _request_structured_completion(client, input_payload)
+            parsed = await _request_structured_completion(
+                client,
+                operation="structured_section_analysis",
+                input_payload=input_payload,
+                response_model=Output,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+            )
+
             try:
                 validated = _validate_structured_output(parsed)
                 ranked_items = rank_and_limit_insights(
@@ -353,6 +458,7 @@ async def generate_section_analysis(
                         {
                             "heading": item.title,
                             "body": item.description,
+                            "examples": [],
                             "source_ids": list(item.source_ids),
                         }
                         for item in validated.items
@@ -362,7 +468,7 @@ async def generate_section_analysis(
                 return {
                     "section": section,
                     "title": get_section_title(section),
-                    "items": attach_sources_to_items(ranked_items, evidence_blocks or []),
+                    "items": attach_sources_to_items(ranked_items, resolved_evidence_blocks),
                 }
             except ValueError as exc:
                 validation_error = str(exc)
@@ -372,4 +478,3 @@ async def generate_section_analysis(
         raise RuntimeError("Structured analysis failed after the allowed retry.")
     finally:
         await client.close()
-

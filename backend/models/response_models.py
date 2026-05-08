@@ -1,6 +1,6 @@
-﻿from typing import List, Literal
+from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from models.request_models import ResearchSection
 
@@ -19,10 +19,74 @@ class GeneratedSearchQueries(BaseModel):
         return normalized_queries
 
 
+class Example(BaseModel):
+    text: str
+    year: Optional[str] = ""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        normalized = str(value).strip()
+        if not normalized:
+            raise ValueError("Example text must not be empty.")
+        return normalized
+
+    @field_validator("year")
+    @classmethod
+    def validate_year(cls, value: Optional[str]) -> str:
+        return str(value or "").strip()
+
+
+class ExtractedExample(BaseModel):
+    company: Optional[str] = ""
+    event: Optional[str] = ""
+    text: str
+    year: Optional[str] = ""
+    source_ids: List[int] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("company", "event", "year")
+    @classmethod
+    def validate_optional_text_fields(cls, value: Optional[str]) -> str:
+        return str(value or "").strip()
+
+    @field_validator("text")
+    @classmethod
+    def validate_example_text(cls, value: str) -> str:
+        normalized = str(value).strip()
+        if not normalized:
+            raise ValueError("Extracted example text must not be empty.")
+        return normalized
+
+    @field_validator("source_ids")
+    @classmethod
+    def validate_extracted_source_ids(cls, value: List[int]) -> List[int]:
+        normalized_ids: List[int] = []
+        for source_id in value or []:
+            try:
+                numeric_id = int(source_id)
+            except (TypeError, ValueError):
+                continue
+            if numeric_id <= 0 or numeric_id in normalized_ids:
+                continue
+            normalized_ids.append(numeric_id)
+        return normalized_ids[:10]
+
+
+class ExampleExtractionResponse(BaseModel):
+    examples: List[ExtractedExample] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class Insight(BaseModel):
     title: str
     description: str
-    source_ids: List[int] = []
+    examples: List[Example] = Field(default_factory=list)
+    source_ids: List[int] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -48,6 +112,24 @@ class Insight(BaseModel):
             normalized_ids.append(numeric_id)
         return normalized_ids[:20]
 
+    @field_validator("examples")
+    @classmethod
+    def validate_examples(cls, value: List[Example]) -> List[Example]:
+        normalized_examples: List[Example] = []
+        seen_keys = set()
+        for example in value or []:
+            normalized_example = _coerce_example(example)
+            if normalized_example is None:
+                continue
+            text = normalized_example.text
+            year = str(normalized_example.year or "").strip()
+            dedupe_key = (text.lower(), year)
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            normalized_examples.append(normalized_example)
+        return normalized_examples[:2]
+
 
 def _normalize_text_value(value) -> str:
     return str(value or "").strip()
@@ -59,6 +141,22 @@ def _pick_first_text(payload, keys: List[str]) -> str:
         if normalized:
             return normalized
     return ""
+
+
+def _coerce_example(example) -> Example | None:
+    if isinstance(example, Example):
+        text = str(example.text).strip()
+        year = str(example.year or "").strip()
+        if not text:
+            return None
+        return Example(text=text, year=year)
+    if isinstance(example, dict):
+        text = str(example.get("text", "")).strip()
+        year = str(example.get("year", "")).strip()
+        if not text:
+            return None
+        return Example(text=text, year=year)
+    return None
 
 
 def _normalize_sources(raw_sources) -> list[dict[str, str]]:
@@ -112,9 +210,29 @@ def normalize_research_item_payload(item) -> dict[str, object] | None:
             if numeric_id > 0 and numeric_id not in normalized_source_ids:
                 normalized_source_ids.append(numeric_id)
 
+    normalized_examples: List[dict[str, str]] = []
+    raw_examples = item.get("examples", [])
+    if isinstance(raw_examples, list):
+        seen_examples = set()
+        for example in raw_examples:
+            normalized_example = _coerce_example(example)
+            if normalized_example is None:
+                continue
+            dedupe_key = (normalized_example.text.lower(), normalized_example.year or "")
+            if dedupe_key in seen_examples:
+                continue
+            seen_examples.add(dedupe_key)
+            normalized_examples.append(
+                {
+                    "text": normalized_example.text,
+                    "year": str(normalized_example.year or "").strip(),
+                }
+            )
+
     return {
         "heading": heading,
         "body": body,
+        "examples": normalized_examples[:2],
         "sources": _normalize_sources(item.get("sources") or item.get("references") or item.get("evidence")),
         "source_ids": normalized_source_ids[:20],
     }
@@ -173,8 +291,9 @@ class InsightSource(BaseModel):
 class ResearchItem(BaseModel):
     heading: str
     body: str
-    sources: List[InsightSource] = []
-    source_ids: List[int] = []
+    examples: List[Example] = Field(default_factory=list)
+    sources: List[InsightSource] = Field(default_factory=list)
+    source_ids: List[int] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -212,6 +331,22 @@ class ResearchItem(BaseModel):
             seen_keys.add(key)
             deduped_sources.append(source)
         return deduped_sources[:20]
+
+    @field_validator("examples")
+    @classmethod
+    def validate_research_examples(cls, value: List[Example]) -> List[Example]:
+        normalized_examples: List[Example] = []
+        seen_keys = set()
+        for example in value or []:
+            normalized_example = _coerce_example(example)
+            if normalized_example is None:
+                continue
+            dedupe_key = (normalized_example.text.lower(), normalized_example.year or "")
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            normalized_examples.append(normalized_example)
+        return normalized_examples[:2]
 
 
 class AnalyzeResponse(BaseModel):
@@ -297,4 +432,3 @@ class FollowUpResponse(BaseModel):
             normalized_queries.append(normalized)
 
         return normalized_queries[:10]
-

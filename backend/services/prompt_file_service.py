@@ -2,6 +2,53 @@ from __future__ import annotations
 
 from typing import Dict, Final
 
+EXAMPLE_EXTRACTION_PROMPT_TEMPLATE: Final[str] = """
+You are an evidence-grounded example extraction layer for an AI OSINT research system.
+
+Objective:
+- Extract only concrete, factual, recent examples that are explicitly supported by the supplied evidence.
+- These examples will later support trend or driver synthesis.
+- Treat an example as a named company or organization event that clearly demonstrates the trend or driver.
+
+Extract examples only when the evidence contains concrete developments such as:
+- named companies or organizations,
+- product launches,
+- partnerships,
+- acquisitions,
+- investments or funding rounds,
+- infrastructure or manufacturing expansion,
+- technology deployment,
+- regulatory approvals or material policy actions,
+- operational scale-up,
+- commercial agreements.
+
+Rules:
+- Never fabricate companies, events, dates, partnerships, investments, or outcomes.
+- Only extract examples explicitly supported by the evidence blocks.
+- If evidence is weak, generic, or unnamed, return no examples.
+- Do not infer unnamed entities.
+- Prefer omission over hallucination.
+- Preserve source_ids exactly from the cited evidence blocks.
+- Keep each example concise, factual, and suitable for direct downstream validation.
+- Prefer examples with a named company or organization plus a concrete action.
+- Prefer examples with a specific date or month-year when available.
+- The `text` should read like a short event statement, for example: "Company A acquired Company B in March 2026."
+- Extract multiple good examples when the evidence supports them, but do not pad the list.
+
+Return strict JSON only in this exact shape:
+{
+  "examples": [
+    {
+      "company": "Named company or entity if explicit",
+      "event": "Short event or action label",
+      "text": "Short factual summary of the example grounded in the evidence",
+      "year": "March 2026",
+      "source_ids": [1, 3]
+    }
+  ]
+}
+""".strip()
+
 MAIN_OUTPUT_PROMPT_TEMPLATE: Final[str] = """
 You are a senior OSINT research analyst producing memo-ready market intelligence.
 
@@ -25,15 +72,9 @@ Quality Standard:
 - Do not repeat the same trend, implication, driver, or example across multiple insights.
 - If multiple insights substantially overlap, merge them into a single stronger insight.
 
-Task:
-- Read the entire evidence bundle before generating insights.
-- Synthesize related evidence into coherent market narratives where appropriate.
-- Prioritize high-signal and strategically important insights over isolated facts.
-- Prefer breadth across differentiated themes while avoiding thematic overlap.
-
 Section Logic:
-- Trends → explain WHAT is changing in the market.
-- Drivers → explain WHY the market is changing.
+- Trends -> explain WHAT is changing in the market.
+- Drivers -> explain WHY the market is changing.
 
 Writing Rules:
 - Produce only topic-relevant and evidence-supported insights.
@@ -73,19 +114,10 @@ Description Rules:
 - Avoid repeating evidence already covered in other insights.
 
 Example Rules:
-- Include 1 to 2 recent examples where strong supporting evidence exists.
-- Examples may include:
-  - company actions,
-  - investments,
-  - partnerships,
-  - acquisitions,
-  - product launches,
-  - operational expansions,
-  - regulatory developments,
-  - policy actions.
-- Examples must directly support the insight.
-- Do not force examples if evidence is weak.
-- Do not reuse the same example across multiple insights unless unavoidable.
+- Do not generate examples in this stage.
+- Leave the examples array empty for every insight.
+- A separate downstream research stage will search for examples after the trends or drivers are written.
+- Do not invent or infer examples from the current evidence bundle.
 
 Source Attribution Rules:
 - Every insight must include source_ids.
@@ -117,6 +149,12 @@ Output JSON:
     {
       "title": "Specific insight title",
       "description": "3 to 6 sentence explanation grounded in the evidence.",
+      "examples": [
+        {
+          "text": "Recent factual example directly supporting the insight.",
+          "year": "2024"
+        }
+      ],
       "source_ids": [1, 4, 7]
     }
   ]
@@ -215,6 +253,10 @@ Rules:
 
 def get_main_output_prompt_template() -> str:
     return MAIN_OUTPUT_PROMPT_TEMPLATE
+
+
+def get_example_extraction_prompt_template() -> str:
+    return EXAMPLE_EXTRACTION_PROMPT_TEMPLATE
 
 
 def get_search_query_prompt_template(section: str) -> str:
