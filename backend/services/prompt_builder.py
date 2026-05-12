@@ -3,6 +3,7 @@ from typing import Any, Dict, Final, List, Optional
 
 from services.location_service import LocationContext
 from services.prompt_file_service import (
+    get_current_research_date,
     get_example_extraction_prompt_template,
     get_main_output_prompt_template,
 )
@@ -127,6 +128,7 @@ def build_metadata_payload(
         "INPUT\n"
         f"- Topic: {topic.strip()}\n"
         f"- Section: {normalized_section.title()}\n"
+        f"- Research date: {get_current_research_date()}\n"
         f"{_format_location_line(resolved_location_context)}\n"
         "\n"
         "ANALYSIS RULES\n"
@@ -162,6 +164,7 @@ def build_example_extraction_payload(
         "INPUT\n"
         f"- Topic: {topic.strip()}\n"
         f"- Section: {normalized_section.title()}\n"
+        f"- Research date: {get_current_research_date()}\n"
         f"{_format_location_line(resolved_location_context)}\n"
         f"- Section focus: {SECTION_DEFINITIONS[normalized_section]}\n\n"
         "TASK\n"
@@ -190,6 +193,7 @@ def build_trend_example_extraction_payload(
         "INPUT\n"
         f"- Topic: {topic.strip()}\n"
         f"- Section: {normalized_section.title()}\n"
+        f"- Research date: {get_current_research_date()}\n"
         f"{_format_location_line(resolved_location_context)}\n"
         f"- Written trend title: {trend_heading.strip()}\n"
         f"- Written trend description: {trend_body.strip()}\n\n"
@@ -198,8 +202,10 @@ def build_trend_example_extraction_payload(
         "- Extract only factual examples that directly support the written trend or driver above.\n"
         "- An example must be a concrete company-level or organization-level event, not a generic market statement.\n"
         "- Prefer examples shaped like: Company A acquired Company B, Company C launched X, Company D raised funding, Company E expanded capacity.\n"
+        "- Prefer examples supported by the latest available evidence, ideally from the last two years relative to the research date.\n"
         "- Include the most specific event date available in the `year` field, such as `March 2026` or `2026-03-14`; use just the year only if the source does not provide a better date.\n"
         "- The `text` field should read like a short factual event line and should name the company and action explicitly.\n"
+        "- If recent examples are not clearly supported, return no examples rather than forcing weak or loosely related ones.\n"
         "- If the evidence is not clearly tied to the written trend or driver, return no examples.\n\n"
         "EVIDENCE\n"
         f"{_format_evidence_blocks(evidence_blocks)}"

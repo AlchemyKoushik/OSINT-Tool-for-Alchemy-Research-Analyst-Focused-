@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -52,6 +53,32 @@ RAW_SOURCE_TEXT_MARKERS = (
 )
 SENTENCE_BOUNDARY_PATTERN = re.compile(r"(?<=[.!?])\s+")
 TITLE_DESCRIPTION_PREFIX_WORDS = 5
+CURRENT_YEAR = datetime.now().year
+PRESCRIPTIVE_TREND_MARKERS = (
+    "should invest",
+    "should respond",
+    "should adapt",
+    "should focus",
+    "should prioritize",
+    "should accelerate",
+    "must adapt",
+    "must respond",
+    "must invest",
+    "need to respond",
+    "need to adapt",
+    "need to invest",
+    "operators must",
+    "operators should",
+    "companies should",
+    "companies must",
+    "players should",
+    "players must",
+)
+STALE_FORECAST_PATTERNS = (
+    re.compile(r"\bproject(?:ed|ion)?\b[^.]*\bby\s+(20\d{2})\b", re.IGNORECASE),
+    re.compile(r"\bexpect(?:ed|s)?\b[^.]*\bby\s+(20\d{2})\b", re.IGNORECASE),
+    re.compile(r"\bforecast(?:ed)?\b[^.]*\bby\s+(20\d{2})\b", re.IGNORECASE),
+)
 
 _OPENAI_RUNTIME_STATE: Dict[str, Any] = {
     "key_loaded": False,
@@ -248,8 +275,26 @@ def _is_generic_insight(title: str, description: str) -> bool:
     return False
 
 
-def _validate_structured_output(parsed: Output) -> Output:
+def _contains_prescriptive_trend_language(description: str) -> bool:
+    lowered_description = description.lower()
+    return any(marker in lowered_description for marker in PRESCRIPTIVE_TREND_MARKERS)
+
+
+def _contains_stale_forecast_language(description: str) -> bool:
+    for pattern in STALE_FORECAST_PATTERNS:
+        for match in pattern.finditer(description):
+            try:
+                target_year = int(match.group(1))
+            except (TypeError, ValueError, IndexError):
+                continue
+            if target_year <= CURRENT_YEAR:
+                return True
+    return False
+
+
+def _validate_structured_output(parsed: Output, section: str) -> Output:
     filtered_items: List[Insight] = []
+    normalized_section = str(section or "").strip().lower()
 
     for item in parsed.items:
         title = _normalize_text(item.title)
@@ -267,7 +312,11 @@ def _validate_structured_output(parsed: Output) -> Output:
         if len(description) < 90:
             continue
         sentence_count = _count_sentences(description)
-        if sentence_count < 2 or sentence_count > 4:
+        if sentence_count < 3 or sentence_count > 6:
+            continue
+        if normalized_section == "trends" and _contains_prescriptive_trend_language(description):
+            continue
+        if _contains_stale_forecast_language(description):
             continue
 
         if any(
@@ -452,7 +501,7 @@ async def generate_section_analysis(
             )
 
             try:
-                validated = _validate_structured_output(parsed)
+                validated = _validate_structured_output(parsed, section)
                 ranked_items = rank_and_limit_insights(
                     [
                         {

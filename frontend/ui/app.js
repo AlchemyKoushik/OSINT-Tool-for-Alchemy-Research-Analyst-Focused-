@@ -132,6 +132,22 @@ function formatDate(value = new Date()) {
   }).format(value);
 }
 
+function slugifyFilenamePart(value, fallback = "brief") {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || fallback;
+}
+
+function formatPreparedDateForFile(value = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value);
+}
+
 function sectionTitle(section) {
   return section === "drivers" ? "Market Drivers" : "Industry Trends";
 }
@@ -389,6 +405,113 @@ function normalizeResearchResponse(payload, fallbackSection = "trends") {
     title,
     items: normalizedItems,
   };
+}
+
+function buildDownloadFileName(result, meta) {
+  const scope = slugifyFilenamePart(meta?.location?.label || "global", "global");
+  const topic = slugifyFilenamePart(meta?.topic || result?.title || "industry-brief", "industry-brief");
+  const section = slugifyFilenamePart(result?.section || "trends", "trends");
+  return `${topic}-${section}-${scope}-${formatPreparedDateForFile()}.md`;
+}
+
+function buildResultMarkdownSection(result, meta, sectionLabel) {
+  if (!result || typeof result !== "object") {
+    return "";
+  }
+
+  const normalizedItems = Array.isArray(result.items) ? result.items : [];
+  const lines = [
+    `## ${sectionLabel}`,
+    "",
+    `**Title:** ${result.title || sectionTitle(result.section)}`,
+    `**Section:** ${sectionTitle(result.section)}`,
+    `**Scope:** ${meta?.location?.label || "Global"}`,
+  ];
+
+  if (meta?.topic) {
+    lines.push(`**Topic:** ${meta.topic}`);
+  }
+
+  lines.push("");
+
+  normalizedItems.forEach((item, index) => {
+    lines.push(`### ${index + 1}. ${item.heading}`);
+    lines.push("");
+    lines.push(item.body);
+    lines.push("");
+
+    if (Array.isArray(item.examples) && item.examples.length) {
+      lines.push("**Examples**");
+      item.examples.forEach((example) => {
+        const yearSuffix = example?.year ? ` (${example.year})` : "";
+        lines.push(`- ${example.text}${yearSuffix}`);
+      });
+      lines.push("");
+    }
+
+    if (Array.isArray(item.sources) && item.sources.length) {
+      lines.push("**Sources**");
+      item.sources.forEach((source) => {
+        const parts = [
+          source?.title || "Source",
+          source?.domain || "",
+          source?.date || "",
+          source?.url || "",
+        ].filter(Boolean);
+        lines.push(`- ${parts.join(" | ")}`);
+      });
+      lines.push("");
+    }
+  });
+
+  return lines.join("\n").trim();
+}
+
+function buildResultsDownloadMarkdown(result, meta, followUps) {
+  const sections = [
+    "# Intelligence Atelier Brief Export",
+    "",
+    `Prepared: ${formatDate()}`,
+    `Topic: ${meta?.topic || "Research topic"}`,
+    `Scope: ${meta?.location?.label || "Global"}`,
+    "",
+    buildResultMarkdownSection(result, meta, "Primary Brief"),
+  ].filter(Boolean);
+
+  const completedFollowUps = Array.isArray(followUps)
+    ? followUps.filter((entry) => entry?.status === "completed" && entry?.result)
+    : [];
+
+  completedFollowUps.forEach((entry, index) => {
+    const followUpMeta = entry.meta || meta;
+    sections.push("");
+    sections.push(
+      buildResultMarkdownSection(
+        entry.result,
+        followUpMeta,
+        `Follow-up ${index + 1}: ${entry.title || followUpSectionTitle(entry.query, entry.section || result?.section)}`,
+      ),
+    );
+  });
+
+  return sections.filter(Boolean).join("\n");
+}
+
+function triggerResultsDownload(result, meta, followUps) {
+  if (typeof window === "undefined" || typeof document === "undefined" || !result) {
+    return;
+  }
+
+  const content = buildResultsDownloadMarkdown(result, meta, followUps);
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const objectUrl = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = buildDownloadFileName(result, meta);
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
 }
 
 function isResearchResponse(payload) {
@@ -846,6 +969,37 @@ function PanelHeader({ eyebrow, title, subtitle, action }) {
       </div>
       ${action || null}
     </div>
+  `;
+}
+
+function DownloadResultsButton({ onClick, disabled = false }) {
+  return html`
+    <button
+      type="button"
+      className="download-results-button"
+      onClick=${onClick}
+      disabled=${disabled}
+      aria-label="Download results"
+      title="Download results"
+    >
+      <span className="download-results-button__icon-shell" aria-hidden="true">
+        <svg
+          className="download-results-button__icon"
+          xmlns="http://www.w3.org/2000/svg"
+          height="16"
+          width="20"
+          viewBox="0 0 640 512"
+        >
+          <path
+            d="M144 480C64.5 480 0 415.5 0 336c0-62.8 40.2-116.2 96.2-135.9c-.1-2.7-.2-5.4-.2-8.1c0-88.4 71.6-160 160-160c59.3 0 111 32.2 138.7 80.2C409.9 102 428.3 96 448 96c53 0 96 43 96 96c0 12.2-2.3 23.8-6.4 34.6C596 238.4 640 290.1 640 352c0 70.7-57.3 128-128 128H144zm79-167l80 80c9.4 9.4 24.6 9.4 33.9 0l80-80c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-39 39V184c0-13.3-10.7-24-24-24s-24 10.7-24 24V318.1l-39-39c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9z"
+          ></path>
+        </svg>
+      </span>
+      <span className="download-results-button__copy">
+        <span className="download-results-button__eyebrow">Export Brief</span>
+        <span className="download-results-button__label">Download Results</span>
+      </span>
+    </button>
   `;
 }
 
@@ -2151,6 +2305,7 @@ function BriefCompleted({
   result,
   debug,
   meta,
+  onDownload,
   followUpOpen,
   followUpQuery,
   followUpDraft,
@@ -2173,6 +2328,7 @@ function BriefCompleted({
           items=${result.items}
           meta=${meta}
           debug=${debug}
+          aside=${html`<${DownloadResultsButton} onClick=${onDownload} />`}
         />
 
         <div className="flex items-center justify-start">
@@ -2259,6 +2415,7 @@ function BriefingCanvas({
   progressValue,
   onLoaderReady,
   loaderFrameId,
+  onDownload,
   followUpOpen,
   followUpQuery,
   followUpDraft,
@@ -2289,6 +2446,7 @@ function BriefingCanvas({
                   result=${result}
                   debug=${debug}
                   meta=${meta}
+                  onDownload=${onDownload}
                   followUpOpen=${followUpOpen}
                   followUpQuery=${followUpQuery}
                   followUpDraft=${followUpDraft}
@@ -2358,6 +2516,13 @@ function App() {
   const journalSeedRef = useRef(0);
   const deferredRegionQuery = useDeferredValue(regionQuery);
   const deferredCountryQuery = useDeferredValue(countryQuery);
+
+  function handleDownloadResults() {
+    if (!analysisResult) {
+      return;
+    }
+    triggerResultsDownload(analysisResult, analysisMeta, followUps);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -2938,6 +3103,7 @@ function App() {
                     progressValue=${progressValue}
                     onLoaderReady=${handleBriefingLoaderReady}
                     loaderFrameId=${loaderFrameId}
+                    onDownload=${handleDownloadResults}
                     followUpOpen=${followUpOpen}
                     followUpQuery=${followUpQuery}
                     followUpDraft=${followUpDraft}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Dict, Final
 
 EXAMPLE_EXTRACTION_PROMPT_TEMPLATE: Final[str] = """
@@ -65,7 +66,7 @@ Quality Standard:
 - Prioritize analytical interpretation over descriptive summarization.
 - Focus on structural shifts, emerging patterns, behavioural changes, technology adoption, regulatory developments, investment activity, competitive dynamics, operational shifts, pricing dynamics, and evolving business models.
 - Favor concrete market signals, demand shifts, cost movements, policy actions, investment patterns, and adoption evidence.
-- Explain why the trend or driver matters strategically for operators, investors, customers, suppliers, or competitors.
+- Explain why the trend or driver matters strategically for the industry, market participants, customers, suppliers, or investors without turning the insight into advice or recommendations.
 - Reject generic wording, boilerplate commentary, recycled source phrasing, and vague future-looking statements.
 - Do not mention URLs, publisher names, scraped headings, or report titles unless they are essential facts in the evidence.
 - Do not invent facts, numbers, timelines, implications, or trends unsupported by evidence.
@@ -75,6 +76,13 @@ Quality Standard:
 Section Logic:
 - Trends -> explain WHAT is changing in the market.
 - Drivers -> explain WHY the market is changing.
+
+Time Rule:
+- Treat all research and analysis as being prepared as of the current date.
+- Prefer wording such as "as of the latest available data", "recent data indicates", or "the market reached".
+- Do not use outdated future-facing wording when the target year has already arrived or passed.
+- Do not write statements such as "the market is projected to reach X by 2025" or "expected to grow by 2026" as current market expectations.
+- If only older projections are available, frame them explicitly as historical forecasts and explain their relevance briefly.
 
 Writing Rules:
 - Produce only topic-relevant and evidence-supported insights.
@@ -88,6 +96,10 @@ Writing Rules:
 - Do not write questions, conversational language, or raw source excerpts.
 - Avoid marketing-style wording and unsubstantiated claims.
 - Each insight must read as a standalone analyst observation rather than a rewritten source summary.
+- For Trends specifically, write objective market analysis rather than recommendations, prescriptions, or management advice.
+- Avoid prescriptive wording such as "operators must adapt", "companies should invest", "players need to respond", or similar call-to-action language.
+- Support each trend using current evidence where possible, preferably not older than the last two years from the research date.
+- If very recent examples are unavailable for a trend, write the trend from the strongest available evidence without overstating certainty.
 
 Title Rules:
 - Each title must:
@@ -111,6 +123,8 @@ Description Rules:
   - what is changing,
   - why it is happening,
   - and why it matters.
+- For Trends, each description should read as a clear market insight supported by recent data, company actions, regulatory changes, expert commentary, customer behavior shifts, or other credible industry signals.
+- Avoid unsupported assumptions, broad market summaries, repeated points across trends, and recommendation-style conclusions.
 - Avoid repeating evidence already covered in other insights.
 
 Example Rules:
@@ -182,7 +196,8 @@ Rules:
 - Every query must be concise, data-seeking, and decision-useful.
 - Every query must include the topic and reflect the requested geography and time horizon.
 - Every query must include at least one of: statistics, report, forecast, data.
-- Prefer queries that can retrieve fresh market evidence, official releases, industry datasets, or analyst reporting.
+- Prefer queries that can retrieve fresh market evidence, official releases, industry datasets, analyst reporting, and recent company or regulatory developments.
+- Prefer current and recent evidence, ideally from the last two years.
 - Avoid vague phrases like analysis of, overview of, future outlook, CAGR-only queries, and generic essay wording.
 - Keep each query to 15 words or fewer.
 - Make the set diverse across themes rather than repeating the same structure.
@@ -257,6 +272,10 @@ def get_main_output_prompt_template() -> str:
 
 def get_example_extraction_prompt_template() -> str:
     return EXAMPLE_EXTRACTION_PROMPT_TEMPLATE
+
+
+def get_current_research_date() -> str:
+    return datetime.now().date().isoformat()
 
 
 def get_search_query_prompt_template(section: str) -> str:
