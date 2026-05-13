@@ -153,3 +153,28 @@ class AnalyzeExistingRequest(BaseModel):
     def validate_analyze_existing_chunks(cls, value: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return _validate_existing_chunks(value)
 
+
+class PdfExportRequest(BaseModel):
+    result: Dict[str, Any]
+    meta: Dict[str, Any] = {}
+    follow_ups: List[Dict[str, Any]] = []
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("result")
+    @classmethod
+    def validate_result(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(value, dict) or not value:
+            raise ValueError("result is required.")
+        return value
+
+    @field_validator("meta")
+    @classmethod
+    def validate_meta(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        return value if isinstance(value, dict) else {}
+
+    @field_validator("follow_ups")
+    @classmethod
+    def validate_follow_ups(cls, value: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [entry for entry in value if isinstance(entry, dict)]
+

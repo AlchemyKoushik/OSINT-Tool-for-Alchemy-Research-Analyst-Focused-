@@ -411,99 +411,63 @@ function buildDownloadFileName(result, meta) {
   const scope = slugifyFilenamePart(meta?.location?.label || "global", "global");
   const topic = slugifyFilenamePart(meta?.topic || result?.title || "industry-brief", "industry-brief");
   const section = slugifyFilenamePart(result?.section || "trends", "trends");
-  return `${topic}-${section}-${scope}-${formatPreparedDateForFile()}.md`;
+  return `${topic}-${section}-${scope}-${formatPreparedDateForFile()}.html`;
 }
 
-function buildResultMarkdownSection(result, meta, sectionLabel) {
-  if (!result || typeof result !== "object") {
-    return "";
-  }
-
-  const normalizedItems = Array.isArray(result.items) ? result.items : [];
-  const lines = [
-    `## ${sectionLabel}`,
-    "",
-    `**Title:** ${result.title || sectionTitle(result.section)}`,
-    `**Section:** ${sectionTitle(result.section)}`,
-    `**Scope:** ${meta?.location?.label || "Global"}`,
-  ];
-
-  if (meta?.topic) {
-    lines.push(`**Topic:** ${meta.topic}`);
-  }
-
-  lines.push("");
-
-  normalizedItems.forEach((item, index) => {
-    lines.push(`### ${index + 1}. ${item.heading}`);
-    lines.push("");
-    lines.push(item.body);
-    lines.push("");
-
-    if (Array.isArray(item.examples) && item.examples.length) {
-      lines.push("**Examples**");
-      item.examples.forEach((example) => {
-        const yearSuffix = example?.year ? ` (${example.year})` : "";
-        lines.push(`- ${example.text}${yearSuffix}`);
-      });
-      lines.push("");
-    }
-
-    if (Array.isArray(item.sources) && item.sources.length) {
-      lines.push("**Sources**");
-      item.sources.forEach((source) => {
-        const parts = [
-          source?.title || "Source",
-          source?.domain || "",
-          source?.date || "",
-          source?.url || "",
-        ].filter(Boolean);
-        lines.push(`- ${parts.join(" | ")}`);
-      });
-      lines.push("");
-    }
-  });
-
-  return lines.join("\n").trim();
-}
-
-function buildResultsDownloadMarkdown(result, meta, followUps) {
-  const sections = [
-    "# Intelligence Atelier Brief Export",
-    "",
-    `Prepared: ${formatDate()}`,
-    `Topic: ${meta?.topic || "Research topic"}`,
-    `Scope: ${meta?.location?.label || "Global"}`,
-    "",
-    buildResultMarkdownSection(result, meta, "Primary Brief"),
-  ].filter(Boolean);
-
-  const completedFollowUps = Array.isArray(followUps)
-    ? followUps.filter((entry) => entry?.status === "completed" && entry?.result)
-    : [];
-
-  completedFollowUps.forEach((entry, index) => {
-    const followUpMeta = entry.meta || meta;
-    sections.push("");
-    sections.push(
-      buildResultMarkdownSection(
-        entry.result,
-        followUpMeta,
-        `Follow-up ${index + 1}: ${entry.title || followUpSectionTitle(entry.query, entry.section || result?.section)}`,
-      ),
-    );
-  });
-
-  return sections.filter(Boolean).join("\n");
-}
-
-function triggerResultsDownload(result, meta, followUps) {
+async function triggerResultsDownload(result, meta, followUps = []) {
   if (typeof window === "undefined" || typeof document === "undefined" || !result) {
     return;
   }
 
-  const content = buildResultsDownloadMarkdown(result, meta, followUps);
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const completedFollowUps = Array.isArray(followUps)
+    ? followUps
+        .filter((entry) => entry?.status === "completed")
+        .map((entry) => ({
+          title: entry?.title,
+          section: entry?.section || result?.section,
+          items: Array.isArray(entry?.results)
+            ? entry.results
+            : Array.isArray(entry?.result?.items)
+              ? entry.result.items
+              : [],
+          meta: entry?.meta || meta,
+        }))
+    : [];
+  const payload = {
+    result,
+    meta: {
+      ...meta,
+      prepared: formatDate(),
+    },
+    follow_ups: completedFollowUps,
+  };
+
+  const response = await fetch(apiUrl("/api/export-memo"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    let detail = "Memo export failed.";
+    try {
+      const errorPayload = await response.json();
+      if (errorPayload?.detail) {
+        detail = String(errorPayload.detail);
+      }
+    } catch {
+      // Ignore JSON parse failures for error responses.
+    }
+    throw new Error(detail);
+  }
+
+  const blob = await response.blob();
+  if (!blob || blob.size === 0) {
+    throw new Error("Memo export returned an empty file.");
+  }
+
   const objectUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
@@ -511,7 +475,7 @@ function triggerResultsDownload(result, meta, followUps) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
+  window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
 }
 
 function isResearchResponse(payload) {
@@ -972,32 +936,36 @@ function PanelHeader({ eyebrow, title, subtitle, action }) {
   `;
 }
 
-function DownloadResultsButton({ onClick, disabled = false }) {
+function DownloadResultsButton({ onClick, disabled = false, exporting = false }) {
   return html`
     <button
       type="button"
-      className="download-results-button"
+      className=${cx("download-results-button", exporting && "is-exporting")}
       onClick=${onClick}
       disabled=${disabled}
-      aria-label="Download results"
-      title="Download results"
+      aria-label=${exporting ? "Preparing memo download" : "Download memo HTML"}
+      title=${exporting ? "Preparing memo download" : "Download memo HTML"}
     >
       <span className="download-results-button__icon-shell" aria-hidden="true">
-        <svg
-          className="download-results-button__icon"
-          xmlns="http://www.w3.org/2000/svg"
-          height="16"
-          width="20"
-          viewBox="0 0 640 512"
-        >
-          <path
-            d="M144 480C64.5 480 0 415.5 0 336c0-62.8 40.2-116.2 96.2-135.9c-.1-2.7-.2-5.4-.2-8.1c0-88.4 71.6-160 160-160c59.3 0 111 32.2 138.7 80.2C409.9 102 428.3 96 448 96c53 0 96 43 96 96c0 12.2-2.3 23.8-6.4 34.6C596 238.4 640 290.1 640 352c0 70.7-57.3 128-128 128H144zm79-167l80 80c9.4 9.4 24.6 9.4 33.9 0l80-80c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-39 39V184c0-13.3-10.7-24-24-24s-24 10.7-24 24V318.1l-39-39c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9z"
-          ></path>
-        </svg>
+        ${exporting
+          ? html`<span className="download-results-button__spinner"></span>`
+          : html`
+              <svg
+                className="download-results-button__icon"
+                xmlns="http://www.w3.org/2000/svg"
+                height="16"
+                width="20"
+                viewBox="0 0 640 512"
+              >
+                <path
+                  d="M144 480C64.5 480 0 415.5 0 336c0-62.8 40.2-116.2 96.2-135.9c-.1-2.7-.2-5.4-.2-8.1c0-88.4 71.6-160 160-160c59.3 0 111 32.2 138.7 80.2C409.9 102 428.3 96 448 96c53 0 96 43 96 96c0 12.2-2.3 23.8-6.4 34.6C596 238.4 640 290.1 640 352c0 70.7-57.3 128-128 128H144zm79-167l80 80c9.4 9.4 24.6 9.4 33.9 0l80-80c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-39 39V184c0-13.3-10.7-24-24-24s-24 10.7-24 24V318.1l-39-39c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9z"
+                ></path>
+              </svg>
+            `}
       </span>
       <span className="download-results-button__copy">
-        <span className="download-results-button__eyebrow">Export Brief</span>
-        <span className="download-results-button__label">Download Results</span>
+        <span className="download-results-button__eyebrow">${exporting ? "Building HTML" : "Memo Export"}</span>
+        <span className="download-results-button__label">${exporting ? "Preparing HTML..." : "Export HTML"}</span>
       </span>
     </button>
   `;
@@ -2306,6 +2274,7 @@ function BriefCompleted({
   debug,
   meta,
   onDownload,
+  exportPending,
   followUpOpen,
   followUpQuery,
   followUpDraft,
@@ -2328,7 +2297,7 @@ function BriefCompleted({
           items=${result.items}
           meta=${meta}
           debug=${debug}
-          aside=${html`<${DownloadResultsButton} onClick=${onDownload} />`}
+          aside=${html`<${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />`}
         />
 
         <div className="flex items-center justify-start">
@@ -2416,6 +2385,7 @@ function BriefingCanvas({
   onLoaderReady,
   loaderFrameId,
   onDownload,
+  exportPending,
   followUpOpen,
   followUpQuery,
   followUpDraft,
@@ -2447,6 +2417,7 @@ function BriefingCanvas({
                   debug=${debug}
                   meta=${meta}
                   onDownload=${onDownload}
+                  exportPending=${exportPending}
                   followUpOpen=${followUpOpen}
                   followUpQuery=${followUpQuery}
                   followUpDraft=${followUpDraft}
@@ -2513,15 +2484,24 @@ function App() {
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [followUpPending, setFollowUpPending] = useState(null);
   const [followUps, setFollowUps] = useState([]);
+  const [exportPending, setExportPending] = useState(false);
   const journalSeedRef = useRef(0);
   const deferredRegionQuery = useDeferredValue(regionQuery);
   const deferredCountryQuery = useDeferredValue(countryQuery);
 
-  function handleDownloadResults() {
+  async function handleDownloadResults() {
     if (!analysisResult) {
       return;
     }
-    triggerResultsDownload(analysisResult, analysisMeta, followUps);
+    setExportPending(true);
+    try {
+      await triggerResultsDownload(analysisResult, analysisMeta, followUps);
+    } catch (error) {
+      console.error("Memo export failed", error);
+      window.alert("Memo export failed. Please try again.");
+    } finally {
+      setExportPending(false);
+    }
   }
 
   useEffect(() => {
@@ -3099,14 +3079,15 @@ function App() {
                     result=${analysisResult}
                     debug=${analysisDebug}
                     meta=${displayMeta}
-                    analysisError=${analysisError}
-                    progressValue=${progressValue}
-                    onLoaderReady=${handleBriefingLoaderReady}
-                    loaderFrameId=${loaderFrameId}
-                    onDownload=${handleDownloadResults}
-                    followUpOpen=${followUpOpen}
-                    followUpQuery=${followUpQuery}
-                    followUpDraft=${followUpDraft}
+                  analysisError=${analysisError}
+                  progressValue=${progressValue}
+                  onLoaderReady=${handleBriefingLoaderReady}
+                  loaderFrameId=${loaderFrameId}
+                  onDownload=${handleDownloadResults}
+                  exportPending=${exportPending}
+                  followUpOpen=${followUpOpen}
+                  followUpQuery=${followUpQuery}
+                  followUpDraft=${followUpDraft}
                     followUpPending=${followUpPending}
                     followUps=${followUps}
                     isProcessing=${isProcessing}

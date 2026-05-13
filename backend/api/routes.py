@@ -6,9 +6,10 @@ from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 
 from config.settings import settings
-from models.request_models import AnalyzeExistingRequest, AnalyzeRequest, FollowUpRequest
+from models.request_models import AnalyzeExistingRequest, AnalyzeRequest, FollowUpRequest, PdfExportRequest
 from models.response_models import AnalyzeResponse, normalize_analyze_response_payload
 from services.cache_service import get_cached_result, set_cached_result
 from services.fallback_analysis import build_fallback_section_analysis
@@ -31,6 +32,7 @@ from services.memory_service import (
 )
 from services.openai_service import generate_section_analysis
 from services.pipeline_orchestrator import execute_pipeline
+from services.html_export_service import build_html_export
 from services.prompt_builder import build_metadata_payload, get_prompt
 from services.redis_service import check_rate_limit, delete_session, get_session, update_session
 from services.ranking_service import rank_and_limit_insights
@@ -1114,3 +1116,40 @@ async def cleanup_session(session_id: str) -> Dict[str, str]:
 
     logger.info("Session deleted session_id=%s", normalized_session_id)
     return {"status": "deleted"}
+
+
+@router.post("/export-memo")
+async def export_memo(request: Request) -> Response:
+    try:
+        payload = await _read_json_payload(request)
+        validated = PdfExportRequest(**payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Invalid memo export payload received: %s", exc)
+        raise HTTPException(status_code=422, detail=f"Invalid memo export payload: {exc}") from exc
+
+    try:
+        html_bytes, filename = await asyncio.to_thread(
+            build_html_export,
+            result_payload=validated.result,
+            meta_payload=validated.meta,
+            follow_up_payloads=validated.follow_ups,
+        )
+    except Exception as exc:
+        logger.exception("Memo export failed")
+        raise HTTPException(status_code=500, detail=f"Memo export failed: {exc}") from exc
+
+    return Response(
+        content=html_bytes,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post("/export-pdf")
+async def export_pdf(request: Request) -> Response:
+    return await export_memo(request)
