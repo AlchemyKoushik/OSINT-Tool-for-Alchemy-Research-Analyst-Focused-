@@ -60,12 +60,70 @@
       window.OSINT_API_URL ||
       window.__OSINT_API_URL__ ||
       document.querySelector('meta[name="osint-api-url"]')?.content?.trim();
-    window.OSINT_API_URL = configuredApiUrl || (
-      isLocalHost
-        ? "http://127.0.0.1:8000"
-        : "https://osint-tool-for-alchemy-research-analyst.onrender.com/"
-    );
-    window.addEventListener("load", () => {
+
+    function normalizeApiOrigin(value) {
+      const normalized = String(value || "").trim().replace(/\/+$/, "");
+      return normalized || "";
+    }
+
+    function uniqueValues(values) {
+      const output = [];
+      values.forEach((value) => {
+        const normalized = normalizeApiOrigin(value);
+        if (normalized && !output.includes(normalized)) {
+          output.push(normalized);
+        }
+      });
+      return output;
+    }
+
+    async function isReachableApiOrigin(origin) {
+      const controller = typeof AbortController === "function" ? new AbortController() : null;
+      const timeoutId = controller ? window.setTimeout(() => controller.abort(), 5000) : null;
+      try {
+        const response = await fetch(`${origin}/health`, {
+          method: "GET",
+          mode: "cors",
+          cache: "no-store",
+          signal: controller ? controller.signal : undefined,
+        });
+        return response.ok;
+      } catch {
+        return false;
+      } finally {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+      }
+    }
+
+    async function resolveApiOrigin() {
+      if (configuredApiUrl) {
+        return normalizeApiOrigin(configuredApiUrl);
+      }
+
+      if (isLocalHost) {
+        return "http://127.0.0.1:8000";
+      }
+
+      const candidateOrigins = uniqueValues([
+        window.location.origin,
+        "https://osint-tool-backend.onrender.com",
+        "https://osint-tool-for-alchemy-research-analyst-focused.onrender.com",
+        "https://osint-tool-for-alchemy-research-analyst.onrender.com",
+      ]);
+
+      for (const candidate of candidateOrigins) {
+        if (await isReachableApiOrigin(candidate)) {
+          return candidate;
+        }
+      }
+
+      return candidateOrigins[0] || "";
+    }
+
+    window.addEventListener("load", async () => {
+      window.OSINT_API_URL = await resolveApiOrigin();
       import(`./ui/app.js?v=${encodeURIComponent(resolvedStaticVersion)}`);
     });
   </script>

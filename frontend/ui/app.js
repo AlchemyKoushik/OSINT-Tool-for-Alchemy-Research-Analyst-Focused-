@@ -15,10 +15,22 @@ import {
 import htm from "https://esm.sh/htm@3.1.1";
 
 const html = htm.bind(React.createElement);
+const DEFAULT_API_CANDIDATES = [
+  "https://osint-tool-backend.onrender.com",
+  "https://osint-tool-for-alchemy-research-analyst-focused.onrender.com",
+  "https://osint-tool-for-alchemy-research-analyst.onrender.com",
+];
 const API_URL =
   typeof window !== "undefined" && typeof window.OSINT_API_URL === "string" && window.OSINT_API_URL.trim()
     ? window.OSINT_API_URL.trim().replace(/\/+$/, "")
-    : "https://osint-tool-for-alchemy-research-analyst.onrender.com/";
+    : (
+        typeof window !== "undefined" &&
+        window.location &&
+        window.location.hostname !== "127.0.0.1" &&
+        window.location.hostname !== "localhost"
+          ? window.location.origin.replace(/\/+$/, "")
+          : DEFAULT_API_CANDIDATES[0]
+      );
 const STATIC_ASSET_VERSION =
   typeof window !== "undefined" && typeof window.__STATIC_ASSET_VERSION__ === "string"
     ? window.__STATIC_ASSET_VERSION__
