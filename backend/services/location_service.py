@@ -175,6 +175,20 @@ def _deduplicate_keywords(values: List[str]) -> Tuple[str, ...]:
     return tuple(deduplicated)
 
 
+def _matchable_aliases(values: List[str]) -> List[str]:
+    matchable_values: List[str] = []
+    for value in values:
+        cleaned_value = str(value or "").strip()
+        normalized_value = _normalize_phrase(cleaned_value)
+        compact_alpha = re.sub(r"[^a-z]", "", cleaned_value.lower())
+        if not normalized_value:
+            continue
+        if len(compact_alpha) <= 3 and cleaned_value.upper() == cleaned_value:
+            continue
+        matchable_values.append(cleaned_value)
+    return matchable_values
+
+
 def resolve_location_context(preference: str | None, value: str | None = None) -> LocationContext:
     normalized_preference = _normalize_preference(preference)
     normalized_value = str(value or "").strip()
@@ -193,13 +207,15 @@ def resolve_location_context(preference: str | None, value: str | None = None) -
 
         region_name = str(region_record.get("name", "")).strip()
         region_keywords = [region_name]
-        region_keywords.extend(str(alias).strip() for alias in region_record.get("aliases", []) or [])
+        region_keywords.extend(_matchable_aliases([str(alias).strip() for alias in region_record.get("aliases", []) or []]))
         for country_record in _countries_by_region().get(region_name, ()):
             region_keywords.append(str(country_record.get("name", "")).strip())
-            region_keywords.extend(str(alias).strip() for alias in country_record.get("aliases", []) or [])
+            region_keywords.extend(
+                _matchable_aliases([str(alias).strip() for alias in country_record.get("aliases", []) or []])
+            )
 
         primary_keywords = [region_name]
-        primary_keywords.extend(str(alias).strip() for alias in region_record.get("aliases", []) or [])
+        primary_keywords.extend(_matchable_aliases([str(alias).strip() for alias in region_record.get("aliases", []) or []]))
         return LocationContext(
             preference="region_specific",
             value=region_name,
@@ -217,7 +233,7 @@ def resolve_location_context(preference: str | None, value: str | None = None) -
     country_name = str(country_record.get("name", "")).strip()
     country_region = str(country_record.get("region", "")).strip()
     country_keywords = [country_name]
-    country_keywords.extend(str(alias).strip() for alias in country_record.get("aliases", []) or [])
+    country_keywords.extend(_matchable_aliases([str(alias).strip() for alias in country_record.get("aliases", []) or []]))
     primary_keywords = [country_name]
     return LocationContext(
         preference="country_specific",

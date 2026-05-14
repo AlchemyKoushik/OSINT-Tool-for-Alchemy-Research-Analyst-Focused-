@@ -34,9 +34,10 @@ def _resolve_env_files() -> tuple[str, ...]:
 
 class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
-    OPENAI_ANALYSIS_MODEL: str = "gpt-5.4"
-    OPENAI_QUERY_MODEL: str = "gpt-4o-mini"
-    OPENAI_TEST_MODEL: str = "gpt-4o-mini"
+    OPENAI_ANALYSIS_MODEL: str = "gpt-4.1"
+    OPENAI_SUPPORT_MODEL: str = "gpt-4.1-mini"
+    OPENAI_QUERY_MODEL: str = "gpt-4.1-mini"
+    OPENAI_TEST_MODEL: str = "gpt-4.1-mini"
     SERPAPI_KEY: str = ""
     SCRAPEDO_KEY: str = ""
     REDIS_URL: str = "redis://localhost:6379/0"

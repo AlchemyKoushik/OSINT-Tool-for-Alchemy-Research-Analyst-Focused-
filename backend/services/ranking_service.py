@@ -12,7 +12,7 @@ from services.external_client import call_openai
 
 logger = logging.getLogger(__name__)
 
-RANKING_MODEL_NAME = "gpt-4o-mini"
+RANKING_MODEL_NAME = settings.OPENAI_SUPPORT_MODEL or settings.OPENAI_QUERY_MODEL or "gpt-4.1-mini"
 RANKING_TIMEOUT_SECONDS = 30
 MAX_SELECTED_RESULTS = 8
 SIGNAL_TERMS = {

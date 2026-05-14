@@ -15,11 +15,11 @@ from services.search_service import search_queries
 
 logger = logging.getLogger(__name__)
 
-MAX_EXAMPLE_RESEARCH_QUERIES = 4
-MAX_EXAMPLE_RESULTS = 12
-MAX_TRENDS_WITH_EXAMPLE_RESEARCH = 6
+MAX_EXAMPLE_RESEARCH_QUERIES = 3
+MAX_EXAMPLE_RESULTS = 8
+MAX_TRENDS_WITH_EXAMPLE_RESEARCH = 4
 MAX_EXAMPLES_PER_TREND = 2
-MAX_CONCURRENT_TREND_RESEARCH = 2
+MAX_CONCURRENT_TREND_RESEARCH = 1
 STOPWORDS = {
     "about",
     "across",
@@ -54,7 +54,7 @@ def _tokenize(value: str) -> List[str]:
 
 def _recent_year_tokens() -> str:
     current_year = datetime.utcnow().year
-    recent_years = [str(current_year - offset) for offset in range(0, 3)]
+    recent_years = [str(current_year - offset) for offset in range(0, 2)]
     return " ".join(recent_years)
 
 
@@ -72,16 +72,25 @@ def _build_trend_example_queries(
     recent_years = _recent_year_tokens()
     combined_text = f"{trend_heading} {trend_body}".lower()
     event_frames = [
-        "named company announcement press release date",
-        "company launch partnership investment expansion date",
-        "acquisition merger deal funding approval agreement date",
-        "manufacturer operator project commercial scale up date",
-        "recent company example event month year press release",
+        "latest market data statistics report recent estimate date",
+        "recent survey finding customer behavior consumer shift report date",
+        "named company announcement press release launch investment partnership date",
+        "regulatory policy approval rule change announcement date",
+        "acquisition merger deal funding expansion agreement date",
+        "executive commentary earnings call management statement date",
     ]
     if any(keyword in combined_text for keyword in ("m&a", "merger", "acquisition", "acquire", "consolidation")):
         event_frames.insert(0, "company acquired company merger deal announced date")
     if any(keyword in combined_text for keyword in ("price", "pricing", "cost", "inflation")):
         event_frames.insert(0, "company price increase surcharge contract repricing announced date")
+    if any(keyword in combined_text for keyword in ("regulation", "policy", "approval", "rule", "compliance")):
+        event_frames.insert(0, "regulatory policy approval rule change announcement date")
+    if any(keyword in combined_text for keyword in ("consumer", "audience", "behavior", "adoption", "usage", "engagement")):
+        event_frames.insert(0, "recent survey consumer behavior adoption usage statistics date")
+    if any(keyword in combined_text for keyword in ("advertising", "revenue", "market share", "penetration", "subscription")):
+        event_frames.insert(0, "latest market data revenue statistics market share estimate date")
+    if any(keyword in combined_text for keyword in ("launch", "product", "release", "innovation", "feature")):
+        event_frames.insert(0, "recent product launch rollout release announcement date")
 
     queries: List[str] = []
     seen = set()

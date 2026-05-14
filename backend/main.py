@@ -16,6 +16,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+STARTUP_DIAGNOSTIC_TIMEOUT_SECONDS = 30
+STARTUP_REDIS_TIMEOUT_SECONDS = 3
 
 app = FastAPI(
     title="OSINT Research Tool Backend",
@@ -32,6 +34,37 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+
+async def _run_startup_diagnostics(redis_available: bool) -> None:
+    try:
+        openai_loaded, openai_test_result, ddg_test_result = await asyncio.wait_for(
+            asyncio.gather(
+                asyncio.to_thread(openai_key_loaded),
+                asyncio.to_thread(test_openai_connection),
+                asyncio.to_thread(test_ddg),
+            ),
+            timeout=STARTUP_DIAGNOSTIC_TIMEOUT_SECONDS,
+        )
+        logger.info(
+            "startup_check_complete redis_available=%s openai_key_loaded=%s openai_test=%s ddg_test=%s",
+            redis_available,
+            openai_loaded,
+            openai_test_result,
+            ddg_test_result,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "startup_diagnostics_timeout timeout_seconds=%s redis_available=%s",
+            STARTUP_DIAGNOSTIC_TIMEOUT_SECONDS,
+            redis_available,
+        )
+    except Exception as exc:
+        logger.warning(
+            "startup_diagnostics_failed redis_available=%s error=%s",
+            redis_available,
+            exc,
+        )
 
 
 @app.on_event("startup")
@@ -51,30 +84,23 @@ async def startup_checks() -> None:
 
     redis_available = False
     try:
-        redis_available = await asyncio.to_thread(ping_redis)
+        redis_available = await asyncio.wait_for(
+            asyncio.to_thread(ping_redis),
+            timeout=STARTUP_REDIS_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Redis startup validation timed out after %s seconds. Continuing with in-memory fallback.",
+            STARTUP_REDIS_TIMEOUT_SECONDS,
+        )
     except Exception as exc:
         logger.warning("Redis startup validation failed. Continuing with in-memory fallback. error=%s", exc)
 
     if not redis_available:
         logger.warning("Redis unavailable at startup. Continuing with in-memory fallback.")
 
-    try:
-        openai_loaded, openai_test_result, ddg_test_result = await asyncio.gather(
-            asyncio.to_thread(openai_key_loaded),
-            asyncio.to_thread(test_openai_connection),
-            asyncio.to_thread(test_ddg),
-        )
-    except Exception as exc:
-        logger.exception("Startup checks failed.")
-        raise RuntimeError(f"Startup checks failed: {exc}") from exc
-
-    logger.info(
-        "startup_check_complete redis_available=%s openai_key_loaded=%s openai_test=%s ddg_test=%s",
-        redis_available,
-        openai_loaded,
-        openai_test_result,
-        ddg_test_result,
-    )
+    asyncio.create_task(_run_startup_diagnostics(redis_available))
+    logger.info("startup_check_ready redis_available=%s diagnostics=background", redis_available)
 
 
 @app.get("/health")

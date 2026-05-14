@@ -243,6 +243,7 @@ function normalizeSourceList(rawSources) {
       url: String(source.url || source.link || source.href || "").trim(),
       domain: String(source.domain || source.publisher || source.site || "").trim(),
       date: String(source.date || source.published_at || source.publishedDate || "").trim(),
+      image_url: String(source.image_url || source.image || source.thumbnail || "").trim(),
     };
 
     if (!normalizedSource.title && !normalizedSource.url) {
@@ -2053,6 +2054,17 @@ function SourceDisclosure({ sources }) {
                 rel="noreferrer"
                 className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3 no-underline transition-colors duration-200 hover:border-atelier-forest/24 hover:bg-white"
               >
+                ${source.image_url
+                  ? html`<div className="mb-3 overflow-hidden rounded-[14px] border border-atelier-line bg-atelier-paper/70">
+                      <img
+                        src=${source.image_url}
+                        alt=${source.title || source.url || `Source ${index + 1}`}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="block h-40 w-full object-cover"
+                      />
+                    </div>`
+                  : null}
                 <p className="m-0 text-sm font-bold text-atelier-ink">
                   ${source.title || source.url || `Source ${index + 1}`}
                 </p>

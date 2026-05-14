@@ -17,7 +17,7 @@ from services.prompt_file_service import get_content_filter_prompt_template
 
 logger = logging.getLogger(__name__)
 
-CONTENT_FILTER_MODEL = settings.OPENAI_ANALYSIS_MODEL or "gpt-5.4"
+CONTENT_FILTER_MODEL = settings.OPENAI_SUPPORT_MODEL or settings.OPENAI_QUERY_MODEL or "gpt-4.1-mini"
 CONTENT_FILTER_MAX_RETRIES = 1
 CONTENT_FILTER_MAX_OUTPUT_TOKENS = 900
 MIN_CHUNK_WORDS = 8

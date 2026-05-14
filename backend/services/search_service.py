@@ -37,6 +37,7 @@ TOTAL_URL_CAP = 200
 MIN_SNIPPET_LENGTH = 50
 CURRENT_YEAR = datetime.now(timezone.utc).year
 YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
+SEARCH_BACKENDS = ("auto", "html", "lite")
 HIGH_VALUE_DOMAINS = (".gov", ".edu", ".org")
 CONSULTING_DOMAINS = ("mckinsey", "deloitte", "pwc", "kpmg", "bain", "bcg")
 HIGH_VALUE_KEYWORDS = ("report", "analysis", "market", "outlook", "research", "forecast")
@@ -138,6 +139,28 @@ def _normalize_raw_result(result: Dict[str, Any]) -> Dict[str, str]:
             or ""
         ).strip(),
     }
+
+
+def _normalize_query_variant(query: str) -> str:
+    return re.sub(r"\s+", " ", str(query or "").strip())
+
+
+def _build_query_variants(query: str) -> List[str]:
+    variants: List[str] = []
+    seen = set()
+
+    for candidate in (
+        query,
+        re.sub(r"\b20\d{2}\b", " ", query),
+    ):
+        normalized = _normalize_query_variant(candidate)
+        normalized_key = normalized.lower()
+        if not normalized or normalized_key in seen:
+            continue
+        seen.add(normalized_key)
+        variants.append(normalized)
+
+    return variants
 
 
 def _extract_years(text: str) -> List[int]:
@@ -274,34 +297,14 @@ def _run_ddg_search_sync(
             return list(ddgs.text(query, **kwargs))
 
 
-async def get_search_results(
-    query: str,
-    freshness: str = "high",
-    location_context: LocationContext | None = None,
+def _filter_backend_results(
+    raw_results: List[Dict[str, Any]],
+    *,
+    normalized_query: str,
+    authority_boosts: Dict[str, int],
+    freshness_level: str,
+    resolved_location_context: LocationContext,
 ) -> List[Dict[str, Any]]:
-    normalized_query = query.strip()
-    freshness_level = _normalize_freshness(freshness)
-    resolved_location_context = location_context or LocationContext()
-    authority_boosts = get_domain_authority_boosts()
-    _log(f"[SEARCH] Query: {normalized_query}")
-    raw_results = await call_search(
-        "ddg_search",
-        lambda: asyncio.to_thread(
-            _run_ddg_search_sync,
-            normalized_query,
-            MAX_RESULTS_PER_QUERY,
-            None,
-            "auto",
-        ),
-        fallback=[],
-        timeout=SEARCH_TIMEOUT_SECONDS,
-        max_retries=SEARCH_MAX_RETRIES,
-        context={"query": normalized_query},
-    )
-    if not raw_results:
-        _log(f"[SEARCH] Failed: {normalized_query} | error=no results")
-        return []
-
     annotated_results: List[Dict[str, Any]] = []
     for result in raw_results:
         base_result = _score_result(_normalize_raw_result(result), authority_boosts, freshness_level)
@@ -332,9 +335,88 @@ async def get_search_results(
         ),
         reverse=True,
     )
-    limited_results = filtered_results[:MAX_RESULTS_PER_QUERY]
-    _log(f"[SEARCH] Results: {len(limited_results)} | query={normalized_query}")
-    return limited_results
+    return filtered_results[:MAX_RESULTS_PER_QUERY]
+
+
+def _run_ddg_search_resilient_sync(
+    query: str,
+    *,
+    authority_boosts: Dict[str, int],
+    freshness_level: str,
+    resolved_location_context: LocationContext,
+) -> List[Dict[str, Any]]:
+    last_error: Exception | None = None
+
+    for query_variant in _build_query_variants(query):
+        for backend in SEARCH_BACKENDS:
+            try:
+                raw_results = _run_ddg_search_sync(
+                    query_variant,
+                    MAX_RESULTS_PER_QUERY,
+                    None,
+                    backend,
+                )
+                filtered_results = _filter_backend_results(
+                    raw_results,
+                    normalized_query=query,
+                    authority_boosts=authority_boosts,
+                    freshness_level=freshness_level,
+                    resolved_location_context=resolved_location_context,
+                )
+                logger.info(
+                    "[SEARCH] Backend=%s variant=%s raw=%s filtered=%s | query=%s",
+                    backend,
+                    "exact" if query_variant == query else "relaxed",
+                    len(raw_results),
+                    len(filtered_results),
+                    query,
+                )
+                if filtered_results:
+                    return filtered_results
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "[SEARCH] Backend failed backend=%s variant=%s | query=%s | error=%s",
+                    backend,
+                    "exact" if query_variant == query else "relaxed",
+                    query,
+                    _error_message(exc),
+                )
+
+    if last_error is not None:
+        raise RuntimeError(f"All DDG backends failed or returned unusable results: {_error_message(last_error)}")
+    raise RuntimeError("All DDG backends returned zero usable results.")
+
+
+async def get_search_results(
+    query: str,
+    freshness: str = "high",
+    location_context: LocationContext | None = None,
+) -> List[Dict[str, Any]]:
+    normalized_query = query.strip()
+    freshness_level = _normalize_freshness(freshness)
+    resolved_location_context = location_context or LocationContext()
+    authority_boosts = get_domain_authority_boosts()
+    _log(f"[SEARCH] Query: {normalized_query}")
+    filtered_results = await call_search(
+        "ddg_search",
+        lambda: asyncio.to_thread(
+            _run_ddg_search_resilient_sync,
+            normalized_query,
+            authority_boosts=authority_boosts,
+            freshness_level=freshness_level,
+            resolved_location_context=resolved_location_context,
+        ),
+        fallback=[],
+        timeout=SEARCH_TIMEOUT_SECONDS,
+        max_retries=SEARCH_MAX_RETRIES,
+        context={"query": normalized_query},
+    )
+    if not filtered_results:
+        _log(f"[SEARCH] Failed: {normalized_query} | error=no results")
+        return []
+    _log(f"[SEARCH] Results: {len(filtered_results)} | query={normalized_query}")
+    return filtered_results
 
 
 async def search_queries(

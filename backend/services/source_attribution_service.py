@@ -53,6 +53,7 @@ def _build_source_ref(block: Dict[str, Any], source_id: int) -> Dict[str, str]:
         "url": str(block.get("url", "")).strip(),
         "domain": str(block.get("domain", "")).strip(),
         "date": str(block.get("date", "")).strip(),
+        "image_url": str(block.get("image_url", "")).strip(),
     }
 
 

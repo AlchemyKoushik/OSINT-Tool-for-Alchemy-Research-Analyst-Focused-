@@ -32,10 +32,10 @@ GARBAGE_MARKERS = (
 )
 STRIP_PREFIX_PATTERN = re.compile(r"^(?:source|note|references?)\s*:\s*", re.IGNORECASE)
 URL_PATTERN = re.compile(r"(?:https?://|www\.)\S+", re.IGNORECASE)
-MAX_SELECTED_SOURCES = 20
-MAX_SENTENCES_PER_SOURCE = 3
-MAX_CHARS_PER_SOURCE = 1800
-MAX_TOTAL_CONTEXT_TOKENS = 10000
+MAX_SELECTED_SOURCES = 30
+MAX_SENTENCES_PER_SOURCE = 4
+MAX_CHARS_PER_SOURCE = 2200
+MAX_TOTAL_CONTEXT_TOKENS = 14000
 MAX_TOTAL_CONTEXT_CHARS = MAX_TOTAL_CONTEXT_TOKENS * 4
 MIN_CONTENT_LENGTH = 160
 MIN_SENTENCE_LENGTH = 50
@@ -343,6 +343,7 @@ def prepare_processed_content(
         content = str(data.get("content", ""))
         artifact_type = str(data.get("artifact_type", "")).strip().lower()
         artifact_path = str(data.get("artifact_path", "")).strip()
+        image_url = str(data.get("image_url", "")).strip()
         location_score = int(data.get("location_score", 0))
         location_matches = [str(match).strip() for match in data.get("location_matches", []) if str(match).strip()]
         cleaned_content = clean_evidence_text(content)
@@ -385,6 +386,7 @@ def prepare_processed_content(
                 "content": cleaned_content,
                 "artifact_type": artifact_type or "web",
                 "artifact_path": artifact_path,
+                "image_url": image_url,
                 "sentence_candidates": sentence_candidates,
                 "weight_data": weight_data,
                 "location_score": location_score,
@@ -451,6 +453,7 @@ def prepare_processed_content(
                 "excerpt": source_text,
                 "url": candidate["url"],
                 "domain": candidate["domain"],
+                "image_url": candidate["image_url"],
             }
         )
         selected_urls.append(candidate["url"])
@@ -463,6 +466,7 @@ def prepare_processed_content(
                 "domain": candidate["domain"],
                 "artifact_type": candidate["artifact_type"],
                 "artifact_path": candidate["artifact_path"],
+                "image_url": candidate["image_url"],
                 "score": candidate["score"],
                 "location_score": candidate["location_score"],
                 "location_matches": candidate["location_matches"],
@@ -477,6 +481,7 @@ def prepare_processed_content(
                 "domain": candidate["domain"],
                 "artifact_type": candidate["artifact_type"],
                 "artifact_path": candidate["artifact_path"],
+                "image_url": candidate["image_url"],
                 "total_weight": weight_data["total_weight"],
                 "location_score": candidate["location_score"],
                 "location_matches": candidate["location_matches"],

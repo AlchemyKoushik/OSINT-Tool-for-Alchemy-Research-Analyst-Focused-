@@ -83,17 +83,24 @@ def _build_heading(text: str, topic: str, index: int) -> str:
         if len(words) >= 6:
             break
     if words:
-        return " ".join(words)
+        phrase = " ".join(words[:6])
+        if index % 4 == 1:
+            return f"Shift Towards {phrase}"
+        if index % 4 == 2:
+            return f"Rise of {phrase}"
+        if index % 4 == 3:
+            return f"Expansion of {phrase}"
+        return f"Growing Adoption of {phrase}"
     return f"{topic.title()} Insight {index}"
 
 
 def _build_description(text: str, section: str) -> str:
     if section == "trends":
         return (
-            f"{text} Taken together, the evidence points to a concrete market shift rather than an isolated source detail."
+            f"{text} The pattern is becoming more visible across the market as competitive priorities, investment focus, and operating choices adjust around the same shift."
         )
     return (
-        f"{text} Taken together, the evidence points to an underlying force that is actively shaping market change."
+        f"{text} The underlying force is increasingly shaping commercial decisions, capital allocation, and market positioning across the sector."
     )
 
 

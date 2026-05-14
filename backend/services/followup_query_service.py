@@ -12,7 +12,7 @@ from services.openai_service import OPENAI_TIMEOUT_SECONDS, can_use_openai, ensu
 
 logger = logging.getLogger(__name__)
 
-FOLLOW_UP_MODEL = settings.OPENAI_QUERY_MODEL or "gpt-4o-mini"
+FOLLOW_UP_MODEL = settings.OPENAI_QUERY_MODEL or settings.OPENAI_SUPPORT_MODEL or "gpt-4.1-mini"
 FOLLOW_UP_MAX_RETRIES = 1
 FOLLOW_UP_MAX_OUTPUT_TOKENS = 700
 MAX_CHUNKS_FOR_DECISION = 18

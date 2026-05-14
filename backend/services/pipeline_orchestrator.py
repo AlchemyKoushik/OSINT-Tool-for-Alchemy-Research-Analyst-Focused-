@@ -4,6 +4,7 @@ import json
 import asyncio
 from typing import Any, Dict, List
 
+from config.settings import settings
 from services.content_processor import prepare_processed_content
 from services.location_service import LocationContext
 from services.redis_service import update_session
@@ -15,6 +16,10 @@ from services.storage_service import upload_to_r2
 logger = logging.getLogger(__name__)
 
 DEBUG = True
+MAX_PIPELINE_SCRAPE_RESULTS = 200
+SCRAPE_BATCH_SIZE = 25
+TARGET_USABLE_TEXT_COUNT = 200
+SCRAPE_TIME_BUDGET_SECONDS = 900
 
 
 def _log(message: str) -> None:
@@ -103,12 +108,16 @@ async def execute_pipeline(
 
     scrape_start = time.perf_counter()
     try:
+        prioritized_search_results = list(search_results[:MAX_PIPELINE_SCRAPE_RESULTS])
         artifact_bundle = await collect_research_artifacts(
             topic=topic,
             section=section,
             session_id=session_id,
             location_context=resolved_location_context,
-            search_results=search_results,
+            search_results=prioritized_search_results,
+            batch_size=SCRAPE_BATCH_SIZE,
+            target_usable_text_count=TARGET_USABLE_TEXT_COUNT,
+            max_duration_seconds=SCRAPE_TIME_BUDGET_SECONDS,
         )
     except Exception as exc:
         logger.exception("Pipeline scraping failed for topic %s section %s", topic, section)
@@ -158,26 +167,54 @@ async def execute_pipeline(
             "selected_urls": list(processed_payload.get("selected_urls", [])),
             "num_sources": int(processed_payload.get("num_sources", 0)),
         }
-        cleaned_data = json.dumps(cleaned_dump_payload, indent=2) if cleaned_dump_payload["existing_chunks"] else ""
 
-        logger.info("cleaned_dump_prepared chars=%s session_id=%s", len(cleaned_data) if cleaned_data else 0, session_id)
+        if not cleaned_dump_payload["existing_chunks"] and scraped_results:
+            cleaned_dump_payload["existing_chunks"] = [
+                {
+                    "text": str(item.get("content", "")).strip()[: settings.MAX_CHUNK_TEXT_LENGTH],
+                    "source_id": f"fallback_{index}",
+                    "source_title": str(item.get("title", "")).strip() or f"Fallback Source {index}",
+                    "source_url": str(item.get("url", "")).strip(),
+                    "source_domain": str(item.get("domain", "")).strip(),
+                    "source_date": "",
+                }
+                for index, item in enumerate(scraped_results, start=1)
+                if str(item.get("content", "")).strip()
+            ][: settings.MAX_EXISTING_CHUNKS]
 
-        if not cleaned_data:
+        if not cleaned_dump_payload["evidence_blocks"] and cleaned_dump_payload["existing_chunks"]:
+            cleaned_dump_payload["evidence_blocks"] = [
+                {
+                    "source_id": chunk["source_id"],
+                    "title": chunk["source_title"],
+                    "date": chunk["source_date"],
+                    "excerpt": chunk["text"],
+                    "url": chunk["source_url"],
+                    "domain": chunk["source_domain"],
+                }
+                for chunk in cleaned_dump_payload["existing_chunks"]
+            ]
+            cleaned_dump_payload["selected_urls"] = [
+                chunk["source_url"] or chunk["source_id"] for chunk in cleaned_dump_payload["existing_chunks"]
+            ]
+            cleaned_dump_payload["num_sources"] = len(cleaned_dump_payload["existing_chunks"])
+
+        cleaned_dump_payload["raw_fallback_text"] = ""
+        if not cleaned_dump_payload["existing_chunks"]:
             logger.warning("cleaned_data empty; using fallback session_id=%s", session_id)
             try:
                 combined_text = ""
                 for item in scraped_results:
                     if isinstance(item, dict):
                         combined_text += str(item.get("content", "") or "") + "\n"
-
-                cleaned_data = combined_text[:50000]
+                cleaned_dump_payload["raw_fallback_text"] = combined_text[:50000]
             except Exception as exc:
                 logger.warning("Fallback cleaning failed for session %s: %s", session_id, exc)
-                cleaned_data = "Fallback empty content"
+                cleaned_dump_payload["raw_fallback_text"] = "Fallback empty content"
 
-        if not cleaned_data:
-            logger.warning("Empty cleaned_data after fallback for session %s", session_id)
-            cleaned_data = "No structured cleaned data available"
+        cleaned_data = json.dumps(cleaned_dump_payload, indent=2)
+
+        logger.info("cleaned_dump_prepared chars=%s session_id=%s", len(cleaned_data) if cleaned_data else 0, session_id)
 
         cleaned_key = await asyncio.to_thread(
             upload_to_r2,

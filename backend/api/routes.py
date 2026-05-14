@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from config.settings import settings
 from models.request_models import AnalyzeExistingRequest, AnalyzeRequest, FollowUpRequest, PdfExportRequest
@@ -50,6 +50,7 @@ INTERNAL_FRESHNESS = "high"
 MAX_WEB_SCRAPE_URLS = 100
 INITIAL_INSIGHT_LIMIT = 10
 FOLLOW_UP_INSIGHT_LIMIT = 5
+EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS = 120
 
 
 def _sanitize_for_log(value: str, limit: int = 120) -> str:
@@ -335,6 +336,25 @@ def _build_fail_safe_response(
     return payload
 
 
+def _fail_safe_json_response(
+    error_message: str,
+    *,
+    section: str = "",
+    debug_payload: Optional[Dict[str, Any]] = None,
+    session_id: str = "",
+    status_code: int = 502,
+) -> JSONResponse:
+    payload = _attach_session_id(
+        _build_fail_safe_response(
+            error_message,
+            section=section,
+            debug_payload=debug_payload,
+        ),
+        session_id,
+    )
+    return JSONResponse(status_code=status_code, content=payload)
+
+
 def _attach_session_id(payload: Dict[str, Any], session_id: str) -> Dict[str, Any]:
     if session_id:
         payload["session_id"] = session_id
@@ -434,13 +454,13 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             payload = await _read_json_payload(request)
         except Exception as exc:
             logger.warning("Analyze payload read failed: %s", exc)
-            return _build_fail_safe_response("Invalid JSON payload.", section=section)
+            return _fail_safe_json_response("Invalid JSON payload.", section=section, status_code=400)
 
         try:
             request_model = AnalyzeRequest(**payload)
         except Exception as exc:
             logger.warning("Analyze payload validation failed: %s", exc)
-            return _build_fail_safe_response(f"Invalid request payload: {exc}", section=section)
+            return _fail_safe_json_response(f"Invalid request payload: {exc}", section=section, status_code=400)
 
         topic = request_model.topic.strip()
         section = request_model.section
@@ -646,15 +666,14 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     location=location_summary,
                     stage_errors=stage_errors,
                 )
-            return _attach_session_id(
-                _build_fail_safe_response(
-                    stage_errors.get("search")
-                    or stage_errors.get("query_generation")
-                    or "No search results found.",
-                    section=section,
-                    debug_payload=debug_payload,
-                ),
-                session_id,
+            return _fail_safe_json_response(
+                stage_errors.get("search")
+                or stage_errors.get("query_generation")
+                or "No search results found.",
+                section=section,
+                debug_payload=debug_payload,
+                session_id=session_id,
+                status_code=502,
             )
 
         artifact_dir = str(artifact_bundle.get("artifact_dir", ""))
@@ -759,15 +778,14 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     existing_chunks=existing_chunks,
                     stage_errors=stage_errors,
                 )
-            return _attach_session_id(
-                _build_fail_safe_response(
-                    stage_errors.get("processing")
-                    or stage_errors.get("scraping")
-                    or "No usable content extracted from stored research artifacts.",
-                    section=section,
-                    debug_payload=debug_payload,
-                ),
-                session_id,
+            return _fail_safe_json_response(
+                stage_errors.get("processing")
+                or stage_errors.get("scraping")
+                or "No usable content extracted from stored research artifacts.",
+                section=section,
+                debug_payload=debug_payload,
+                session_id=session_id,
+                status_code=502,
             )
 
         try:
@@ -839,9 +857,12 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     artifact_counts=artifact_counts,
                     existing_chunks=existing_chunks,
                 )
-            return _attach_session_id(
-                _build_fail_safe_response(f"Prompt building failed: {exc}", section=section, debug_payload=debug_payload),
-                session_id,
+            return _fail_safe_json_response(
+                f"Prompt building failed: {exc}",
+                section=section,
+                debug_payload=debug_payload,
+                session_id=session_id,
+                status_code=502,
             )
         execution_time["prompt_ms"] = _elapsed_ms(prompt_start)
         prompt_chars = len(system_prompt) + len(metadata_payload)
@@ -872,13 +893,31 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             list(analysis_json.get("items", [])),
             evidence_blocks,
         )
-        analysis_json["items"] = await enrich_items_with_researched_examples(
-            items=list(analysis_json.get("items", [])),
-            topic=topic,
-            section=section,
-            location_context=location_context,
-            session_id=session_id,
-        )
+        try:
+            analysis_json["items"] = await asyncio.wait_for(
+                enrich_items_with_researched_examples(
+                    items=list(analysis_json.get("items", [])),
+                    topic=topic,
+                    section=section,
+                    location_context=location_context,
+                    session_id=session_id,
+                ),
+                timeout=EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Example enrichment timed out topic=%s section=%s timeout_seconds=%s",
+                _sanitize_for_log(topic),
+                section,
+                EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS,
+            )
+            analysis_json["items"] = [
+                {
+                    **dict(item),
+                    "examples": list(item.get("examples", [])) if isinstance(item.get("examples", []), list) else [],
+                }
+                for item in list(analysis_json.get("items", []))
+            ]
         if not analysis_json["items"]:
             analysis_json["title"] = "No strong insights found"
 
@@ -916,13 +955,12 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                     artifact_counts=artifact_counts,
                     existing_chunks=existing_chunks,
                 )
-            return _attach_session_id(
-                _build_fail_safe_response(
-                    f"Response validation failed: {exc}",
-                    section=section,
-                    debug_payload=debug_payload,
-                ),
-                session_id,
+            return _fail_safe_json_response(
+                f"Response validation failed: {exc}",
+                section=section,
+                debug_payload=debug_payload,
+                session_id=session_id,
+                status_code=502,
             )
         execution_time["validation_ms"] = _elapsed_ms(validation_start)
         execution_time["total_ms"] = _elapsed_ms(total_start)
@@ -1051,9 +1089,12 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 artifact_manifest=artifact_manifest,
                 artifact_counts=artifact_counts,
             )
-        return _attach_session_id(
-            _build_fail_safe_response(f"Pipeline failed: {exc}", section=section, debug_payload=debug_payload),
-            session_id,
+        return _fail_safe_json_response(
+            f"Pipeline failed: {exc}",
+            section=section,
+            debug_payload=debug_payload,
+            session_id=session_id,
+            status_code=502,
         )
 
 

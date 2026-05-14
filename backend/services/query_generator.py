@@ -1,6 +1,7 @@
 ﻿import asyncio
 import logging
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from openai import AsyncOpenAI
@@ -15,16 +16,17 @@ from services.prompt_file_service import get_search_query_prompt_template
 logger = logging.getLogger(__name__)
 
 DEBUG = True
-QUERY_MODEL_NAME = settings.OPENAI_QUERY_MODEL or "gpt-4o-mini"
+QUERY_MODEL_NAME = settings.OPENAI_QUERY_MODEL or settings.OPENAI_SUPPORT_MODEL or "gpt-4.1-mini"
 QUERY_TIMEOUT_SECONDS = 25
 QUERY_MAX_RETRIES = 1
 MIN_QUERY_COUNT = 10
 MAX_QUERY_COUNT = 10
 DATA_TERMS = ("statistics", "report", "forecast", "data")
+CURRENT_QUERY_YEAR = datetime.utcnow().year
+RECENT_QUERY_YEARS = tuple(str(CURRENT_QUERY_YEAR - offset) for offset in range(0, 2))
 QUERY_ANGLE_QUALIFIERS = (
     "latest",
-    "2024",
-    "2025",
+    *RECENT_QUERY_YEARS,
     "recent",
     "market size",
     "investment",
@@ -297,6 +299,7 @@ def _build_query_user_prompt(
         "- If Region is selected, every query must explicitly include the region keyword.\n"
         '- Every query must include at least one of: "statistics", "report", "forecast", or "data".\n'
         '- Every query must explicitly contain the topic or its obvious key terms.\n'
+        f'- Prefer the latest available evidence and bias the query set toward {RECENT_QUERY_YEARS[0]} and {RECENT_QUERY_YEARS[-1]} when useful.\n'
         '- Prefer geography-aware and data-focused wording.\n'
         '- Avoid vague phrases like "analysis of" and "overview of".\n'
         '- Avoid generic forecast headlines and vague academic wording.\n'
