@@ -25,8 +25,6 @@ SECTION_TITLES: Final[Dict[str, str]] = {
     "trends": "Industry Trends",
     "drivers": "Market Drivers",
 }
-MAX_PROMPT_EVIDENCE_BLOCKS = 30
-MAX_PROMPT_SOURCE_METADATA = 30
 
 
 def get_prompt(section: str, max_items: int = 10) -> str:
@@ -56,7 +54,7 @@ def _format_evidence_blocks(evidence_blocks: Optional[List[Dict[str, Any]]]) -> 
         return "[]"
 
     compact_blocks: List[Dict[str, Any]] = []
-    for index, block in enumerate(evidence_blocks[:MAX_PROMPT_EVIDENCE_BLOCKS], start=1):
+    for index, block in enumerate(evidence_blocks[:20], start=1):
         excerpt = str(block.get("excerpt", "")).strip()
         if not excerpt:
             continue
@@ -78,7 +76,7 @@ def _format_source_metadata(
     artifact_counts: Optional[Dict[str, Any]],
 ) -> str:
     compact_sources: List[Dict[str, Any]] = []
-    for source in (source_scores or [])[:MAX_PROMPT_SOURCE_METADATA]:
+    for source in (source_scores or [])[:20]:
         compact_sources.append(
             {
                 "title": str(source.get("title", "")).strip(),
@@ -139,12 +137,6 @@ def build_metadata_payload(
         "- Ignore any residual noise if present.\n"
         "- Generate insights after understanding the full evidence set, not source by source.\n"
         "- Prioritize concrete signals, changes, and implications over descriptive filler.\n"
-        "- Treat the research date as the current date when evaluating recency and wording.\n"
-        "- For Trends, prefer evidence and signals from the last two years whenever available.\n"
-        "- For Trends, support each item with the latest available market evidence, company actions, regulatory developments, expert commentary, customer behavior shifts, or credible industry signals.\n"
-        "- Do not present stale projections with target years earlier than or equal to the research date as current expectations.\n"
-        '- Prefer wording such as "as of the latest available data", "recent estimates indicate", or "the market reached".\n'
-        "- If only older projections are available, frame them as historical forecasts and explain their relevance briefly.\n"
         f"- Section focus: {SECTION_DEFINITIONS[normalized_section]}\n"
         "- Every returned item must include supporting source_ids from the numbered evidence blocks.\n"
         f"- Final output cap: Return only the top {max(1, int(max_items or 1))} ranked insights.\n\n"
@@ -208,15 +200,11 @@ def build_trend_example_extraction_payload(
         "TASK\n"
         "- Use only the newly researched evidence below.\n"
         "- Extract only factual examples that directly support the written trend or driver above.\n"
-        "- An example must be a concrete and recent proof point, not a generic market statement.\n"
-        "- Strong examples may include company actions, transactions, investments, product launches, regulatory changes, survey findings, market data points, executive commentary, or customer behavior signals.\n"
-        "- Prefer company-level or organization-level events when available, but do not exclude strong recent data-led or regulation-led examples.\n"
+        "- An example must be a concrete company-level or organization-level event, not a generic market statement.\n"
+        "- Prefer examples shaped like: Company A acquired Company B, Company C launched X, Company D raised funding, Company E expanded capacity.\n"
         "- Prefer examples supported by the latest available evidence, ideally from the last two years relative to the research date.\n"
-        "- Return at most 1 to 2 strong examples for the item; do not pad weak evidence into example slots.\n"
-        "- If the evidence supports only one strong recent example, return one and do not force a second.\n"
         "- Include the most specific event date available in the `year` field, such as `March 2026` or `2026-03-14`; use just the year only if the source does not provide a better date.\n"
-        "- The `text` field should read like a short factual proof point and should name the company, evidence signal, or concrete market development explicitly.\n"
-        "- Do not use outdated projections, old market commentary, or loosely related statements as examples.\n"
+        "- The `text` field should read like a short factual event line and should name the company and action explicitly.\n"
         "- If recent examples are not clearly supported, return no examples rather than forcing weak or loosely related ones.\n"
         "- If the evidence is not clearly tied to the written trend or driver, return no examples.\n\n"
         "EVIDENCE\n"

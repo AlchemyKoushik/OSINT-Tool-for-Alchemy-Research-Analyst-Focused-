@@ -16,7 +16,6 @@ from services.trend_example_research_service import enrich_items_with_researched
 
 logger = logging.getLogger(__name__)
 FOLLOW_UP_INSIGHT_LIMIT = 5
-EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS = 120
 
 
 def _normalize_text(value: Any) -> str:
@@ -188,31 +187,13 @@ async def analyze_existing_chunks(
         list(ranked_items),
         evidence_blocks,
     )
-    try:
-        sourced_items = await asyncio.wait_for(
-            enrich_items_with_researched_examples(
-                items=list(sourced_items),
-                topic=normalized_query,
-                section=section,
-                location_context=location_context,
-                session_id=session_id or "followup_examples",
-            ),
-            timeout=EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        logger.warning(
-            "Follow-up example enrichment timed out query=%s section=%s timeout_seconds=%s",
-            normalized_query,
-            section,
-            EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS,
-        )
-        sourced_items = [
-            {
-                **dict(item),
-                "examples": list(item.get("examples", [])) if isinstance(item.get("examples", []), list) else [],
-            }
-            for item in list(sourced_items)
-        ]
+    sourced_items = await enrich_items_with_researched_examples(
+        items=list(sourced_items),
+        topic=normalized_query,
+        section=section,
+        location_context=location_context,
+        session_id=session_id or "followup_examples",
+    )
     validated_items = _validate_research_items(sourced_items)
     if not validated_items:
         logger.warning("Invalid or empty LLM output for analyze_existing_chunks; applying fallback.")

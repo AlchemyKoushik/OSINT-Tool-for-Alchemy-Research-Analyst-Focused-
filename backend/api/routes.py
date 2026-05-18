@@ -44,13 +44,12 @@ from services.trend_example_research_service import enrich_items_with_researched
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "artifact_sot_v8_company_event_examples"
+PIPELINE_VERSION = "artifact_sot_v8_examples_restored_from_0033ee1"
 INTERNAL_DEPTH = "high"
 INTERNAL_FRESHNESS = "high"
 MAX_WEB_SCRAPE_URLS = 100
 INITIAL_INSIGHT_LIMIT = 10
 FOLLOW_UP_INSIGHT_LIMIT = 5
-EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS = 120
 
 
 def _sanitize_for_log(value: str, limit: int = 120) -> str:
@@ -893,31 +892,13 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             list(analysis_json.get("items", [])),
             evidence_blocks,
         )
-        try:
-            analysis_json["items"] = await asyncio.wait_for(
-                enrich_items_with_researched_examples(
-                    items=list(analysis_json.get("items", [])),
-                    topic=topic,
-                    section=section,
-                    location_context=location_context,
-                    session_id=session_id,
-                ),
-                timeout=EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Example enrichment timed out topic=%s section=%s timeout_seconds=%s",
-                _sanitize_for_log(topic),
-                section,
-                EXAMPLE_ENRICHMENT_TIMEOUT_SECONDS,
-            )
-            analysis_json["items"] = [
-                {
-                    **dict(item),
-                    "examples": list(item.get("examples", [])) if isinstance(item.get("examples", []), list) else [],
-                }
-                for item in list(analysis_json.get("items", []))
-            ]
+        analysis_json["items"] = await enrich_items_with_researched_examples(
+            items=list(analysis_json.get("items", [])),
+            topic=topic,
+            section=section,
+            location_context=location_context,
+            session_id=session_id,
+        )
         if not analysis_json["items"]:
             analysis_json["title"] = "No strong insights found"
 

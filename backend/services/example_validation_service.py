@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Dict, Iterable, List, Sequence
 
 from models.response_models import Example, ExtractedExample
@@ -45,61 +44,7 @@ EVENT_KEYWORDS = (
     "infrastructure",
     "scale",
 )
-EVIDENCE_SIGNAL_KEYWORDS = (
-    "survey",
-    "respondents",
-    "according to",
-    "report",
-    "data",
-    "statistics",
-    "estimate",
-    "estimated",
-    "revenue",
-    "market share",
-    "penetration",
-    "usage",
-    "adoption",
-    "subscriber",
-    "subscribers",
-    "pricing",
-    "price increase",
-    "regulatory",
-    "regulation",
-    "policy",
-    "approval",
-    "guidance",
-    "earnings call",
-    "chief executive",
-    "ceo",
-)
 MAX_VALIDATED_EXAMPLES_PER_TREND = 2
-CURRENT_YEAR = datetime.utcnow().year
-MAX_EXAMPLE_AGE_YEARS = 2
-FORECAST_ONLY_MARKERS = (
-    "projected to",
-    "is projected to",
-    "forecast to",
-    "expected to",
-    "cagr",
-    "compound annual growth",
-)
-CURRENT_SIGNAL_MARKERS = (
-    "reached",
-    "rose",
-    "grew",
-    "declined",
-    "launched",
-    "acquired",
-    "announced",
-    "reported",
-    "survey",
-    "respondents",
-    "according to",
-    "regulatory",
-    "approved",
-    "policy",
-    "earnings call",
-)
 
 
 @dataclass(frozen=True)
@@ -151,16 +96,6 @@ def _extract_year(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def _extract_numeric_year(value: str) -> int | None:
-    raw_year = _extract_year(value)
-    if not raw_year:
-        return None
-    try:
-        return int(raw_year)
-    except (TypeError, ValueError):
-        return None
-
-
 def _has_specific_date_signal(example: ExtractedExample) -> bool:
     combined = " ".join(
         [
@@ -200,46 +135,9 @@ def _has_event_signal(example: ExtractedExample) -> bool:
     return any(keyword in event_text for keyword in EVENT_KEYWORDS)
 
 
-def _has_evidence_signal(example: ExtractedExample) -> bool:
-    combined_text = " ".join(
-        [
-            _normalize_text(example.event),
-            _normalize_text(example.text),
-        ]
-    ).lower()
-    return any(keyword in combined_text for keyword in EVIDENCE_SIGNAL_KEYWORDS)
-
-
 def _looks_generic(text: str) -> bool:
     lowered = text.lower()
     return any(marker in lowered for marker in GENERIC_EXAMPLE_MARKERS)
-
-
-def _is_too_old(example: ExtractedExample) -> bool:
-    year_candidate = _extract_numeric_year(_normalize_text(example.year)) or _extract_numeric_year(_normalize_text(example.text))
-    if year_candidate is None:
-        return False
-    return year_candidate < (CURRENT_YEAR - MAX_EXAMPLE_AGE_YEARS)
-
-
-def _looks_like_forecast_only_example(example: ExtractedExample) -> bool:
-    combined_text = " ".join(
-        [
-            _normalize_text(example.event),
-            _normalize_text(example.text),
-        ]
-    ).lower()
-    has_forecast_marker = any(marker in combined_text for marker in FORECAST_ONLY_MARKERS)
-    has_current_signal = any(marker in combined_text for marker in CURRENT_SIGNAL_MARKERS)
-    return has_forecast_marker and not has_current_signal
-
-
-def _example_priority(example: ExtractedExample) -> tuple[int, int, int, int]:
-    numeric_year = _extract_numeric_year(_normalize_text(example.year)) or _extract_numeric_year(_normalize_text(example.text)) or 0
-    has_company = 1 if _normalize_text(example.company) else 0
-    has_event = 1 if _has_event_signal(example) else 0
-    has_signal = 1 if _has_evidence_signal(example) else 0
-    return (numeric_year, has_company, has_event, has_signal)
 
 
 def _is_supported_by_evidence(example: ExtractedExample, evidence_lookup: Dict[int, str]) -> bool:
@@ -281,14 +179,10 @@ def validate_example(
         return ExampleValidationResult(accepted=False, reason="too_short")
     if _looks_generic(text):
         return ExampleValidationResult(accepted=False, reason="generic_text")
-    if not company and not _has_event_signal(example) and not _has_evidence_signal(example):
-        return ExampleValidationResult(accepted=False, reason="missing_entity_event_or_signal")
+    if not company and not _has_event_signal(example):
+        return ExampleValidationResult(accepted=False, reason="missing_entity_or_event")
     if not _has_specific_date_signal(example):
         return ExampleValidationResult(accepted=False, reason="missing_date_signal")
-    if _is_too_old(example):
-        return ExampleValidationResult(accepted=False, reason="too_old")
-    if _looks_like_forecast_only_example(example):
-        return ExampleValidationResult(accepted=False, reason="forecast_only_example")
 
     valid_source_ids = _source_id_set(evidence_blocks)
     normalized_source_ids = [source_id for source_id in example.source_ids if source_id in valid_source_ids]
@@ -334,7 +228,6 @@ def validate_examples(
         seen_keys.add(dedupe_key)
         validated.append(result.example)
 
-    validated.sort(key=_example_priority, reverse=True)
     return validated, discard_reasons
 
 
@@ -347,8 +240,6 @@ def evidence_has_strong_example_signals(evidence_blocks: Sequence[Dict[str, Any]
             ]
         ).lower()
         if any(keyword in combined for keyword in EVENT_KEYWORDS):
-            return True
-        if any(keyword in combined for keyword in EVIDENCE_SIGNAL_KEYWORDS):
             return True
         if len(re.findall(r"\b[A-Z][A-Za-z0-9&.-]+\b", str(block.get("excerpt", "")))) >= 2:
             return True

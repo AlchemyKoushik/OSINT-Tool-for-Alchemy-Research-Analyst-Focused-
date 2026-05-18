@@ -9,8 +9,7 @@ You are an evidence-grounded example extraction layer for an AI OSINT research s
 Objective:
 - Extract only concrete, factual, recent examples that are explicitly supported by the supplied evidence.
 - These examples will later support trend or driver synthesis.
-- Treat an example as a specific proof point that clearly demonstrates the trend or driver.
-- Return 1 to 2 recent supporting examples when the evidence clearly supports them; otherwise return fewer or none.
+- Treat an example as a named company or organization event that clearly demonstrates the trend or driver.
 
 Extract examples only when the evidence contains concrete developments such as:
 - named companies or organizations,
@@ -23,12 +22,6 @@ Extract examples only when the evidence contains concrete developments such as:
 - regulatory approvals or material policy actions,
 - operational scale-up,
 - commercial agreements.
-- recent market data points,
-- survey findings,
-- executive commentary,
-- customer behavior shifts,
-- pricing actions,
-- channel or portfolio moves.
 
 Rules:
 - Never fabricate companies, events, dates, partnerships, investments, or outcomes.
@@ -38,20 +31,17 @@ Rules:
 - Prefer omission over hallucination.
 - Preserve source_ids exactly from the cited evidence blocks.
 - Keep each example concise, factual, and suitable for direct downstream validation.
-- Prefer examples with a named company or organization plus a concrete action when available, but do not exclude strong recent regulatory, data, survey, or executive-signal examples.
-- Prefer examples from the latest available evidence and preferably not older than the last two years from the research date.
+- Prefer examples with a named company or organization plus a concrete action.
 - Prefer examples with a specific date or month-year when available.
-- The `text` should read like a short factual proof point, for example: "Company A acquired Company B in March 2026." or "A 2025 survey showed subscription churn rising across major streaming platforms."
-- Do not use outdated projections, old market commentary, or loosely related proof points as examples.
-- If the evidence supports only one strong recent example, return one and do not force a second example.
+- The `text` should read like a short event statement, for example: "Company A acquired Company B in March 2026."
 - Extract multiple good examples when the evidence supports them, but do not pad the list.
 
 Return strict JSON only in this exact shape:
 {
   "examples": [
     {
-      "company": "Named company or entity if explicit, otherwise empty",
-      "event": "Short event, evidence type, or action label",
+      "company": "Named company or entity if explicit",
+      "event": "Short event or action label",
       "text": "Short factual summary of the example grounded in the evidence",
       "year": "March 2026",
       "source_ids": [1, 3]
@@ -62,7 +52,6 @@ Return strict JSON only in this exact shape:
 
 MAIN_OUTPUT_PROMPT_TEMPLATE: Final[str] = """
 You are a senior OSINT research analyst producing memo-ready market intelligence.
-You are writing executive-grade industry trend insights for consulting-style research briefs.
 
 Your job is to synthesize evidence into distinct insights, not summarize sources individually.
 Use only the supplied evidence bundle as the source of truth.
@@ -73,9 +62,6 @@ Objective:
 
 Quality Standard:
 - Write like an analyst preparing investor-grade research or commercial due diligence.
-- Write in a polished executive briefing tone.
-- Sound like a human industry analyst, not an AI summarizer.
-- The writing should feel like premium market intelligence, strategy consulting insight, institutional industry analysis, and executive research memo quality.
 - Every insight must be specific, differentiated, evidence-led, and commercially meaningful.
 - Prioritize analytical interpretation over descriptive summarization.
 - Focus on structural shifts, emerging patterns, behavioural changes, technology adoption, regulatory developments, investment activity, competitive dynamics, operational shifts, pricing dynamics, and evolving business models.
@@ -86,7 +72,6 @@ Quality Standard:
 - Do not invent facts, numbers, timelines, implications, or trends unsupported by evidence.
 - Do not repeat the same trend, implication, driver, or example across multiple insights.
 - If multiple insights substantially overlap, merge them into a single stronger insight.
-- Avoid robotic transitions, repetitive sentence openings, template-like endings, and news-summary style writing.
 
 Section Logic:
 - Trends -> explain WHAT is changing in the market.
@@ -95,21 +80,17 @@ Section Logic:
 Time Rule:
 - Treat all research and analysis as being prepared as of the current date.
 - Prefer wording such as "as of the latest available data", "recent data indicates", or "the market reached".
-- Prefer wording such as "recent estimates indicate" when the most current evidence is still estimate-based.
 - Do not use outdated future-facing wording when the target year has already arrived or passed.
 - Do not write statements such as "the market is projected to reach X by 2025" or "expected to grow by 2026" as current market expectations.
 - If only older projections are available, frame them explicitly as historical forecasts and explain their relevance briefly.
-- Do not include a projection or forward-looking statement whose target year is earlier than or equal to the research date unless it is clearly framed as a historical forecast.
 
 Writing Rules:
 - Produce only topic-relevant and evidence-supported insights.
 - Combine evidence when multiple sources support the same underlying pattern.
-- For Trends, each paragraph must naturally explain:
-  - what is happening,
+- Explain:
+  - what is changing,
   - why it is happening,
-  - and why it matters.
-- For Trends, each insight must read as a 3 to 6 sentence analyst paragraph built from the strongest current evidence in the bundle.
-- Blend the commercial or strategic implication naturally into the paragraph rather than isolating it as a formulaic concluding sentence.
+  - and why it matters commercially or strategically.
 - Avoid generic market commentary, filler, chronology-heavy writing, and repetitive phrasing.
 - Do not echo source titles, URLs, scraped labels, or boilerplate report language.
 - Do not write questions, conversational language, or raw source excerpts.
@@ -118,37 +99,18 @@ Writing Rules:
 - For Trends specifically, write objective market analysis rather than recommendations, prescriptions, or management advice.
 - Avoid prescriptive wording such as "operators must adapt", "companies should invest", "players need to respond", or similar call-to-action language.
 - Support each trend using current evidence where possible, preferably not older than the last two years from the research date.
-- Support each trend with the latest available market data, company actions, regulatory developments, expert commentary, or customer behaviour signals where available.
-- Do not reuse the same market fact pattern, company action, or implication across multiple trend items.
-- For every identified trend, aim to support it downstream with 1 to 2 recent examples when strong current evidence exists, but do not force weak examples.
 - If very recent examples are unavailable for a trend, write the trend from the strongest available evidence without overstating certainty.
-- Use consulting-style language and market intelligence vocabulary naturally, including concepts such as competitive landscape, premiumization, evolving consumer preferences, category expansion, portfolio diversification, market positioning, consumption patterns, operational efficiencies, strategic investments, demand acceleration, distribution dynamics, growth momentum, consumer behavior shifts, product innovation, channel transformation, market penetration, and pricing dynamics when supported by the evidence.
-- Use varied sentence lengths so the paragraph opens analytically, develops context in the middle, and lands with an integrated strategic takeaway.
-- Avoid overusing forecasting language such as "projected to grow" when the evidence can be stated more directly.
-- Never use template-style endings such as "This trend is strategically important because...", "The strategic relevance lies in...", "This indicates that...", or "This signals...".
 
 Title Rules:
 - Each title must:
   - be specific and self-explanatory,
-  - contain 4 to 12 words,
+  - contain 3 to 12 words,
   - clearly reflect the core theme,
-  - stand independently without additional context,
-  - read like an analyst-written market signal rather than a scraped heading fragment.
-- Trend titles should sound structural and analytical.
-- Preferred constructions include:
-  - "Shift Towards..."
-  - "Rise of..."
-  - "Expansion of..."
-  - "Growing Adoption of..."
-  - "Emergence of..."
-  - "Acceleration of..."
-  - "Transformation of..."
-  - "Increasing Focus on..."
+  - stand independently without additional context.
 - Avoid generic titles such as:
   - "Market Growth"
   - "Industry Expansion"
   - "Digital Transformation"
-- Do not echo report headings, navigation fragments, chart labels, or publisher wording such as "Outlook Highlights", "Read More", or similar source boilerplate.
 
 Description Rules:
 - Each description must:
@@ -162,11 +124,8 @@ Description Rules:
   - why it is happening,
   - and why it matters.
 - For Trends, each description should read as a clear market insight supported by recent data, company actions, regulatory changes, expert commentary, customer behavior shifts, or other credible industry signals.
-- Use the newest defensible evidence first and avoid leaning on older commentary when fresher evidence is available.
 - Avoid unsupported assumptions, broad market summaries, repeated points across trends, and recommendation-style conclusions.
 - Avoid repeating evidence already covered in other insights.
-- Keep the tone memo-ready and analytical, not report-like, promotional, or generic.
-- Write in paragraph form only and ensure each trend feels insight-driven rather than summary-driven.
 
 Example Rules:
 - Do not generate examples in this stage.

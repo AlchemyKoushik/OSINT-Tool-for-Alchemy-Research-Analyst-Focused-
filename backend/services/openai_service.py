@@ -17,14 +17,10 @@ from services.source_attribution_service import attach_sources_to_items
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = settings.OPENAI_ANALYSIS_MODEL or "gpt-4.1"
-SUPPORT_MODEL_NAME = settings.OPENAI_SUPPORT_MODEL or settings.OPENAI_QUERY_MODEL or "gpt-4.1-mini"
-OPENAI_TEST_MODEL = settings.OPENAI_TEST_MODEL or "gpt-4.1-mini"
+MODEL_NAME = settings.OPENAI_ANALYSIS_MODEL or "gpt-5.5"
+OPENAI_TEST_MODEL = settings.OPENAI_TEST_MODEL or "gpt-4o-mini"
 OPENAI_TIMEOUT_SECONDS = settings.EXTERNAL_TIMEOUT_SECONDS
 OPENAI_MAX_RETRIES = settings.EXTERNAL_MAX_RETRIES
-STRUCTURED_ANALYSIS_TIMEOUT_SECONDS = max(OPENAI_TIMEOUT_SECONDS, 90)
-STRUCTURED_ANALYSIS_CALL_RETRIES = 1
-STRUCTURED_EXTRACTION_TIMEOUT_SECONDS = max(OPENAI_TIMEOUT_SECONDS, 25)
 MIN_OUTPUT_TOKENS = 16
 DEFAULT_MAX_OUTPUT_TOKENS = 256
 MAX_OUTPUT_TOKENS = 2600
@@ -46,15 +42,6 @@ GENERIC_TITLE_MARKERS = (
     "future outlook",
     "analysis and forecast",
     "market size",
-)
-SOURCE_ECHO_TITLE_MARKERS = (
-    "outlook highlights",
-    "read more",
-    "home research",
-    "charts data",
-    "latest outlook",
-    "press release",
-    "report overview",
 )
 GARBAGE_MARKERS = ("http", "www", "source:", "note:", "click here", "read more", "copyright")
 RAW_SOURCE_TEXT_MARKERS = (
@@ -281,8 +268,6 @@ def _is_generic_insight(title: str, description: str) -> bool:
     lowered_description = description.lower()
     if any(marker in lowered_title for marker in GENERIC_TITLE_MARKERS):
         return True
-    if any(marker in lowered_title for marker in SOURCE_ECHO_TITLE_MARKERS):
-        return True
     if any(marker in lowered_description for marker in GENERIC_DESCRIPTION_MARKERS):
         return True
     if any(marker in lowered_title or marker in lowered_description for marker in GARBAGE_MARKERS):
@@ -322,7 +307,7 @@ def _validate_structured_output(parsed: Output, section: str) -> Output:
             continue
         if _is_generic_insight(title, description):
             continue
-        if len(title.split()) < 4 or len(title.split()) > 12:
+        if len(title.split()) < 3 or len(title.split()) > 14:
             continue
         if len(description) < 90:
             continue
@@ -363,26 +348,19 @@ async def _request_structured_completion(
     response_model: type[Any],
     max_output_tokens: int,
 ) -> Any:
-    is_example_extraction = response_model is ExampleExtractionResponse
-    response_timeout = STRUCTURED_EXTRACTION_TIMEOUT_SECONDS if is_example_extraction else STRUCTURED_ANALYSIS_TIMEOUT_SECONDS
-    response_retries = OPENAI_MAX_RETRIES if is_example_extraction else STRUCTURED_ANALYSIS_CALL_RETRIES
     response = await call_openai(
         operation,
         lambda: client.responses.parse(
-            model=SUPPORT_MODEL_NAME if is_example_extraction else MODEL_NAME,
+            model=MODEL_NAME,
             input=input_payload,
             text_format=response_model,
             max_output_tokens=ensure_min_output_tokens(max_output_tokens),
             temperature=STRUCTURED_TEMPERATURE,
         ),
         fallback=None,
-        timeout=response_timeout,
-        max_retries=response_retries,
-        context={
-            "model": SUPPORT_MODEL_NAME if is_example_extraction else MODEL_NAME,
-            "response_model": response_model.__name__,
-            "timeout_seconds": response_timeout,
-        },
+        timeout=OPENAI_TIMEOUT_SECONDS,
+        max_retries=OPENAI_MAX_RETRIES,
+        context={"model": MODEL_NAME, "response_model": response_model.__name__},
     )
     if response is None:
         raise RuntimeError("Failed to generate structured analysis output.")
