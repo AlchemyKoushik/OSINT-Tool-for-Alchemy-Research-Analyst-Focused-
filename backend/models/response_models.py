@@ -1,6 +1,6 @@
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from models.request_models import ResearchSection
 
@@ -21,6 +21,17 @@ class GeneratedSearchQueries(BaseModel):
 
 class Example(BaseModel):
     text: str
+    company: Optional[str] = ""
+    event: Optional[str] = ""
+    event_date: Optional[str] = ""
+    published_date: Optional[str] = ""
+    location: Optional[str] = ""
+    example_type: Optional[str] = ""
+    why_it_matters: Optional[str] = ""
+    source_quality: Optional[str] = ""
+    confidence: Optional[str] = ""
+    validation_score: Optional[int] = None
+    fallback_used: bool = False
     year: Optional[str] = ""
 
     model_config = ConfigDict(extra="forbid")
@@ -33,22 +44,59 @@ class Example(BaseModel):
             raise ValueError("Example text must not be empty.")
         return normalized
 
-    @field_validator("year")
+    @field_validator(
+        "company",
+        "event",
+        "event_date",
+        "published_date",
+        "location",
+        "example_type",
+        "why_it_matters",
+        "source_quality",
+        "confidence",
+        "year",
+    )
     @classmethod
-    def validate_year(cls, value: Optional[str]) -> str:
+    def validate_optional_text(cls, value: Optional[str]) -> str:
         return str(value or "").strip()
+
+    @model_validator(mode="after")
+    def populate_year(self) -> "Example":
+        if not self.year:
+            self.year = str(self.event_date or self.published_date or "").strip()
+        return self
 
 
 class ExtractedExample(BaseModel):
     company: Optional[str] = ""
     event: Optional[str] = ""
     text: str
+    event_date: Optional[str] = ""
+    published_date: Optional[str] = ""
+    location: Optional[str] = ""
+    example_type: Optional[str] = ""
+    confidence: Optional[str] = ""
+    trend_fit_reason: Optional[str] = ""
+    source_quality: Optional[str] = ""
+    validation_score: Optional[int] = None
+    fallback_used: bool = False
     year: Optional[str] = ""
     source_ids: List[int] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("company", "event", "year")
+    @field_validator(
+        "company",
+        "event",
+        "event_date",
+        "published_date",
+        "location",
+        "example_type",
+        "confidence",
+        "trend_fit_reason",
+        "source_quality",
+        "year",
+    )
     @classmethod
     def validate_optional_text_fields(cls, value: Optional[str]) -> str:
         return str(value or "").strip()
@@ -75,11 +123,46 @@ class ExtractedExample(BaseModel):
             normalized_ids.append(numeric_id)
         return normalized_ids[:10]
 
+    @model_validator(mode="after")
+    def populate_year_alias(self) -> "ExtractedExample":
+        if not self.year:
+            self.year = str(self.event_date or self.published_date or "").strip()
+        return self
+
 
 class ExampleExtractionResponse(BaseModel):
     examples: List[ExtractedExample] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
+
+
+class ExampleSearchQuery(BaseModel):
+    query: str
+    purpose: str
+    priority: Literal["high", "medium", "fallback"]
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("query", "purpose")
+    @classmethod
+    def validate_query_fields(cls, value: str) -> str:
+        normalized = str(value).strip()
+        if not normalized:
+            raise ValueError("Example search query fields must not be empty.")
+        return normalized
+
+
+class ExampleSearchQueryResponse(BaseModel):
+    queries: List[ExampleSearchQuery]
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("queries")
+    @classmethod
+    def validate_example_queries(cls, value: List[ExampleSearchQuery]) -> List[ExampleSearchQuery]:
+        if not value:
+            raise ValueError("Example search query generation must return at least one query.")
+        return value[:8]
 
 
 class Insight(BaseModel):
@@ -128,7 +211,7 @@ class Insight(BaseModel):
                 continue
             seen_keys.add(dedupe_key)
             normalized_examples.append(normalized_example)
-        return normalized_examples[:2]
+        return normalized_examples[:3]
 
 
 def _normalize_text_value(value) -> str:
@@ -145,17 +228,33 @@ def _pick_first_text(payload, keys: List[str]) -> str:
 
 def _coerce_example(example) -> Example | None:
     if isinstance(example, Example):
-        text = str(example.text).strip()
-        year = str(example.year or "").strip()
-        if not text:
-            return None
-        return Example(text=text, year=year)
+        return example
     if isinstance(example, dict):
         text = str(example.get("text", "")).strip()
-        year = str(example.get("year", "")).strip()
         if not text:
             return None
-        return Example(text=text, year=year)
+        event_date = str(example.get("event_date", "")).strip()
+        published_date = str(example.get("published_date", "")).strip()
+        year = str(example.get("year", "")).strip() or event_date or published_date
+        return Example(
+            text=text,
+            company=str(example.get("company", "")).strip(),
+            event=str(example.get("event", "")).strip(),
+            event_date=event_date,
+            published_date=published_date,
+            location=str(example.get("location", "")).strip(),
+            example_type=str(example.get("example_type", "")).strip(),
+            why_it_matters=str(example.get("why_it_matters", "") or example.get("trend_fit_reason", "")).strip(),
+            source_quality=str(example.get("source_quality", "")).strip(),
+            confidence=str(example.get("confidence", "")).strip(),
+            validation_score=(
+                int(example.get("validation_score"))
+                if str(example.get("validation_score", "")).strip().isdigit()
+                else None
+            ),
+            fallback_used=bool(example.get("fallback_used", False)),
+            year=year,
+        )
     return None
 
 
@@ -176,6 +275,7 @@ def _normalize_sources(raw_sources) -> list[dict[str, str]]:
             "url": _pick_first_text(source, ["url", "link", "href"]),
             "domain": _pick_first_text(source, ["domain", "publisher", "site"]),
             "date": _pick_first_text(source, ["date", "published_at", "publishedDate"]),
+            "image_url": _pick_first_text(source, ["image_url", "image", "thumbnail_url", "thumbnail"]),
         }
         dedupe_key = (
             normalized_source["source_id"],
@@ -210,7 +310,7 @@ def normalize_research_item_payload(item) -> dict[str, object] | None:
             if numeric_id > 0 and numeric_id not in normalized_source_ids:
                 normalized_source_ids.append(numeric_id)
 
-    normalized_examples: List[dict[str, str]] = []
+    normalized_examples: List[dict[str, Any]] = []
     raw_examples = item.get("examples", [])
     if isinstance(raw_examples, list):
         seen_examples = set()
@@ -225,6 +325,17 @@ def normalize_research_item_payload(item) -> dict[str, object] | None:
             normalized_examples.append(
                 {
                     "text": normalized_example.text,
+                    "company": normalized_example.company,
+                    "event": normalized_example.event,
+                    "event_date": normalized_example.event_date,
+                    "published_date": normalized_example.published_date,
+                    "location": normalized_example.location,
+                    "example_type": normalized_example.example_type,
+                    "why_it_matters": normalized_example.why_it_matters,
+                    "source_quality": normalized_example.source_quality,
+                    "confidence": normalized_example.confidence,
+                    "validation_score": normalized_example.validation_score,
+                    "fallback_used": normalized_example.fallback_used,
                     "year": str(normalized_example.year or "").strip(),
                 }
             )
@@ -232,9 +343,11 @@ def normalize_research_item_payload(item) -> dict[str, object] | None:
     return {
         "heading": heading,
         "body": body,
-        "examples": normalized_examples[:2],
+        "examples": normalized_examples[:3],
         "sources": _normalize_sources(item.get("sources") or item.get("references") or item.get("evidence")),
         "source_ids": normalized_source_ids[:20],
+        "example_coverage_status": _normalize_text_value(item.get("example_coverage_status")),
+        "fallback_used": bool(item.get("fallback_used", False)),
     }
 
 
@@ -279,10 +392,11 @@ class InsightSource(BaseModel):
     url: str
     domain: str = ""
     date: str = ""
+    image_url: str = ""
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("source_id", "title", "url", "domain", "date")
+    @field_validator("source_id", "title", "url", "domain", "date", "image_url")
     @classmethod
     def validate_source_fields(cls, value: str) -> str:
         return str(value or "").strip()
@@ -294,6 +408,8 @@ class ResearchItem(BaseModel):
     examples: List[Example] = Field(default_factory=list)
     sources: List[InsightSource] = Field(default_factory=list)
     source_ids: List[int] = Field(default_factory=list)
+    example_coverage_status: str = ""
+    fallback_used: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
@@ -304,6 +420,11 @@ class ResearchItem(BaseModel):
         if not normalized:
             raise ValueError("Response item fields must not be empty.")
         return normalized
+
+    @field_validator("example_coverage_status")
+    @classmethod
+    def validate_coverage_status(cls, value: str) -> str:
+        return str(value or "").strip()
 
     @field_validator("source_ids")
     @classmethod
@@ -346,7 +467,7 @@ class ResearchItem(BaseModel):
                 continue
             seen_keys.add(dedupe_key)
             normalized_examples.append(normalized_example)
-        return normalized_examples[:2]
+        return normalized_examples[:3]
 
 
 class AnalyzeResponse(BaseModel):

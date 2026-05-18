@@ -73,13 +73,15 @@ def _render_examples(examples: Sequence[Dict[str, Any]]) -> str:
         return ""
 
     items = []
-    for example in examples[:2]:
+    for example in examples[:3]:
         text = _escape(example.get("text"))
         if not text:
             continue
-        year = _escape(example.get("year"))
+        year = _escape(example.get("year") or example.get("event_date") or example.get("published_date"))
+        why_it_matters = _escape(example.get("why_it_matters"))
         suffix = f" <span class=\"example-year\">({year})</span>" if year else ""
-        items.append(f"<li>{text}{suffix}</li>")
+        why_html = f"<div class=\"source-meta\">{why_it_matters}</div>" if why_it_matters else ""
+        items.append(f"<li>{text}{suffix}{why_html}</li>")
 
     if not items:
         return ""

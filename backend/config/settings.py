@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     MAX_EXISTING_CHUNKS: int = 250
     MAX_CHUNK_TEXT_LENGTH: int = 6000
     CLEANUP_MAX_RETRIES: int = 2
+    MAX_TRENDS_WITH_EXAMPLE_RESEARCH: int | None = None
+    BACKFILL_ALL_MISSING_TREND_EXAMPLES: bool = True
 
     model_config = SettingsConfigDict(
         env_file=_resolve_env_files(),

@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from datetime import date
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Sequence
@@ -399,7 +400,11 @@ async def extract_validated_examples_from_evidence(
     section: str,
     evidence_blocks: Sequence[Dict[str, Any]],
     log_context: str = "",
-) -> List[ExtractedExample]:
+    research_date: date | None = None,
+    trend_context: Dict[str, Any] | None = None,
+    allow_low_confidence_fallback: bool = False,
+    return_diagnostics: bool = False,
+) -> List[ExtractedExample] | tuple[List[ExtractedExample], Dict[str, Any]]:
     api_key = settings.OPENAI_API_KEY.strip()
     if not api_key:
         logger.warning("Example extraction skipped because OPENAI_API_KEY is not configured.")
@@ -426,7 +431,13 @@ async def extract_validated_examples_from_evidence(
             section,
         )
 
-        validated_examples, discard_reasons = validate_examples(candidate_examples, resolved_evidence_blocks)
+        validated_examples, discard_reasons = validate_examples(
+            candidate_examples,
+            resolved_evidence_blocks,
+            research_date=research_date,
+            trend_context=trend_context,
+            allow_low_confidence_fallback=allow_low_confidence_fallback,
+        )
         if discard_reasons:
             logger.info(
                 "Discarded %s extracted examples context=%s section=%s reasons=%s",
@@ -447,6 +458,13 @@ async def extract_validated_examples_from_evidence(
                 log_context,
                 section,
             )
+        diagnostics = {
+            "candidate_count": len(candidate_examples),
+            "validated_count": len(validated_examples),
+            "rejection_reasons": discard_reasons,
+        }
+        if return_diagnostics:
+            return validated_examples, diagnostics
         return validated_examples
     finally:
         await client.close()

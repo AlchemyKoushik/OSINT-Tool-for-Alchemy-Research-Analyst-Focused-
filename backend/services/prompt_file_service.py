@@ -3,48 +3,116 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, Final
 
-EXAMPLE_EXTRACTION_PROMPT_TEMPLATE: Final[str] = """
-You are an evidence-grounded example extraction layer for an AI OSINT research system.
+EXAMPLE_SEARCH_QUERY_SYSTEM_PROMPT_TEMPLATE: Final[str] = """
+You are a search-query generation layer for an OSINT industry research system.
 
-Objective:
-- Extract only concrete, factual, recent examples that are explicitly supported by the supplied evidence.
-- These examples will later support trend or driver synthesis.
-- Treat an example as a named company or organization event that clearly demonstrates the trend or driver.
+Your job is to generate precise web-search queries that can find recent, factual, named examples supporting a written industry trend.
 
-Extract examples only when the evidence contains concrete developments such as:
-- named companies or organizations,
+The examples must be concrete company-level, organization-level, project-level, policy-level, transaction-level, investment-level or regulatory developments.
+
+The search queries should prioritise:
+- recent company announcements,
+- press releases,
+- regulatory filings,
+- project announcements,
 - product launches,
 - partnerships,
 - acquisitions,
-- investments or funding rounds,
-- infrastructure or manufacturing expansion,
-- technology deployment,
-- regulatory approvals or material policy actions,
-- operational scale-up,
-- commercial agreements.
+- funding rounds,
+- financing announcements,
+- capacity expansions,
+- commercial deployments,
+- government or regulator announcements,
+- credible trade publications.
 
-Rules:
-- Never fabricate companies, events, dates, partnerships, investments, or outcomes.
-- Only extract examples explicitly supported by the evidence blocks.
-- If evidence is weak, generic, or unnamed, return no examples.
+Do not generate broad market-size queries.
+Do not generate generic "market trends" queries.
+Do not generate queries that only restate the trend title.
+Each query must be designed to find a dated, named example.
+
+Prioritise evidence from the research year and the previous year.
+Use older years only as fallback.
+
+Return strict JSON only.
+""".strip()
+
+EXAMPLE_EXTRACTION_PROMPT_TEMPLATE: Final[str] = """
+You are an evidence-grounded example extraction layer for an AI OSINT industry research system.
+
+Objective:
+- Extract only concrete, factual, recent examples that directly support a written industry trend or driver.
+
+An example is a specific dated development involving a named company, organization, project, regulator, government body, investor, or market participant.
+
+Valid examples include:
+- named companies or organizations,
+- product or service launches,
+- partnerships or commercial agreements,
+- acquisitions, mergers, stake purchases or divestments,
+- funding rounds or investment commitments,
+- capacity expansions,
+- manufacturing or infrastructure investments,
+- project announcements, approvals, construction starts or commercial operations,
+- technology deployments,
+- pilot projects,
+- prototype tests,
+- demonstration missions,
+- feasibility studies,
+- government funding,
+- research contracts,
+- space agency programmes,
+- consortium activity,
+- proof-of-concept milestones,
+- regulatory approvals,
+- material policy actions,
+- major contracts,
+- price changes, surcharges or repricing actions,
+- market entry or geographic expansion.
+
+Strict grounding rules:
+- Use only the supplied evidence blocks.
+- Never fabricate companies, events, dates, values, partnerships, investments, locations or outcomes.
 - Do not infer unnamed entities.
-- Prefer omission over hallucination.
-- Preserve source_ids exactly from the cited evidence blocks.
-- Keep each example concise, factual, and suitable for direct downstream validation.
-- Prefer examples with a named company or organization plus a concrete action.
-- Prefer examples with a specific date or month-year when available.
-- The `text` should read like a short event statement, for example: "Company A acquired Company B in March 2026."
-- Extract multiple good examples when the evidence supports them, but do not pad the list.
+- Do not convert broad market commentary into a company example.
+- Do not use old examples when newer examples are available in the evidence.
+- Prefer sources from the research year and previous year.
+- Use evidence older than two years only if:
+  1. no recent evidence exists, and
+  2. the event is still materially relevant, and
+  3. the example clearly supports the trend.
+- If evidence is weak, generic, unnamed, undated or loosely related, return no examples.
+- Prefer omission over weak evidence.
+
+Each extracted example must include:
+- a named entity,
+- a concrete action,
+- a date or date signal,
+- a direct connection to the written trend,
+- valid source_ids from the supplied evidence.
+
+The text field must be short, factual and event-led.
+Good format:
+"Company A launched X in Germany in March 2026 to expand utility-scale battery storage deployment."
+
+Bad format:
+"Companies are investing in battery storage."
+"The market is seeing more partnerships."
+"Battery storage is becoming important."
 
 Return strict JSON only in this exact shape:
 {
   "examples": [
     {
-      "company": "Named company or entity if explicit",
-      "event": "Short event or action label",
-      "text": "Short factual summary of the example grounded in the evidence",
-      "year": "March 2026",
-      "source_ids": [1, 3]
+      "company": "Named company, organization, regulator or project entity",
+      "event": "Short action label",
+      "text": "One factual sentence directly supported by the evidence",
+      "event_date": "YYYY-MM-DD or Month YYYY or YYYY",
+      "published_date": "YYYY-MM-DD if available",
+      "location": "Country/region if available",
+      "example_type": "launch | partnership | acquisition | funding | expansion | project | deployment | policy | approval | contract | pricing | market_entry | other",
+      "source_ids": [1, 3],
+      "confidence": "high | medium | low",
+      "trend_fit_reason": "One short phrase explaining why this example supports the trend"
     }
   ]
 }
@@ -268,6 +336,10 @@ Rules:
 
 def get_main_output_prompt_template() -> str:
     return MAIN_OUTPUT_PROMPT_TEMPLATE
+
+
+def get_example_search_query_system_prompt_template() -> str:
+    return EXAMPLE_SEARCH_QUERY_SYSTEM_PROMPT_TEMPLATE
 
 
 def get_example_extraction_prompt_template() -> str:
