@@ -15,7 +15,6 @@ from services.cache_service import get_cached_result, set_cached_result
 from services.fallback_analysis import build_fallback_section_analysis
 from services.followup_analysis_service import analyze_existing_chunks
 from services.followup_query_service import handle_followup_query
-from services.demo_replay_service import load_demo_replay_source_html, maybe_build_demo_replay_response
 from services.location_service import (
     LocationContext,
     build_location_topic_key,
@@ -496,13 +495,6 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             section,
             location_summary["label"],
         )
-
-        demo_replay_response = await maybe_build_demo_replay_response(
-            session_id=session_id,
-            debug_mode=debug_mode,
-        )
-        if demo_replay_response is not None and not follow_up_mode:
-            return demo_replay_response
 
         try:
             feedback_summary = get_feedback_adjustment(topic_key)
@@ -1160,16 +1152,12 @@ async def export_memo(request: Request) -> Response:
         raise HTTPException(status_code=422, detail=f"Invalid memo export payload: {exc}") from exc
 
     try:
-        source_html_export = await asyncio.to_thread(load_demo_replay_source_html, validated.meta)
-        if source_html_export is not None:
-            html_bytes, filename = source_html_export
-        else:
-            html_bytes, filename = await asyncio.to_thread(
-                build_html_export,
-                result_payload=validated.result,
-                meta_payload=validated.meta,
-                follow_up_payloads=validated.follow_ups,
-            )
+        html_bytes, filename = await asyncio.to_thread(
+            build_html_export,
+            result_payload=validated.result,
+            meta_payload=validated.meta,
+            follow_up_payloads=validated.follow_ups,
+        )
     except Exception as exc:
         logger.exception("Memo export failed")
         raise HTTPException(status_code=500, detail=f"Memo export failed: {exc}") from exc

@@ -427,30 +427,6 @@ function buildDownloadFileName(result, meta) {
   return `${topic}-${section}-${scope}-${formatPreparedDateForFile()}.html`;
 }
 
-function extractDownloadFilename(response) {
-  const contentDisposition = response?.headers?.get("Content-Disposition") || "";
-  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-  if (utf8Match?.[1]) {
-    try {
-      return decodeURIComponent(utf8Match[1]);
-    } catch {
-      return utf8Match[1];
-    }
-  }
-
-  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i);
-  if (quotedMatch?.[1]) {
-    return quotedMatch[1];
-  }
-
-  const plainMatch = contentDisposition.match(/filename=([^;]+)/i);
-  if (plainMatch?.[1]) {
-    return plainMatch[1].trim();
-  }
-
-  return "";
-}
-
 async function triggerResultsDownload(result, meta, followUps = []) {
   if (typeof window === "undefined" || typeof document === "undefined" || !result) {
     return;
@@ -505,11 +481,10 @@ async function triggerResultsDownload(result, meta, followUps = []) {
     throw new Error("Memo export returned an empty file.");
   }
 
-  const serverFilename = extractDownloadFilename(response);
   const objectUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
-  anchor.download = serverFilename || buildDownloadFileName(result, meta);
+  anchor.download = buildDownloadFileName(result, meta);
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

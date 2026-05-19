@@ -59,9 +59,6 @@ class Settings(BaseSettings):
     CLEANUP_MAX_RETRIES: int = 2
     MAX_TRENDS_WITH_EXAMPLE_RESEARCH: int | None = None
     BACKFILL_ALL_MISSING_TREND_EXAMPLES: bool = True
-    DEMO_REPLAY_ENABLED: bool = True
-    DEMO_REPLAY_DELAY_SECONDS: int = 60
-    DEMO_REPLAY_HTML_PATH: str = "data/demo_replay_memo.html"
 
     model_config = SettingsConfigDict(
         env_file=_resolve_env_files(),
