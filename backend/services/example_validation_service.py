@@ -133,7 +133,7 @@ SBSP_SYNONYMS = (
     "microwave power transmission",
 )
 LOW_VALUE_SOURCE_TIERS = {"Tier 3"}
-MAX_VALIDATED_EXAMPLES_PER_TREND = 3
+MAX_VALIDATED_EXAMPLES_PER_TREND = 5
 
 
 @dataclass(frozen=True)
@@ -461,6 +461,7 @@ def validate_example(
     trend_context: Dict[str, Any] | None = None,
     allow_low_confidence_fallback: bool = False,
     recent_evidence_exists: bool = False,
+    max_age_months: int | None = None,
 ) -> ExampleValidationResult:
     text = _normalize_text(example.text)
     company = _normalize_text(example.company)
@@ -512,6 +513,8 @@ def validate_example(
 
     best_date = _parse_date_signal(_best_date_signal(normalized_example, evidence_lookup))
     months_old = _months_old(best_date, research_date=resolved_research_date)
+    if max_age_months is not None and months_old is not None and months_old > max_age_months:
+        return ExampleValidationResult(accepted=False, reason="too_old", score=score)
     if months_old is not None and months_old > 24 and recent_evidence_exists and not allow_low_confidence_fallback:
         return ExampleValidationResult(accepted=False, reason="unsupported_by_evidence", score=score)
 
@@ -535,6 +538,7 @@ def validate_examples(
     research_date: date | None = None,
     trend_context: Dict[str, Any] | None = None,
     allow_low_confidence_fallback: bool = False,
+    max_age_months: int | None = None,
 ) -> tuple[List[ExtractedExample], List[str]]:
     validated: List[ExtractedExample] = []
     discard_reasons: List[str] = []
@@ -554,6 +558,7 @@ def validate_examples(
             trend_context=trend_context,
             allow_low_confidence_fallback=allow_low_confidence_fallback,
             recent_evidence_exists=recent_evidence_exists,
+            max_age_months=max_age_months,
         )
         if not result.accepted or result.example is None:
             discard_reasons.append(result.reason or "unknown_validation_failure")

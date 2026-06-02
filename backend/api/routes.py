@@ -490,10 +490,13 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         freshness = INTERNAL_FRESHNESS
 
         logger.info(
-            "Analyze request received for topic=%s section=%s location=%s",
+            "[RUN] Analyze request received | session_id=%s | topic=%s | section=%s | location=%s | follow_up=%s | debug=%s",
+            session_id,
             _sanitize_for_log(topic),
             section,
             location_summary["label"],
+            follow_up_mode,
+            debug_mode,
         )
 
         try:
@@ -527,6 +530,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             cached_result = None
 
         if cached_result is not None and not follow_up_mode:
+            logger.info("[RUN] Cache hit | session_id=%s | section=%s", session_id, section)
             cached_items_raw = cached_result.get("response", {}).get("items", [])
             cache_has_examples_shape = (
                 isinstance(cached_items_raw, list)
@@ -587,6 +591,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             return _attach_session_id(cached_response, session_id)
 
         pipeline_start = time.perf_counter()
+        logger.info("[RUN] Pipeline execution started | session_id=%s | section=%s", session_id, section)
         try:
             pipeline_payload = await execute_pipeline(
                 topic=topic,
@@ -622,6 +627,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 "execution_time": {},
             }
         pipeline_elapsed_ms = _elapsed_ms(pipeline_start)
+        logger.info("[RUN] Pipeline execution completed | session_id=%s | ms=%s", session_id, pipeline_elapsed_ms)
         execution_time.update({key: int(value) for key, value in dict(pipeline_payload.get("execution_time", {})).items()})
         execution_time["pipeline_ms"] = pipeline_elapsed_ms
         execution_time["search_ms"] = int(execution_time.get("search_ms", 0))
@@ -807,6 +813,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         detected_conflicts = []
 
         prompt_start = time.perf_counter()
+        logger.info("[RUN] Prompt assembly started | session_id=%s | section=%s", session_id, section)
         try:
             insight_limit = _resolve_insight_limit(follow_up_mode)
             system_prompt = get_prompt(section, max_items=insight_limit)
@@ -865,8 +872,10 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             )
         execution_time["prompt_ms"] = _elapsed_ms(prompt_start)
         prompt_chars = len(system_prompt) + len(metadata_payload)
+        logger.info("[RUN] Prompt assembly completed | session_id=%s | chars=%s | ms=%s", session_id, prompt_chars, execution_time["prompt_ms"])
 
         openai_start = time.perf_counter()
+        logger.info("[RUN] Structured analysis started | session_id=%s | section=%s", session_id, section)
         try:
             analysis_json = await generate_section_analysis(
                 system_prompt,
@@ -883,6 +892,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
                 section=section,
             )
         execution_time["openai_ms"] = _elapsed_ms(openai_start)
+        logger.info("[RUN] Structured analysis completed | session_id=%s | ms=%s", session_id, execution_time["openai_ms"])
         analysis_json = normalize_analyze_response_payload(analysis_json, fallback_section=section)
         analysis_json["items"] = rank_and_limit_insights(
             list(analysis_json.get("items", [])),
@@ -899,6 +909,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
             location_context=location_context,
             session_id=session_id,
         )
+        logger.info("[RUN] Item enrichment completed | session_id=%s | items=%s", session_id, len(analysis_json.get("items", [])))
         if not analysis_json["items"]:
             analysis_json["title"] = "No strong insights found"
 
@@ -947,6 +958,13 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         execution_time["total_ms"] = _elapsed_ms(total_start)
 
         response_payload: Dict[str, Any] = validated_response.model_dump()
+        logger.info(
+            "[RUN] Analyze request completed | session_id=%s | section=%s | items=%s | total_ms=%s",
+            session_id,
+            section,
+            len(response_payload.get("items", [])),
+            execution_time["total_ms"],
+        )
         response_payload["meta"] = {
             "topic": topic,
             "location": location_summary,

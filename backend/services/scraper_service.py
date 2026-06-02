@@ -55,7 +55,10 @@ SECTION_KEYWORDS: Dict[str, Tuple[str, ...]] = {
     "trends": ("trend", "trends", "innovation", "outlook", "forecast", "adoption", "shift", "growth"),
     "drivers": ("driver", "drivers", "demand", "factor", "factors", "incentive", "policy", "catalyst"),
     "challenges": ("challenge", "challenges", "risk", "risks", "constraint", "constraints", "barrier", "barriers"),
+    "competitive_landscape": ("competitive", "competition", "players", "vendors", "providers", "market share", "leaders"),
     "competitive landscape": ("competitive", "competition", "players", "vendors", "providers", "market share"),
+    "company_profile": ("company", "profile", "headquarters", "investor", "about", "business", "products", "services"),
+    "company profile": ("company", "profile", "headquarters", "investor", "about", "business", "products", "services"),
 }
 STOPWORDS = {
     "about",

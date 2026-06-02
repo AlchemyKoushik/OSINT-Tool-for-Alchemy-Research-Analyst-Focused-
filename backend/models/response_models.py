@@ -136,6 +136,73 @@ class ExampleExtractionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CompetitiveLandscapeProfile(BaseModel):
+    business_overview: str = ""
+    key_company_facts: List[str] = Field(default_factory=list)
+    competitive_positioning: str = ""
+    recent_developments: List[ExtractedExample] = Field(default_factory=list)
+    source_ids: List[int] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("business_overview", "competitive_positioning")
+    @classmethod
+    def validate_optional_profile_text(cls, value: str) -> str:
+        return str(value or "").strip()
+
+    @field_validator("key_company_facts")
+    @classmethod
+    def validate_profile_facts(cls, value: List[str]) -> List[str]:
+        normalized_facts: List[str] = []
+        seen_facts = set()
+        for fact in value or []:
+            normalized = str(fact or "").strip()
+            normalized_key = normalized.lower()
+            if not normalized or normalized_key in seen_facts:
+                continue
+            seen_facts.add(normalized_key)
+            normalized_facts.append(normalized)
+        return normalized_facts[:5]
+
+    @field_validator("recent_developments")
+    @classmethod
+    def validate_profile_developments(cls, value: List[ExtractedExample]) -> List[ExtractedExample]:
+        normalized_examples: List[ExtractedExample] = []
+        seen_keys = set()
+        for example in value or []:
+            if not isinstance(example, ExtractedExample):
+                continue
+            dedupe_key = (
+                str(example.text or "").strip().lower(),
+                str(example.event_date or example.published_date or example.year or "").strip(),
+            )
+            if not dedupe_key[0] or dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            normalized_examples.append(example)
+        return normalized_examples[:5]
+
+    @field_validator("source_ids")
+    @classmethod
+    def validate_profile_source_ids(cls, value: List[int]) -> List[int]:
+        normalized_ids: List[int] = []
+        for source_id in value or []:
+            try:
+                numeric_id = int(source_id)
+            except (TypeError, ValueError):
+                continue
+            if numeric_id <= 0 or numeric_id in normalized_ids:
+                continue
+            normalized_ids.append(numeric_id)
+        return normalized_ids[:10]
+
+
+class CompetitiveLandscapeProfileResponse(BaseModel):
+    profile: CompetitiveLandscapeProfile = Field(default_factory=CompetitiveLandscapeProfile)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ExampleSearchQuery(BaseModel):
     query: str
     purpose: str
@@ -168,6 +235,9 @@ class ExampleSearchQueryResponse(BaseModel):
 class Insight(BaseModel):
     title: str
     description: str
+    segment: str = ""
+    key_company_facts: List[str] = Field(default_factory=list)
+    competitive_positioning: str = ""
     examples: List[Example] = Field(default_factory=list)
     source_ids: List[int] = Field(default_factory=list)
 
@@ -180,6 +250,30 @@ class Insight(BaseModel):
         if not normalized:
             raise ValueError("Insight fields must not be empty.")
         return normalized
+
+    @field_validator("segment")
+    @classmethod
+    def validate_segment(cls, value: str) -> str:
+        return str(value or "").strip().lower()
+
+    @field_validator("key_company_facts")
+    @classmethod
+    def validate_key_company_facts(cls, value: List[str]) -> List[str]:
+        normalized_facts: List[str] = []
+        seen_facts = set()
+        for fact in value or []:
+            normalized = str(fact or "").strip()
+            normalized_key = normalized.lower()
+            if not normalized or normalized_key in seen_facts:
+                continue
+            seen_facts.add(normalized_key)
+            normalized_facts.append(normalized)
+        return normalized_facts[:5]
+
+    @field_validator("competitive_positioning")
+    @classmethod
+    def validate_competitive_positioning(cls, value: str) -> str:
+        return str(value or "").strip()
 
     @field_validator("source_ids")
     @classmethod
@@ -211,7 +305,7 @@ class Insight(BaseModel):
                 continue
             seen_keys.add(dedupe_key)
             normalized_examples.append(normalized_example)
-        return normalized_examples[:3]
+        return normalized_examples[:5]
 
 
 def _normalize_text_value(value) -> str:
@@ -343,7 +437,25 @@ def normalize_research_item_payload(item) -> dict[str, object] | None:
     return {
         "heading": heading,
         "body": body,
-        "examples": normalized_examples[:3],
+        "segment": _pick_first_text(item, ["segment", "player_segment", "tier", "bucket"]).lower(),
+        "key_company_facts": [
+            normalized_fact
+            for normalized_fact in [
+                _normalize_text_value(fact)
+                for fact in (
+                    item.get("key_company_facts")
+                    or item.get("key_facts")
+                    or item.get("company_facts")
+                    or []
+                )
+            ]
+            if normalized_fact
+        ][:5],
+        "competitive_positioning": _pick_first_text(
+            item,
+            ["competitive_positioning", "competitive_implication", "positioning_implication"],
+        ),
+        "examples": normalized_examples[:5],
         "sources": _normalize_sources(item.get("sources") or item.get("references") or item.get("evidence")),
         "source_ids": normalized_source_ids[:20],
         "example_coverage_status": _normalize_text_value(item.get("example_coverage_status")),
@@ -405,6 +517,9 @@ class InsightSource(BaseModel):
 class ResearchItem(BaseModel):
     heading: str
     body: str
+    segment: str = ""
+    key_company_facts: List[str] = Field(default_factory=list)
+    competitive_positioning: str = ""
     examples: List[Example] = Field(default_factory=list)
     sources: List[InsightSource] = Field(default_factory=list)
     source_ids: List[int] = Field(default_factory=list)
@@ -420,6 +535,11 @@ class ResearchItem(BaseModel):
         if not normalized:
             raise ValueError("Response item fields must not be empty.")
         return normalized
+
+    @field_validator("segment")
+    @classmethod
+    def validate_segment(cls, value: str) -> str:
+        return str(value or "").strip().lower()
 
     @field_validator("example_coverage_status")
     @classmethod
@@ -467,7 +587,26 @@ class ResearchItem(BaseModel):
                 continue
             seen_keys.add(dedupe_key)
             normalized_examples.append(normalized_example)
-        return normalized_examples[:3]
+        return normalized_examples[:5]
+
+    @field_validator("key_company_facts")
+    @classmethod
+    def validate_research_key_company_facts(cls, value: List[str]) -> List[str]:
+        normalized_facts: List[str] = []
+        seen_facts = set()
+        for fact in value or []:
+            normalized = str(fact or "").strip()
+            normalized_key = normalized.lower()
+            if not normalized or normalized_key in seen_facts:
+                continue
+            seen_facts.add(normalized_key)
+            normalized_facts.append(normalized)
+        return normalized_facts[:5]
+
+    @field_validator("competitive_positioning")
+    @classmethod
+    def validate_research_competitive_positioning(cls, value: str) -> str:
+        return str(value or "").strip()
 
 
 class AnalyzeResponse(BaseModel):
@@ -494,7 +633,7 @@ class AnalyzeResponse(BaseModel):
 def normalize_analyze_response_payload(payload, fallback_section: str = "trends") -> dict[str, object]:
     normalized_payload = dict(payload) if isinstance(payload, dict) else {}
     normalized_section = _normalize_text_value(normalized_payload.get("section")).lower()
-    if normalized_section not in {"trends", "drivers"}:
+    if normalized_section not in {"trends", "drivers", "competitive_landscape"}:
         normalized_section = _normalize_text_value(fallback_section).lower() or "trends"
 
     raw_items = normalized_payload.get("items")
@@ -511,7 +650,10 @@ def normalize_analyze_response_payload(payload, fallback_section: str = "trends"
 
     normalized_title = _pick_first_text(normalized_payload, ["title", "heading"])
     if not normalized_title:
-        normalized_title = "Market Drivers" if normalized_section == "drivers" else "Industry Trends"
+        normalized_title = {
+            "drivers": "Market Drivers",
+            "competitive_landscape": "Competitive Landscape",
+        }.get(normalized_section, "Industry Trends")
 
     normalized_payload["section"] = normalized_section
     normalized_payload["title"] = normalized_title

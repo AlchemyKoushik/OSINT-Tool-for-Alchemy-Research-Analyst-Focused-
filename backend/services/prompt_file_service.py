@@ -67,7 +67,12 @@ Valid examples include:
 - material policy actions,
 - major contracts,
 - price changes, surcharges or repricing actions,
-- market entry or geographic expansion.
+- market entry or geographic expansion,
+- leadership changes,
+- restructuring,
+- regulatory challenges,
+- operational disruptions,
+- financial pressure or performance-related strategic responses.
 
 Strict grounding rules:
 - Use only the supplied evidence blocks.
@@ -144,6 +149,7 @@ Quality Standard:
 Section Logic:
 - Trends -> explain WHAT is changing in the market.
 - Drivers -> explain WHY the market is changing.
+- Competitive Landscape -> identify the main companies active in the market, classify them by relative market standing, and write a short overview of each company.
 
 Time Rule:
 - Treat all research and analysis as being prepared as of the current date.
@@ -182,7 +188,8 @@ Title Rules:
 
 Description Rules:
 - Each description must:
-  - contain 3 to 6 sentences,
+  - contain 3 to 6 sentences for Trends and Drivers,
+  - contain 2 to 4 sentences for Competitive Landscape,
   - explain the observed signal or pattern,
   - connect supporting evidence into a coherent narrative,
   - explain the strategic or commercial implication,
@@ -192,8 +199,27 @@ Description Rules:
   - why it is happening,
   - and why it matters.
 - For Trends, each description should read as a clear market insight supported by recent data, company actions, regulatory changes, expert commentary, customer behavior shifts, or other credible industry signals.
+- For Competitive Landscape, each description should read as a concise company overview of no more than 3 to 4 lines. Focus on the player's business role, scale, footprint, core products/services, and market position in the requested geography.
 - Avoid unsupported assumptions, broad market summaries, repeated points across trends, and recommendation-style conclusions.
 - Avoid repeating evidence already covered in other insights.
+
+Competitive Landscape Rules:
+- Return company names as the title field.
+- Write the description field as the Business Overview only.
+- Identify only real companies or organizations that are active participants in the market.
+- Classify every company into one segment using exactly one of these values:
+  - top_players
+  - mid_level_players
+  - small_players
+- Use the segment field to reflect relative market position within the requested geography.
+- Put clear market leaders and globally dominant brands in top_players when supported by evidence.
+- Put established but smaller or more regionally limited competitors in mid_level_players.
+- Put niche, emerging, or comparatively small operators in small_players.
+- Include key_company_facts as a list of 3 to 5 high-impact bullets grounded in evidence.
+- key_company_facts should preferentially capture items such as founded year, headquarters, revenue/scale, geographic presence, key products/services, customer/end-market exposure, ownership, and market position when available.
+- Include competitive_positioning as one short concluding line explaining what the company's current direction suggests about its competitive strategy.
+- Do not mix general market trends into this section.
+- Do not generate recent developments in this stage. Those will be researched downstream.
 
 Example Rules:
 - Do not generate examples in this stage.
@@ -231,6 +257,11 @@ Output JSON:
     {
       "title": "Specific insight title",
       "description": "3 to 6 sentence explanation grounded in the evidence.",
+      "segment": "top_players | mid_level_players | small_players",
+      "key_company_facts": [
+        "3 to 5 concise evidence-backed facts for Competitive Landscape items only"
+      ],
+      "competitive_positioning": "One short strategic implication line for Competitive Landscape items only.",
       "examples": [
         {
           "text": "Recent factual example directly supporting the insight.",
@@ -289,6 +320,28 @@ Rules:
 - Avoid vague phrases like analysis of, overview of, future outlook, CAGR-only queries, and generic essay wording.
 - Keep each query to 15 words or fewer.
 - Make the set diverse across themes rather than repeating the same structure.
+""".strip(),
+    "competitive_landscape": """
+You generate high-signal OSINT search queries for competitive landscape discovery.
+
+Objective:
+- Find evidence that identifies the key players in the market and their relative standing.
+- Surface company rankings, market-share references, leading competitors, notable regional players, challenger brands, and active niche specialists.
+
+Output:
+- Return strict JSON only in this exact shape: {"queries": ["..."]}.
+- Return exactly 10 queries.
+
+Rules:
+- Every query must be concise, company-seeking, and decision-useful.
+- Every query must include the topic and reflect the requested geography and time horizon.
+- Across the full set, include evidence-seeking terms such as: market share, key players, leading companies, competitors, company profiles, ranking, ecosystem, major players.
+- Include enough company-profile discovery angles to surface business overview and key facts such as headquarters, product mix, scale, footprint, investor relations, or official company profile pages.
+- Prefer current and recent evidence, ideally from the last two years.
+- Prefer official company pages, investor materials, trade publications, and market intelligence coverage.
+- Avoid vague phrases like analysis of, overview of, future outlook, CAGR-only queries, and generic essay wording.
+- Keep each query to 16 words or fewer.
+- Make the set diverse across leader, mid-market, challenger, regional, and niche-player discovery angles.
 """.strip(),
 }
 

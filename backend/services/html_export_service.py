@@ -73,7 +73,7 @@ def _render_examples(examples: Sequence[Dict[str, Any]]) -> str:
         return ""
 
     items = []
-    for example in examples[:3]:
+    for example in examples[:5]:
         text = _escape(example.get("text"))
         if not text:
             continue
@@ -94,40 +94,115 @@ def _render_examples(examples: Sequence[Dict[str, Any]]) -> str:
     )
 
 
-def _render_sources(sources: Sequence[Dict[str, Any]]) -> str:
+def _render_source_list(sources: Sequence[Dict[str, Any]]) -> str:
     if not sources:
         return ""
 
     items = [_render_source_link(source, index) for index, source in enumerate(sources[:5], start=1)]
+    return f"<ul class=\"source-list\">{''.join(items)}</ul>"
+
+
+def _render_sources_disclosure(sources: Sequence[Dict[str, Any]]) -> str:
+    if not sources:
+        return ""
     return (
-        "<section class=\"item-subsection\">"
-        "<h4>Sources</h4>"
-        f"<ul class=\"source-list\">{''.join(items)}</ul>"
-        "</section>"
+        "<details class=\"disclosure disclosure--sources\">"
+        f"<summary>Sources ({len(list(sources[:5]))})</summary>"
+        f"<div class=\"disclosure__body\">{_render_source_list(sources)}</div>"
+        "</details>"
     )
 
 
-def _render_item(item: Dict[str, Any], index: int) -> str:
+def _render_examples_sources_disclosure(examples: Sequence[Dict[str, Any]], sources: Sequence[Dict[str, Any]]) -> str:
+    example_count = len([example for example in examples[:5] if _safe_text(example.get('text'))])
+    source_count = len(list(sources[:5]))
+    if not example_count and not source_count:
+        return ""
+
+    examples_html = _render_examples(examples)
+    if examples_html:
+        examples_html = examples_html.replace("<section class=\"item-subsection\">", "<section class=\"disclosure-block\">", 1)
+        examples_html = examples_html.replace("</section>", "</section>", 1)
+
+    sources_html = ""
+    if source_count:
+        sources_html = (
+            "<section class=\"disclosure-block\">"
+            "<h4>Sources</h4>"
+            f"{_render_source_list(sources)}"
+            "</section>"
+        )
+
+    return (
+        "<details class=\"disclosure\">"
+        f"<summary>Sources ({source_count})"
+        f"{f' <span class=\"summary-separator\">|</span> Examples ({example_count})' if example_count or source_count else ''}"
+        "</summary>"
+        f"<div class=\"disclosure__body\">{examples_html}{sources_html}</div>"
+        "</details>"
+    )
+
+
+def _render_fact_list(facts: Sequence[str]) -> str:
+    normalized_facts = [_escape(fact) for fact in list(facts or []) if _safe_text(fact)]
+    if not normalized_facts:
+        return ""
+    return f"<ul class=\"example-list\">{''.join(f'<li>{fact}</li>' for fact in normalized_facts[:5])}</ul>"
+
+
+def _render_competitive_landscape_item(item: Dict[str, Any], index: int) -> str:
     heading = _escape(item.get("heading"), "Insight")
     body = _format_multiline_html(item.get("body"))
-    badge = "Trend" if "trend" in _safe_text(item.get("heading")).lower() else "Insight"
     examples = item.get("examples", []) or []
     sources = item.get("sources", []) or []
+    positioning_text = _format_multiline_html(item.get("competitive_positioning"))
+    facts_html = _render_fact_list(item.get("key_company_facts", []) or [])
+    developments_html = _render_examples(examples).replace("<h4>Examples</h4>", "<h4>Recent Strategic Developments</h4>")
+    return (
+        "<article class=\"memo-item memo-item--competitive\">"
+        "<div class=\"memo-item__header\">"
+        f"<span class=\"memo-item__index\">{index}</span>"
+        "<div>"
+        f"<h3>{heading}</h3>"
+        "</div>"
+        "</div>"
+        "<section class=\"item-subsection item-subsection--first\">"
+        "<h4>Business Overview</h4>"
+        f"<p class=\"memo-item__body\">{body}</p>"
+        "</section>"
+        f"{f'<section class=\"item-subsection\"><h4>Key Company Facts</h4>{facts_html}</section>' if facts_html else ''}"
+        f"{developments_html}"
+        f"{f'<section class=\"item-subsection\"><h4>Competitive Positioning / Implication</h4><p class=\"memo-item__body\">{positioning_text}</p></section>' if positioning_text else ''}"
+        f"{_render_sources_disclosure(sources)}"
+        "</article>"
+    )
 
+
+def _render_trend_or_driver_item(item: Dict[str, Any], index: int, section: str) -> str:
+    heading = _escape(item.get("heading"), "Insight")
+    body = _format_multiline_html(item.get("body"))
+    badge = "Driver" if section == "drivers" else "Trend"
+    examples = item.get("examples", []) or []
+    sources = item.get("sources", []) or []
     return (
         "<article class=\"memo-item\">"
         "<div class=\"memo-item__header\">"
-        f"<span class=\"memo-item__index\">{index:02d}</span>"
+        f"<span class=\"memo-item__index\">{index}</span>"
         "<div>"
         f"<div class=\"memo-item__badge\">{html.escape(badge)}</div>"
         f"<h3>{heading}</h3>"
         "</div>"
         "</div>"
         f"<p class=\"memo-item__body\">{body}</p>"
-        f"{_render_examples(examples)}"
-        f"{_render_sources(sources)}"
+        f"{_render_examples_sources_disclosure(examples, sources)}"
         "</article>"
     )
+
+
+def _render_item(item: Dict[str, Any], index: int, section: str) -> str:
+    if section == "competitive_landscape":
+        return _render_competitive_landscape_item(item, index)
+    return _render_trend_or_driver_item(item, index, section)
 
 
 def _render_summary_cards(meta: Dict[str, Any], result: Dict[str, Any]) -> str:
@@ -142,23 +217,32 @@ def _render_summary_cards(meta: Dict[str, Any], result: Dict[str, Any]) -> str:
         ("Sources", source_count),
         ("Prepared", prepared),
     ]
-    return "".join(
+    cards_html = "".join(
         f"<div class=\"summary-card\"><span>{label}</span><strong>{value}</strong></div>"
         for label, value in cards
     )
+    return f"<div class=\"memo-summary-grid\">{cards_html}</div>"
 
 
 def _render_section(result: Dict[str, Any], meta: Dict[str, Any], *, title_override: str | None = None) -> str:
     title = _escape(title_override or result.get("title"), "Industry Trends")
     location_label = _escape(meta.get("location", {}).get("label"), "Global")
     topic = _escape(meta.get("topic"), "Research topic")
+    section = _safe_text(result.get("section"), "trends")
     description = (
         "Underlying forces accelerating or shaping the market."
-        if result.get("section") == "drivers"
+        if section == "drivers"
+        else "Key players mapped by relative market position, with concise overviews and recent developments from the last 12 months."
+        if section == "competitive_landscape"
         else "Observable patterns, shifts, and momentum lines across the landscape."
     )
     items_html = "".join(
-        _render_item(item, index) for index, item in enumerate(result.get("items", []) or [], start=1)
+        _render_item(item, index, section) for index, item in enumerate(result.get("items", []) or [], start=1)
+    )
+    empty_state_html = (
+        "<div class=\"memo-empty-state\">No strong insights found.</div>"
+        if not (result.get("items", []) or [])
+        else ""
     )
 
     return (
@@ -170,10 +254,11 @@ def _render_section(result: Dict[str, Any], meta: Dict[str, Any], *, title_overr
         f"<p class=\"memo-topic\">{topic}</p>"
         f"<p class=\"memo-description\">{html.escape(description)}</p>"
         "</div>"
-        f"<div class=\"memo-scope\">{location_label}</div>"
+        f"<div class=\"memo-scope\">{location_label} | {html.escape(title)}</div>"
         "</div>"
-        f"<div class=\"memo-summary-grid\">{_render_summary_cards(meta, result)}</div>"
-        f"<div class=\"memo-items\">{items_html}</div>"
+        f"<div class=\"memo-meta-panel\">{_render_summary_cards(meta, result)}</div>"
+        "<div class=\"editorial-rule\"></div>"
+        f"<div class=\"memo-items\">{items_html or empty_state_html}</div>"
         "</section>"
     )
 
@@ -267,7 +352,7 @@ def build_html_export(
       font: 700 11px/1.3 Arial, sans-serif;
       letter-spacing: 0.22em;
       text-transform: uppercase;
-      color: var(--gold);
+      color: rgba(89, 103, 99, 0.85);
       margin-bottom: 10px;
     }}
 
@@ -281,36 +366,40 @@ def build_html_export(
     .memo-description {{
       margin: 10px 0 0;
       max-width: 760px;
-      font-size: 17px;
+      font-size: 15px;
       line-height: 1.7;
       color: var(--muted);
     }}
 
     .memo-scope {{
       flex: 0 0 auto;
-      min-width: 180px;
-      padding: 12px 16px;
-      border-radius: 999px;
-      background: var(--accent-soft);
-      color: var(--accent);
-      font: 700 12px/1.4 Arial, sans-serif;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
+      font: 600 14px/1.4 Arial, sans-serif;
+      color: var(--ink);
       text-align: center;
+    }}
+
+    .memo-meta-panel {{
+      margin-top: 20px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.72);
+      padding: 18px 20px;
     }}
 
     .memo-summary-grid {{
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(4, minmax(150px, 210px));
+      gap: 12px;
+      align-items: stretch;
+      justify-content: start;
     }}
 
     .summary-card {{
-      background: var(--panel-strong);
+      background: rgba(255,255,255,0.84);
       border: 1px solid var(--line);
       border-radius: 18px;
-      padding: 14px 16px;
+      padding: 12px 14px;
+      min-width: 0;
     }}
 
     .summary-card span {{
@@ -324,20 +413,28 @@ def build_html_export(
 
     .summary-card strong {{
       display: block;
-      font-size: 16px;
-      line-height: 1.5;
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--ink);
+    }}
+
+    .editorial-rule {{
+      height: 1px;
+      margin: 24px 0 0;
+      background: linear-gradient(90deg, transparent, var(--line), transparent);
     }}
 
     .memo-items {{
       display: grid;
       gap: 18px;
+      margin-top: 24px;
     }}
 
     .memo-item {{
-      background: var(--panel);
+      background: rgba(255, 255, 255, 0.78);
       border: 1px solid var(--line);
-      border-radius: 22px;
-      padding: 22px;
+      border-radius: 26px;
+      padding: 20px;
     }}
 
     .memo-item__header {{
@@ -351,12 +448,12 @@ def build_html_export(
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 56px;
-      height: 56px;
-      border-radius: 16px;
+      min-width: 44px;
+      height: 44px;
+      border-radius: 999px;
       background: var(--accent);
       color: #fff;
-      font: 700 20px/1 Arial, sans-serif;
+      font: 700 14px/1 Arial, sans-serif;
     }}
 
     .memo-item__badge {{
@@ -367,31 +464,43 @@ def build_html_export(
       margin-bottom: 8px;
     }}
 
+    .memo-item__label {{
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }}
+
     .memo-item h3 {{
       margin: 0;
-      font-size: 28px;
-      line-height: 1.15;
+      font-size: 32px;
+      line-height: 1.02;
     }}
 
     .memo-item__body {{
       margin: 0;
-      font-size: 17px;
-      line-height: 1.78;
-      color: var(--ink);
+      font-size: 15px;
+      line-height: 1.9;
+      color: var(--muted);
     }}
 
     .item-subsection {{
-      margin-top: 16px;
-      padding-top: 14px;
-      border-top: 1px solid var(--line);
+      margin-top: 24px;
+    }}
+
+    .item-subsection--first {{
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
     }}
 
     .item-subsection h4 {{
       margin: 0 0 10px;
       font: 700 13px/1.4 Arial, sans-serif;
-      letter-spacing: 0.16em;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: var(--accent);
+      color: var(--muted);
     }}
 
     .example-list,
@@ -401,6 +510,18 @@ def build_html_export(
       color: var(--muted);
       font-size: 15px;
       line-height: 1.7;
+    }}
+
+    .source-list {{
+      list-style: none;
+      padding-left: 0;
+    }}
+
+    .source-item {{
+      background: rgba(255,255,255,0.84);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 12px 14px;
     }}
 
     .example-year {{
@@ -414,6 +535,71 @@ def build_html_export(
 
     .source-meta {{
       font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+    }}
+
+    .disclosure {{
+      margin-top: 28px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,0.72);
+      overflow: hidden;
+    }}
+
+    .disclosure > summary {{
+      cursor: pointer;
+      list-style: none;
+      padding: 14px 16px;
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }}
+
+    .disclosure > summary::-webkit-details-marker {{
+      display: none;
+    }}
+
+    .disclosure > summary::after {{
+      content: "Show";
+      color: var(--accent);
+    }}
+
+    .disclosure[open] > summary::after {{
+      content: "Hide";
+    }}
+
+    .disclosure__body {{
+      border-top: 1px solid var(--line);
+      padding: 16px;
+      display: grid;
+      gap: 16px;
+    }}
+
+    .disclosure-block h4 {{
+      margin: 0 0 10px;
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(89, 103, 99, 0.82);
+    }}
+
+    .summary-separator {{
+      margin: 0 6px;
+      color: rgba(89, 103, 99, 0.55);
+    }}
+
+    .memo-empty-state {{
+      border: 1px dashed var(--line);
+      border-radius: 26px;
+      background: rgba(255,255,255,0.76);
+      padding: 24px 20px;
+      font-size: 15px;
+      line-height: 1.8;
       color: var(--muted);
     }}
 
@@ -432,6 +618,7 @@ def build_html_export(
 
       .memo-summary-grid {{
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
       }}
 
       .memo-item h3 {{

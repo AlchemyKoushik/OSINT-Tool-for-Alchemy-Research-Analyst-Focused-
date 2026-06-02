@@ -52,6 +52,19 @@ RAW_SOURCE_TEXT_MARKERS = (
     "analysis and forecasts",
     "what is the expected",
 )
+COMPANY_TITLE_REJECT_MARKERS = (
+    "market",
+    "markets",
+    "executive summary",
+    "forecast",
+    "forecasts",
+    "analysis",
+    "industry",
+    "chapter",
+    "usd",
+    "billion",
+    "million",
+)
 SENTENCE_BOUNDARY_PATTERN = re.compile(r"(?<=[.!?])\s+")
 TITLE_DESCRIPTION_PREFIX_WORDS = 5
 CURRENT_YEAR = datetime.now().year
@@ -293,6 +306,13 @@ def _contains_stale_forecast_language(description: str) -> bool:
     return False
 
 
+def _looks_like_invalid_company_title(title: str) -> bool:
+    lowered_title = title.lower().strip()
+    if any(marker in lowered_title for marker in COMPANY_TITLE_REJECT_MARKERS):
+        return True
+    return bool(re.search(r"\b20\d{2}\b", lowered_title))
+
+
 def _validate_structured_output(parsed: Output, section: str) -> Output:
     filtered_items: List[Insight] = []
     normalized_section = str(section or "").strip().lower()
@@ -300,6 +320,12 @@ def _validate_structured_output(parsed: Output, section: str) -> Output:
     for item in parsed.items:
         title = _normalize_text(item.title)
         description = _normalize_text(item.description)
+        competitive_positioning = _normalize_text(getattr(item, "competitive_positioning", ""))
+        key_company_facts = [
+            _normalize_text(fact)
+            for fact in list(getattr(item, "key_company_facts", []) or [])
+            if _normalize_text(fact)
+        ]
         if not title or not description:
             continue
         if _looks_like_raw_source_text(title, description):
@@ -308,17 +334,33 @@ def _validate_structured_output(parsed: Output, section: str) -> Output:
             continue
         if _is_generic_insight(title, description):
             continue
-        if len(title.split()) < 3 or len(title.split()) > 14:
+        title_word_count = len(title.split())
+        if normalized_section == "competitive_landscape":
+            if title_word_count < 1 or title_word_count > 8:
+                continue
+            if _looks_like_invalid_company_title(title):
+                continue
+        elif title_word_count < 3 or title_word_count > 14:
             continue
         if len(description) < 90:
             continue
         sentence_count = _count_sentences(description)
-        if sentence_count < 3 or sentence_count > 6:
+        if normalized_section == "competitive_landscape":
+            if sentence_count < 2 or sentence_count > 4:
+                continue
+        elif sentence_count < 3 or sentence_count > 6:
             continue
         if normalized_section == "trends" and _contains_prescriptive_trend_language(description):
             continue
         if _contains_stale_forecast_language(description):
             continue
+        if normalized_section == "competitive_landscape" and not str(item.segment or "").strip():
+            continue
+        if normalized_section == "competitive_landscape":
+            if len(key_company_facts) < 3:
+                continue
+            if not competitive_positioning:
+                continue
 
         if any(
             _titles_are_similar(title, existing.title) or _descriptions_are_similar(description, existing.description)
@@ -330,6 +372,9 @@ def _validate_structured_output(parsed: Output, section: str) -> Output:
             Insight(
                 title=title,
                 description=description,
+                segment=str(item.segment or "").strip().lower(),
+                key_company_facts=key_company_facts[:5],
+                competitive_positioning=competitive_positioning,
                 examples=[],
                 source_ids=list(item.source_ids),
             )
@@ -404,6 +449,7 @@ async def extract_validated_examples_from_evidence(
     trend_context: Dict[str, Any] | None = None,
     allow_low_confidence_fallback: bool = False,
     return_diagnostics: bool = False,
+    max_age_months: int | None = None,
 ) -> List[ExtractedExample] | tuple[List[ExtractedExample], Dict[str, Any]]:
     api_key = settings.OPENAI_API_KEY.strip()
     if not api_key:
@@ -437,6 +483,7 @@ async def extract_validated_examples_from_evidence(
             research_date=research_date,
             trend_context=trend_context,
             allow_low_confidence_fallback=allow_low_confidence_fallback,
+            max_age_months=max_age_months,
         )
         if discard_reasons:
             logger.info(

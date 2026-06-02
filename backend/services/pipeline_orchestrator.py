@@ -65,6 +65,7 @@ async def execute_pipeline(
     }
 
     query_start = time.perf_counter()
+    _log(f"[PIPELINE] Query generation started | session_id={session_id}")
     try:
         if provided_queries:
             queries = [str(query).strip() for query in provided_queries if str(query).strip()]
@@ -83,8 +84,10 @@ async def execute_pipeline(
     if not queries:
         stage_errors.setdefault("query_generation", "Query generation returned no usable queries.")
     execution_time["query_ms"] = _elapsed_ms(query_start)
+    _log(f"[PIPELINE] Query generation completed | count={len(queries)} | ms={execution_time['query_ms']} | session_id={session_id}")
 
     search_start = time.perf_counter()
+    _log(f"[PIPELINE] Search started | query_count={len(queries)} | session_id={session_id}")
     try:
         search_payload = await search_queries(
             topic,
@@ -105,8 +108,10 @@ async def execute_pipeline(
             f"Search returned no usable results after filtering across {len(queries)} queries.",
         )
     execution_time["search_ms"] = _elapsed_ms(search_start)
+    _log(f"[PIPELINE] Search completed | results={len(search_results)} | ms={execution_time['search_ms']} | session_id={session_id}")
 
     scrape_start = time.perf_counter()
+    _log(f"[PIPELINE] Scraping started | candidate_results={len(search_results)} | session_id={session_id}")
     try:
         prioritized_search_results = list(search_results[:MAX_PIPELINE_SCRAPE_RESULTS])
         artifact_bundle = await collect_research_artifacts(
@@ -133,8 +138,13 @@ async def execute_pipeline(
                 f"Scraping completed without any successful artifacts from {len(search_results)} candidate results.",
             )
     execution_time["scrape_ms"] = _elapsed_ms(scrape_start)
+    _log(
+        f"[PIPELINE] Scraping completed | usable_artifacts={artifact_bundle.get('counts', {}).get('usable_text_count', 0)} "
+        f"| success={artifact_bundle.get('counts', {}).get('success_count', 0)} | ms={execution_time['scrape_ms']} | session_id={session_id}"
+    )
 
     process_start = time.perf_counter()
+    _log(f"[PIPELINE] Content processing started | session_id={session_id}")
     try:
         stored_sources = await asyncio.to_thread(load_saved_sources, list(artifact_bundle.get("artifacts", [])))
         scraped_results = list(stored_sources) if stored_sources else list(artifact_bundle.get("pages", []))
@@ -255,6 +265,10 @@ async def execute_pipeline(
             "Processing finished without any usable text in the final evidence bundle.",
         )
     execution_time["processing_ms"] = _elapsed_ms(process_start)
+    _log(
+        f"[PIPELINE] Content processing completed | sources={processed_payload.get('num_sources', 0)} "
+        f"| chars={processed_payload.get('processing_chars', 0)} | ms={execution_time['processing_ms']} | session_id={session_id}"
+    )
 
     _log("[PIPELINE] Completed")
     return {

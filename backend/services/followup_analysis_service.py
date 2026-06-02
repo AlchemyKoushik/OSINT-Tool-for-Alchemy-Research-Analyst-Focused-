@@ -88,6 +88,7 @@ def _validate_research_items(items: Any) -> List[Dict[str, Any]]:
             {
                 "heading": heading,
                 "body": body,
+                "segment": _normalize_text(item.get("segment")),
                 "examples": list(item.get("examples", [])) if isinstance(item.get("examples", []), list) else [],
                 "sources": list(item.get("sources", [])) if isinstance(item.get("sources", []), list) else [],
                 "source_ids": list(item.get("source_ids", [])) if isinstance(item.get("source_ids", []), list) else [],

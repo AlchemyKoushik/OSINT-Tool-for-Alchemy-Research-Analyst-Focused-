@@ -72,6 +72,7 @@ const BUILT_IN_LOCATION_CATALOG_PATHS = [
 const SECTION_OPTIONS = [
   { value: "trends", label: "Trends" },
   { value: "drivers", label: "Drivers" },
+  { value: "competitive_landscape", label: "Competitive Landscape (CL)" },
 ];
 
 const REGION_NOTES = {
@@ -161,13 +162,23 @@ function formatPreparedDateForFile(value = new Date()) {
 }
 
 function sectionTitle(section) {
-  return section === "drivers" ? "Market Drivers" : "Industry Trends";
+  if (section === "drivers") {
+    return "Market Drivers";
+  }
+  if (section === "competitive_landscape") {
+    return "Competitive Landscape";
+  }
+  return "Industry Trends";
 }
 
 function sectionDescriptor(section) {
-  return section === "drivers"
-    ? "Underlying forces accelerating or shaping the market."
-    : "Observable patterns, shifts, and momentum lines across the landscape.";
+  if (section === "drivers") {
+    return "Underlying forces accelerating or shaping the market.";
+  }
+  if (section === "competitive_landscape") {
+    return "Key players mapped by relative market position, with concise company overviews and recent developments from the last 12 months.";
+  }
+  return "Observable patterns, shifts, and momentum lines across the landscape.";
 }
 
 function humanizePreference(preference) {
@@ -188,7 +199,13 @@ function formatScopeSummary(meta) {
 function followUpSectionTitle(query, fallbackSection) {
   const normalized = String(query || "").trim();
   if (!normalized) {
-    return fallbackSection === "drivers" ? "Follow-up Drivers" : "Follow-up Trends";
+    if (fallbackSection === "drivers") {
+      return "Follow-up Drivers";
+    }
+    if (fallbackSection === "competitive_landscape") {
+      return "Follow-up Competitive Landscape";
+    }
+    return "Follow-up Trends";
   }
 
   const lowered = normalized.toLowerCase();
@@ -297,6 +314,16 @@ function normalizeResearchItem(item) {
   return {
     heading,
     body,
+    segment: String(item.segment || item.player_segment || item.tier || item.bucket || "").trim().toLowerCase(),
+    key_company_facts: Array.isArray(item.key_company_facts || item.key_facts || item.company_facts)
+      ? (item.key_company_facts || item.key_facts || item.company_facts)
+          .map((fact) => String(fact || "").trim())
+          .filter((fact, index, facts) => fact && facts.indexOf(fact) === index)
+          .slice(0, 5)
+      : [],
+    competitive_positioning: String(
+      item.competitive_positioning || item.competitive_implication || item.positioning_implication || "",
+    ).trim(),
     examples,
     sources: normalizeSourceList(item.sources || item.references || item.evidence),
     source_ids: Array.isArray(item.source_ids)
@@ -397,10 +424,12 @@ function normalizeResearchResponse(payload, fallbackSection = "trends") {
   }
 
   const inferredSection =
-    payload.section === "trends" || payload.section === "drivers"
+    payload.section === "trends" || payload.section === "drivers" || payload.section === "competitive_landscape"
       ? payload.section
       : Array.isArray(payload.drivers)
         ? "drivers"
+        : Array.isArray(payload.competitive_landscape)
+          ? "competitive_landscape"
         : Array.isArray(payload.trends)
           ? "trends"
           : fallbackSection;
@@ -631,7 +660,7 @@ function buildCompletedJournal(result, debug, meta) {
     },
     {
       id: "journal-output",
-      message: `Delivered ${result?.items?.length || 0} memo-ready ${result?.section === "drivers" ? "drivers" : "insights"} in the final canvas.`,
+      message: `Delivered ${result?.items?.length || 0} memo-ready ${result?.section === "drivers" ? "drivers" : result?.section === "competitive_landscape" ? "company profiles" : "insights"} in the final canvas.`,
     },
   ];
 }
@@ -2035,7 +2064,7 @@ function FollowUpCard({ entry }) {
   `;
 }
 
-function SourceDisclosure({ sources }) {
+function SourceList({ sources }) {
   const normalizedSources = Array.isArray(sources) ? sources.filter((source) => source?.title || source?.url) : [];
 
   if (!normalizedSources.length) {
@@ -2091,6 +2120,53 @@ function SourceDisclosure({ sources }) {
               </div>`}
         `,
       )}
+    </div>
+  `;
+}
+
+function SourceDisclosure({ sources }) {
+  const [open, setOpen] = useState(false);
+  const normalizedSources = Array.isArray(sources) ? sources.filter((source) => source?.title || source?.url) : [];
+
+  if (!normalizedSources.length) {
+    return null;
+  }
+
+  return html`
+    <div className="mt-7 rounded-[22px] border border-atelier-line bg-white/72">
+      <button
+        type="button"
+        onClick=${() => setOpen((current) => !current)}
+        aria-expanded=${open ? "true" : "false"}
+        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
+      >
+        <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-atelier-moss">
+          Sources (${normalizedSources.length})
+        </span>
+        <span className="text-xs font-bold uppercase tracking-[0.2em] text-atelier-forest">
+          ${open ? "Hide" : "Show"}
+        </span>
+      </button>
+
+      <${AnimatePresence} initial=${false}>
+        ${open
+          ? html`
+              <${motion.div}
+                key="competitive-sources-panel"
+                initial=${{ opacity: 0, y: 8, scale: 0.99 }}
+                animate=${{ opacity: 1, y: 0, scale: 1 }}
+                exit=${{ opacity: 0, y: 6, scale: 0.99 }}
+                transition=${TRANSITION}
+                style=${MOTION_EXPAND_STYLE}
+                className="overflow-hidden origin-top border-t border-atelier-line"
+              >
+                <div className="px-4 py-4">
+                  <${SourceList} sources=${normalizedSources} />
+                </div>
+              </${motion.div}>
+            `
+          : null}
+      </${AnimatePresence}>
     </div>
   `;
 }
@@ -2188,7 +2264,7 @@ function ExamplesAndSourcesDisclosure({ examples, sources }) {
                           <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">
                             Sources
                           </p>
-                          <${SourceDisclosure} sources=${normalizedSources} />
+                          <${SourceList} sources=${normalizedSources} />
                         </div>
                       `
                     : null}
@@ -2201,7 +2277,114 @@ function ExamplesAndSourcesDisclosure({ examples, sources }) {
   `;
 }
 
+function CompetitiveLandscapeDevelopments({ examples = [] }) {
+  const normalizedExamples = Array.isArray(examples) ? examples.filter((example) => example?.text) : [];
+  if (!normalizedExamples.length) {
+    return null;
+  }
+
+  return html`
+    <section className="mt-6">
+      <p className="m-0 text-[11px] font-bold uppercase tracking-[0.2em] text-atelier-moss">
+        Recent Strategic Developments
+      </p>
+      <ol className="mt-3 list-decimal space-y-3 pl-6 text-sm leading-7 text-atelier-moss">
+        ${normalizedExamples.map(
+          (example, index) => html`
+            <li key=${`${example.text}-${index}`} className="pl-1">
+              <span className="text-atelier-ink">${example.text}</span>
+              ${example.year
+                ? html`<span className="ml-2 text-xs font-bold uppercase tracking-[0.16em] text-atelier-goldDeep">
+                    ${example.year}
+                  </span>`
+                : null}
+            </li>
+          `,
+        )}
+      </ol>
+    </section>
+  `;
+}
+
+function CompetitiveLandscapeFacts({ facts = [] }) {
+  const normalizedFacts = Array.isArray(facts) ? facts.filter(Boolean) : [];
+  if (!normalizedFacts.length) {
+    return null;
+  }
+
+  return html`
+    <section className="mt-6">
+      <p className="m-0 text-[11px] font-bold uppercase tracking-[0.2em] text-atelier-moss">
+        Key Company Facts
+      </p>
+      <ul className="mt-3 space-y-3 pl-5 text-sm leading-7 text-atelier-moss">
+        ${normalizedFacts.map(
+          (fact, index) => html`
+            <li key=${`${fact}-${index}`} className="pl-1 text-atelier-ink">
+              ${fact}
+            </li>
+          `,
+        )}
+      </ul>
+    </section>
+  `;
+}
+
+function CompetitiveLandscapePositioning({ text = "" }) {
+  const normalizedText = String(text || "").trim();
+  if (!normalizedText) {
+    return null;
+  }
+
+  return html`
+    <section className="mt-6">
+      <p className="m-0 text-[11px] font-bold uppercase tracking-[0.2em] text-atelier-moss">
+        Competitive Positioning / Implication
+      </p>
+      <p className="mt-3 text-sm leading-7 text-atelier-moss">
+        ${normalizedText || "No clear competitive implication could be validated from the current evidence set."}
+      </p>
+    </section>
+  `;
+}
+
 function BriefItemCard({ item, index, section, title }) {
+  if (section === "competitive_landscape") {
+    return html`
+      <${motion.article}
+        key=${`${title}-${item.heading}-${index}`}
+        initial=${{ opacity: 0, y: 16 }}
+        animate=${{ opacity: 1, y: 0 }}
+        transition=${{ ...TRANSITION, delay: index * 0.05 }}
+        style=${MOTION_SMOOTH_STYLE}
+        className="rounded-[26px] border border-atelier-line bg-white/78 px-5 py-5"
+      >
+        <div className="flex items-start gap-4">
+          <div className="brief-item-index flex h-11 w-11 flex-none items-center justify-center rounded-full text-sm font-bold">
+            ${index + 1}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h4 className="mt-2 font-display text-[2rem] font-semibold leading-[1.02] text-atelier-ink">
+              ${item.heading}
+            </h4>
+            <section className="mt-6">
+              <p className="m-0 text-[11px] font-bold uppercase tracking-[0.2em] text-atelier-moss">
+                Business Overview
+              </p>
+              <p className="mt-3 text-sm leading-8 text-atelier-moss">
+                ${item.body}
+              </p>
+            </section>
+            <${CompetitiveLandscapeFacts} facts=${item.key_company_facts} />
+            <${CompetitiveLandscapeDevelopments} examples=${item.examples} />
+            <${CompetitiveLandscapePositioning} text=${item.competitive_positioning} />
+            <${SourceDisclosure} sources=${item.sources} />
+          </div>
+        </div>
+      </${motion.article}>
+    `;
+  }
+
   return html`
     <${motion.article}
       key=${`${title}-${item.heading}-${index}`}
@@ -2274,15 +2457,15 @@ function ResultSection({
       <div className="mt-6 space-y-4">
         ${normalizedItems.length
           ? normalizedItems.map(
-          (item, index) => html`
-            <${BriefItemCard}
-              item=${item}
-              index=${index}
-              section=${section}
-              title=${title}
-            />
-          `,
-        )
+              (item, index) => html`
+                <${BriefItemCard}
+                  item=${item}
+                  index=${index}
+                  section=${section}
+                  title=${title}
+                />
+              `,
+            )
           : html`
               <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
                 No strong insights found.

@@ -20,11 +20,17 @@ SECTION_DEFINITIONS: Final[Dict[str, str]] = {
         "signals, input costs, labor availability, supply chain changes, infrastructure, technology, "
         "investment, and strategic actions."
     ),
+    "competitive_landscape": (
+        "Identify the key players in the market and classify them into top players, mid-level players, "
+        "and small players based on scale, reach, brand strength, breadth of offering, investment capacity, "
+        "and market visibility within the requested geography."
+    ),
 }
 
 SECTION_TITLES: Final[Dict[str, str]] = {
     "trends": "Industry Trends",
     "drivers": "Market Drivers",
+    "competitive_landscape": "Competitive Landscape",
 }
 
 
@@ -231,6 +237,28 @@ def build_trend_example_extraction_payload(
             "space-based solar, solar power satellite, orbital solar, space-based power, power beaming, "
             "wireless power transmission, microwave power transmission.\n"
         )
+    if normalized_section == "competitive_landscape":
+        return (
+            "INPUT\n"
+            f"- Topic: {topic.strip()}\n"
+            f"- Section: Competitive Landscape\n"
+            f"- Research date: {current_date}\n"
+            f"- Location scope: {resolved_location_context.label if not resolved_location_context.is_global else 'Global'}\n"
+            f"- Company name: {trend_heading.strip()}\n"
+            f"- Company overview: {trend_body.strip()}\n\n"
+            "TASK\n"
+            "- Extract only recent developments for this specific company from the last 12 months.\n\n"
+            "Rules:\n"
+            "- Use only the evidence below.\n"
+            "- Extract only developments directly tied to the named company.\n"
+            "- Prioritise product launches, service launches, partnerships, contracts, funding, acquisitions, expansions, deployments, approvals, and major strategic moves.\n"
+            "- Every example must have a clear date signal within the last 12 months from the research date.\n"
+            "- If the evidence is older than 12 months, generic, or not clearly tied to the company, exclude it.\n"
+            "- Return an empty examples list if no valid recent developments exist.\n\n"
+            "EVIDENCE\n"
+            f"{_format_example_evidence_blocks(evidence_blocks)}\n\n"
+            "Return strict JSON only."
+        ).strip()
     return (
         "INPUT\n"
         f"- Topic: {topic.strip()}\n"
@@ -268,6 +296,74 @@ def build_trend_example_extraction_payload(
     ).strip()
 
 
+def build_company_profile_extraction_payload(
+    *,
+    topic: str,
+    company_name: str,
+    existing_overview: str,
+    location_context: Optional[LocationContext] = None,
+    evidence_blocks: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    resolved_location_context = location_context or LocationContext()
+    current_date = get_current_research_date()
+    return (
+        "INPUT\n"
+        f"- Topic: {topic.strip()}\n"
+        f"- Section: Competitive Landscape\n"
+        f"- Research date: {current_date}\n"
+        f"- Location scope: {resolved_location_context.label if not resolved_location_context.is_global else 'Global'}\n"
+        f"- Company name: {company_name.strip()}\n"
+        f"- Existing company overview draft: {existing_overview.strip()}\n\n"
+        "TASK\n"
+        "- Build a concise company profile for the named company using only the evidence below.\n\n"
+        "Rules:\n"
+        "- Keep the company name fixed to the named company. Do not rename it.\n"
+        "- Write business_overview as a concise 2 to 3 sentence description of the company business, operating model, customer or end-market focus, and market role.\n"
+        "- Do not write generic market size, CAGR, forecast, chapter, or report-summary text in business_overview.\n"
+        "- If the evidence does not support business_overview, return an empty string.\n"
+        "- key_company_facts should contain only evidence-backed bullets for this company, such as headquarters, founding year, ownership, revenue or scale, geographic presence, products or services, customer exposure, or market position.\n"
+        "- For public or well-known companies, aggressively extract the maximum supported set of key_company_facts from the evidence rather than returning a sparse list.\n"
+        "- Prioritise these fact categories whenever supported: headquarters, year founded, revenue or scale, geographic presence, key products or services, customer base or end-market exposure, ownership structure, and market position or ranking.\n"
+        "- Return only the fact text, not labels like Fact 1.\n"
+        "- Return an empty key_company_facts list if the evidence does not support them.\n"
+        "- recent_developments must include only company-specific developments from the last 12 months.\n"
+        "- Each recent development must be factual, date-supported, and clearly tied to the named company.\n"
+        "- If no recent developments are supported, return an empty recent_developments list.\n"
+        "- competitive_positioning should be one short concluding line about what the company's recent actions imply about its competitive strategy.\n"
+        "- Return an empty competitive_positioning string if the evidence does not support it.\n"
+        "- source_ids must reference only the numbered evidence blocks that directly support the profile.\n"
+        "- Prefer official company, investor, regulator, exchange, and reputable trade or news sources when available.\n\n"
+        "EVIDENCE\n"
+        f"{_format_example_evidence_blocks(evidence_blocks)}\n\n"
+        "Return strict JSON only in this shape:\n"
+        "{\n"
+        '  "profile": {\n'
+        '    "business_overview": "2 to 3 sentence company overview or empty string",\n'
+        '    "key_company_facts": ["fact 1", "fact 2"],\n'
+        '    "competitive_positioning": "one short concluding line or empty string",\n'
+        '    "recent_developments": [\n'
+        "      {\n"
+        '        "company": "company name",\n'
+        '        "event": "specific event",\n'
+        '        "text": "full recent development sentence",\n'
+        '        "event_date": "YYYY-MM-DD or empty",\n'
+        '        "published_date": "YYYY-MM-DD or empty",\n'
+        '        "location": "location or empty",\n'
+        '        "example_type": "partnership | launch | expansion | investment | M&A | restructuring | regulatory | contract | other",\n'
+        '        "confidence": "high | medium | low",\n'
+        '        "trend_fit_reason": "why this matters strategically",\n'
+        '        "source_quality": "Tier 1 | Tier 2 | Tier 3",\n'
+        '        "validation_score": 0,\n'
+        '        "year": "YYYY-MM-DD or YYYY",\n'
+        '        "source_ids": [1]\n'
+        "      }\n"
+        "    ],\n"
+        '    "source_ids": [1, 2]\n'
+        "  }\n"
+        "}"
+    ).strip()
+
+
 def build_example_search_query_user_prompt(
     *,
     topic: str,
@@ -286,6 +382,35 @@ def build_example_search_query_user_prompt(
             "- Treat these as equivalent if useful: space-based solar power, space based solar power, SBSP, space solar power, "
             "space-based solar, solar power satellite, orbital solar, space-based power, power beaming, wireless power transmission, microwave power transmission.\n"
         )
+    if section.strip().lower() == "competitive_landscape":
+        return (
+            "INPUT\n"
+            f"- Topic: {topic.strip()}\n"
+            f"- Section: Competitive Landscape\n"
+            f"- Research date: {current_date}\n"
+            f"- Location: {geo}\n"
+            f"- Company: {trend_heading.strip()}\n"
+            f"- Company overview: {trend_body.strip()}\n\n"
+            "TASK\n"
+            "Generate search queries to find recent developments for this company from the last 12 months.\n\n"
+            "Rules:\n"
+            "- Generate 5 to 8 queries.\n"
+            "- Every query must be centered on the named company.\n"
+            "- Cover a mix of partnerships, launches, upgrades, expansions, market entry, M&A, investments, strategic pivots, operational issues, regulatory challenges, financial pressure, leadership changes, and restructuring where relevant.\n"
+            "- Bias toward the current year and previous year only.\n"
+            "- Avoid generic market trend queries.\n"
+            "- Avoid unsupported competitor names.\n\n"
+            "Return JSON in this shape:\n"
+            "{\n"
+            "  \"queries\": [\n"
+            "    {\n"
+            "      \"query\": \"search query text\",\n"
+            "      \"purpose\": \"what type of evidence this query is trying to find\",\n"
+            "      \"priority\": \"high | medium | fallback\"\n"
+            "    }\n"
+            "  ]\n"
+            "}"
+        ).strip()
     return (
         "INPUT\n"
         f"- Topic: {topic.strip()}\n"

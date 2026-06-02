@@ -9,30 +9,37 @@ from typing import Any, Dict, List, Sequence
 from openai import AsyncOpenAI
 
 from config.settings import settings
-from models.response_models import ExampleSearchQueryResponse
+from models.response_models import CompetitiveLandscapeProfileResponse, ExampleSearchQueryResponse
 from services.content_processor import prepare_processed_content
 from services.example_validation_service import attach_examples_to_insights
 from services.external_client import call_openai
 from services.location_service import LocationContext
 from services.openai_service import can_use_openai, ensure_min_output_tokens, extract_validated_examples_from_evidence
 from services.prompt_builder import (
+    build_company_profile_extraction_payload,
     build_example_search_query_system_prompt,
     build_example_search_query_user_prompt,
     build_trend_example_extraction_payload,
 )
 from services.scraper_service import collect_research_artifacts, load_saved_sources
 from services.search_service import search_queries
+from services.source_attribution_service import attach_sources_to_items
 
 logger = logging.getLogger(__name__)
 
 MAX_EXAMPLE_RESEARCH_QUERIES = 8
 MAX_EXAMPLE_RESULTS = 24
 MAX_TRENDS_WITH_EXAMPLE_RESEARCH = settings.MAX_TRENDS_WITH_EXAMPLE_RESEARCH
-MAX_EXAMPLES_PER_TREND = 3
+MAX_EXAMPLES_PER_TREND = 5
 MAX_CONCURRENT_TREND_RESEARCH = 2
 EXAMPLE_QUERY_MODEL_NAME = settings.OPENAI_QUERY_MODEL or settings.OPENAI_SUPPORT_MODEL or "gpt-4.1-mini"
 EXAMPLE_QUERY_TIMEOUT_SECONDS = 30
 EXAMPLE_QUERY_MAX_RETRIES = 1
+COMPANY_PROFILE_MODEL_NAME = settings.OPENAI_ANALYSIS_MODEL or "gpt-5.5"
+COMPANY_PROFILE_TIMEOUT_SECONDS = 45
+COMPANY_PROFILE_MAX_RETRIES = 1
+COMPANY_PROFILE_MAX_CHARS_PER_SOURCE = 2800
+COMPANY_PROFILE_MAX_SOURCES = 8
 STOPWORDS = {
     "about",
     "across",
@@ -54,6 +61,25 @@ STOPWORDS = {
 TIER_1_DOMAIN_MARKERS = (".gov", ".sec", "investor", "regulator", "exchange", "official")
 TIER_2_DOMAIN_MARKERS = ("reuters", "bloomberg", "spglobal", "argus", "woodmac", "mckinsey", "bnef")
 TIER_3_TITLE_MARKERS = ("blog", "top 10", "list of", "overview", "market size")
+GENERIC_COMPANY_OVERVIEW_MARKERS = (
+    "market generated a revenue",
+    "projected to reach",
+    "compound annual growth rate",
+    "forecast period",
+    "market size",
+    "report examines",
+)
+INVALID_COMPANY_TITLE_MARKERS = (
+    "market",
+    "markets",
+    "forecast",
+    "industry",
+    "executive summary",
+    "generated revenue",
+    "projected reach",
+    "billion",
+    "million",
+)
 EMERGING_TREND_MARKERS = (
     "emerging",
     "emerges",
@@ -148,6 +174,7 @@ def _dedupe_queries(queries: Sequence[str]) -> List[str]:
 def _build_fallback_queries(
     *,
     topic: str,
+    section: str,
     trend_heading: str,
     trend_body: str,
     location_context: LocationContext,
@@ -158,6 +185,31 @@ def _build_fallback_queries(
     focus_terms = _build_focus_terms(trend_heading, trend_body)
     year_scope = f"{current_year} OR {previous_year}"
     extended_year_scope = f"{current_year} OR {previous_year} OR {two_years_ago}"
+
+    if section == "competitive_landscape":
+        company_name = trend_heading.strip()
+        templates = [
+            '"{company_name}" company profile headquarters products services {year_scope}',
+            '"{company_name}" investor relations annual report revenue operations {year_scope}',
+            '"{company_name}" headquarters founded revenue ownership market position',
+            '"{company_name}" annual report geographic presence products services',
+            '"{company_name}" about us business overview brands markets {year_scope}',
+            '"{company_name}" {geo} launch partnership acquisition {year_scope}',
+            '"{company_name}" {geo} expansion investment contract {year_scope}',
+            '"{company_name}" {geo} leadership change restructuring regulatory challenge {year_scope}',
+            '"{company_name}" {geo} recent developments {year_scope}',
+            '"{company_name}" {geo} market position footprint distribution {year_scope}',
+        ]
+        return _dedupe_queries(
+            [
+                template.format(
+                    company_name=company_name,
+                    geo=geo,
+                    year_scope=year_scope,
+                )
+                for template in templates
+            ]
+        )[:MAX_EXAMPLE_RESEARCH_QUERIES]
 
     if fallback_mode:
         templates = [
@@ -208,6 +260,19 @@ def _extract_parsed_query_output(response: Any) -> ExampleSearchQueryResponse:
     raise ValueError("Structured example search query response did not contain parsed content.")
 
 
+def _extract_parsed_company_profile_output(response: Any) -> CompetitiveLandscapeProfileResponse:
+    for output in getattr(response, "output", []):
+        if getattr(output, "type", "") != "message":
+            continue
+        for item in getattr(output, "content", []):
+            if getattr(item, "type", "") == "refusal":
+                raise RuntimeError(str(getattr(item, "refusal", "Company profile extraction was refused.")))
+            parsed = getattr(item, "parsed", None)
+            if isinstance(parsed, CompetitiveLandscapeProfileResponse):
+                return parsed
+    raise ValueError("Structured company profile response did not contain parsed content.")
+
+
 async def _generate_example_search_queries(
     *,
     topic: str,
@@ -218,11 +283,14 @@ async def _generate_example_search_queries(
 ) -> List[str]:
     fallback_queries = _build_fallback_queries(
         topic=topic,
+        section=section,
         trend_heading=trend_heading,
         trend_body=trend_body,
         location_context=location_context,
         fallback_mode=False,
     )
+    if section == "competitive_landscape":
+        return fallback_queries
     if not settings.OPENAI_API_KEY or not can_use_openai():
         return fallback_queries
 
@@ -265,6 +333,25 @@ async def _generate_example_search_queries(
         await client.close()
 
 
+def _looks_like_generic_company_overview(company_name: str, overview: str) -> bool:
+    normalized_company = _normalize_text(company_name).lower()
+    normalized_overview = _normalize_text(overview).lower()
+    if not normalized_overview:
+        return True
+    if normalized_company and normalized_company not in normalized_overview:
+        return True
+    return any(marker in normalized_overview for marker in GENERIC_COMPANY_OVERVIEW_MARKERS)
+
+
+def _looks_like_invalid_company_heading(heading: str) -> bool:
+    normalized_heading = _normalize_text(heading).lower()
+    if not normalized_heading:
+        return True
+    if bool(re.search(r"\b20\d{2}\b", normalized_heading)):
+        return True
+    return any(marker in normalized_heading for marker in INVALID_COMPANY_TITLE_MARKERS)
+
+
 def _build_enriched_evidence_blocks(
     processed_payload: Dict[str, Any],
     stored_sources: Sequence[Dict[str, Any]],
@@ -296,6 +383,128 @@ def _build_enriched_evidence_blocks(
             }
         )
     return evidence_blocks
+
+
+def _build_company_profile_evidence_blocks(
+    stored_sources: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    evidence_blocks: List[Dict[str, Any]] = []
+    seen_signatures = set()
+    for source_index, source in enumerate(list(stored_sources)[:COMPANY_PROFILE_MAX_SOURCES], start=1):
+        cleaned_content = prepare_processed_content([dict(source)]).get("processed_text", "")
+        if not cleaned_content:
+            raw_content = _normalize_text(source.get("content"))
+            cleaned_content = raw_content[:COMPANY_PROFILE_MAX_CHARS_PER_SOURCE]
+        excerpt = _normalize_text(cleaned_content)[:COMPANY_PROFILE_MAX_CHARS_PER_SOURCE].strip()
+        signature = excerpt.lower()
+        if not excerpt or signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        evidence_blocks.append(
+            {
+                "source_id": str(source_index),
+                "title": _normalize_text(source.get("title")) or f"Source {source_index}",
+                "url": _normalize_text(source.get("url")),
+                "publisher": _normalize_text(source.get("source_type") or source.get("artifact_type")),
+                "published_date": "",
+                "retrieved_date": datetime.now(timezone.utc).date().isoformat(),
+                "source_tier": _source_tier_for_source(source),
+                "snippet": excerpt[:500],
+                "full_text_excerpt": excerpt,
+                "excerpt": excerpt,
+                "date": "",
+                "domain": _normalize_text(source.get("domain")),
+                "location": _normalize_text(source.get("location")),
+            }
+        )
+    return evidence_blocks
+
+
+async def _extract_company_profile_from_evidence(
+    *,
+    topic: str,
+    company_name: str,
+    existing_overview: str,
+    location_context: LocationContext,
+    evidence_blocks: Sequence[Dict[str, Any]],
+) -> CompetitiveLandscapeProfileResponse:
+    if not settings.OPENAI_API_KEY or not can_use_openai():
+        return CompetitiveLandscapeProfileResponse()
+
+    payload = build_company_profile_extraction_payload(
+        topic=topic,
+        company_name=company_name,
+        existing_overview=existing_overview,
+        location_context=location_context,
+        evidence_blocks=list(evidence_blocks),
+    )
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    try:
+        response = await call_openai(
+            "extract_company_profile",
+            lambda: client.responses.parse(
+                model=COMPANY_PROFILE_MODEL_NAME,
+                input=[
+                    {"role": "system", "content": "You are an OSINT analyst building evidence-backed company profiles."},
+                    {"role": "user", "content": payload},
+                ],
+                text_format=CompetitiveLandscapeProfileResponse,
+                max_output_tokens=ensure_min_output_tokens(1800),
+                temperature=0.1,
+            ),
+            fallback=None,
+            timeout=COMPANY_PROFILE_TIMEOUT_SECONDS,
+            max_retries=COMPANY_PROFILE_MAX_RETRIES,
+            context={"model": COMPANY_PROFILE_MODEL_NAME, "company_name": company_name},
+        )
+        if response is None:
+            return CompetitiveLandscapeProfileResponse()
+        return _extract_parsed_company_profile_output(response)
+    except Exception as exc:
+        logger.warning("Company profile extraction failed company=%s error=%s", company_name, exc)
+        return CompetitiveLandscapeProfileResponse()
+    finally:
+        await client.close()
+
+
+async def _collect_company_research_evidence(
+    *,
+    topic: str,
+    section: str,
+    heading: str,
+    body: str,
+    location_context: LocationContext,
+    session_id: str,
+    item_index: int,
+    queries: Sequence[str],
+) -> Dict[str, Any]:
+    search_payload = await search_queries(
+        f"{topic} {heading}",
+        list(queries),
+        freshness="high",
+        location_context=location_context,
+    )
+    search_results = list(search_payload.get("results", []))[:MAX_EXAMPLE_RESULTS]
+    if not search_results:
+        return {"search_results": 0, "stored_sources": [], "evidence_blocks": []}
+
+    artifact_bundle = await collect_research_artifacts(
+        topic=f"{topic} {heading}",
+        section="company_profile",
+        session_id=f"{session_id}_trend_examples_{item_index}_profile",
+        location_context=location_context,
+        search_results=search_results,
+    )
+    stored_sources = await asyncio.to_thread(load_saved_sources, list(artifact_bundle.get("artifacts", [])))
+    if not stored_sources:
+        return {"search_results": len(search_results), "stored_sources": [], "evidence_blocks": []}
+
+    evidence_blocks = _build_company_profile_evidence_blocks(stored_sources)
+    return {
+        "search_results": len(search_results),
+        "stored_sources": list(stored_sources),
+        "evidence_blocks": evidence_blocks,
+    }
 
 
 def _trend_context(
@@ -415,6 +624,7 @@ async def _run_example_pass(
         trend_context=trend_context,
         allow_low_confidence_fallback=fallback_mode,
         return_diagnostics=True,
+        max_age_months=12 if section == "competitive_landscape" else None,
     )
     validated_examples, diagnostics = extraction_result
     for example in validated_examples:
@@ -457,6 +667,78 @@ async def _research_examples_for_item(
         location_context=location_context,
     )
     logger.info("Trend example research heading=%s generated_queries=%s", heading, queries)
+    if section == "competitive_landscape":
+        evidence_bundle = await _collect_company_research_evidence(
+            topic=topic,
+            section=section,
+            heading=heading,
+            body=body,
+            location_context=location_context,
+            session_id=session_id,
+            item_index=item_index,
+            queries=queries,
+        )
+        evidence_blocks = list(evidence_bundle.get("evidence_blocks", []))
+        stored_sources = list(evidence_bundle.get("stored_sources", []))
+        if not evidence_blocks:
+            logger.info('Competitive landscape enrichment skipped company="%s" reason="%s"', heading, "no_company_evidence")
+            return _build_skip_item(normalized_item, reason="no_company_evidence")
+
+        profile_response = await _extract_company_profile_from_evidence(
+            topic=topic,
+            company_name=heading,
+            existing_overview=body,
+            location_context=location_context,
+            evidence_blocks=evidence_blocks,
+        )
+        profile = profile_response.profile
+
+        attached_item = dict(normalized_item)
+        if profile.business_overview and not _looks_like_generic_company_overview(heading, profile.business_overview):
+            attached_item["body"] = profile.business_overview
+        attached_item["key_company_facts"] = list(profile.key_company_facts or [])
+        attached_item["competitive_positioning"] = _normalize_text(profile.competitive_positioning)
+        attached_item["examples"] = [
+            {
+                "text": example.text,
+                "company": example.company,
+                "event": example.event,
+                "event_date": example.event_date,
+                "published_date": example.published_date,
+                "location": example.location,
+                "example_type": example.example_type,
+                "why_it_matters": example.trend_fit_reason,
+                "source_quality": example.source_quality,
+                "confidence": example.confidence,
+                "validation_score": example.validation_score,
+                "fallback_used": bool(example.fallback_used),
+                "year": example.year,
+            }
+            for example in list(profile.recent_developments or [])[:MAX_EXAMPLES_PER_TREND]
+        ]
+        profile_source_ids = list(profile.source_ids or [])
+        if not profile_source_ids:
+            for example in profile.recent_developments or []:
+                for source_id in list(example.source_ids or []):
+                    if source_id not in profile_source_ids:
+                        profile_source_ids.append(source_id)
+        attached_item["source_ids"] = profile_source_ids[:10]
+        attached_with_sources = attach_sources_to_items([attached_item], evidence_blocks, max_sources_per_item=6)
+        attached_item = attached_with_sources[0] if attached_with_sources else attached_item
+        attached_item["fallback_used"] = False
+        attached_item["example_coverage_status"] = _coverage_status(attached_item.get("examples", []))
+        logger.info(
+            'Competitive landscape enrichment status index=%s company="%s" search_results=%s sources=%s facts=%s developments=%s positioning=%s',
+            item_index,
+            heading,
+            int(evidence_bundle.get("search_results", 0)),
+            len(stored_sources),
+            len(attached_item.get("key_company_facts", [])),
+            len(attached_item.get("examples", [])),
+            bool(attached_item.get("competitive_positioning")),
+        )
+        return attached_item
+
     primary_pass = await _run_example_pass(
         topic=topic,
         section=section,
@@ -474,6 +756,7 @@ async def _research_examples_for_item(
     if not validated_examples:
         fallback_queries = _build_fallback_queries(
             topic=topic,
+            section=section,
             trend_heading=heading,
             trend_body=body,
             location_context=location_context,
@@ -496,14 +779,36 @@ async def _research_examples_for_item(
     else:
         fallback_pass = {"sources": 0, "candidate_count": 0, "rejection_reasons": [], "search_results": 0}
 
-    attached_items = attach_examples_to_insights(
-        [normalized_item],
-        validated_examples,
-        trend_contexts={heading.lower(): _trend_context(item=normalized_item, topic=topic, location_context=location_context)},
-    )
-    attached_item = attached_items[0] if attached_items else normalized_item
-    attached_examples = list(attached_item.get("examples", []))[:MAX_EXAMPLES_PER_TREND]
-    attached_item["examples"] = attached_examples
+    if section == "competitive_landscape":
+        attached_item = dict(normalized_item)
+        attached_examples = [
+            {
+                "text": example.text,
+                "company": example.company,
+                "event": example.event,
+                "event_date": example.event_date,
+                "published_date": example.published_date,
+                "location": example.location,
+                "example_type": example.example_type,
+                "why_it_matters": example.trend_fit_reason,
+                "source_quality": example.source_quality,
+                "confidence": example.confidence,
+                "validation_score": example.validation_score,
+                "fallback_used": bool(example.fallback_used),
+                "year": example.year,
+            }
+            for example in validated_examples[:MAX_EXAMPLES_PER_TREND]
+        ]
+        attached_item["examples"] = attached_examples
+    else:
+        attached_items = attach_examples_to_insights(
+            [normalized_item],
+            validated_examples,
+            trend_contexts={heading.lower(): _trend_context(item=normalized_item, topic=topic, location_context=location_context)},
+        )
+        attached_item = attached_items[0] if attached_items else normalized_item
+        attached_examples = list(attached_item.get("examples", []))[:MAX_EXAMPLES_PER_TREND]
+        attached_item["examples"] = attached_examples
     attached_item["fallback_used"] = fallback_used or any(bool(example.get("fallback_used", False)) for example in attached_examples)
     attached_item["example_coverage_status"] = _coverage_status(attached_examples)
 
@@ -600,6 +905,11 @@ async def enrich_items_with_researched_examples(
             "partial" if result["examples"] else "none"
         )
         result["fallback_used"] = bool(result.get("fallback_used", False))
+        if section == "competitive_landscape":
+            if _looks_like_invalid_company_heading(result.get("heading", "")):
+                continue
+            if _looks_like_generic_company_overview(result.get("heading", ""), result.get("body", "")):
+                continue
         enriched_items.append(result)
 
     return enriched_items

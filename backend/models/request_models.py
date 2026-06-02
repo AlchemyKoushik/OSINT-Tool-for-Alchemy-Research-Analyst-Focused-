@@ -6,7 +6,7 @@ from config.settings import settings
 from services.location_service import resolve_location_context
 
 
-ResearchSection = Literal["trends", "drivers"]
+ResearchSection = Literal["trends", "drivers", "competitive_landscape"]
 LocationPreference = Literal["global", "region_specific", "country_specific"]
 
 

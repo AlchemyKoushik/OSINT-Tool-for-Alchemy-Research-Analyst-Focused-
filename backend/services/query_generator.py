@@ -21,7 +21,16 @@ QUERY_TIMEOUT_SECONDS = 25
 QUERY_MAX_RETRIES = 1
 MIN_QUERY_COUNT = 10
 MAX_QUERY_COUNT = 10
-DATA_TERMS = ("statistics", "report", "forecast", "data")
+BASE_DATA_TERMS = ("statistics", "report", "forecast", "data")
+COMPETITIVE_LANDSCAPE_TERMS = (
+    "market share",
+    "key players",
+    "leading companies",
+    "competitors",
+    "company profiles",
+    "ranking",
+    "major players",
+)
 CURRENT_QUERY_YEAR = datetime.utcnow().year
 RECENT_QUERY_YEARS = tuple(str(CURRENT_QUERY_YEAR - offset) for offset in range(0, 2))
 QUERY_ANGLE_QUALIFIERS = (
@@ -82,6 +91,20 @@ SECTION_QUERY_FOCUSES = {
         "premiumization",
         "localization",
         "expansion",
+    ),
+    "competitive_landscape": (
+        "key players",
+        "market share",
+        "leading companies",
+        "competitors",
+        "company profiles",
+        "ranking",
+        "regional players",
+        "challenger brands",
+        "ecosystem",
+        "niche companies",
+        "major players",
+        "top companies",
     ),
 }
 SECTION_QUERY_SUFFIXES = (
@@ -159,21 +182,27 @@ def _contains_topic_signal(query: str, topic: str) -> bool:
     return matches >= required_matches
 
 
+def _required_query_terms(section: str) -> tuple[str, ...]:
+    return COMPETITIVE_LANDSCAPE_TERMS if section == "competitive_landscape" else BASE_DATA_TERMS
+
+
 def _validate_query(
     query: str,
     context: LocationContext,
     *,
     topic: str,
+    section: str,
 ) -> str:
     normalized = _normalize_query(query)
     if not normalized:
         raise ValueError("Encountered an empty query.")
-    if _word_count(normalized) > 15:
-        raise ValueError(f"Query exceeds 15 words: {normalized}")
+    max_words = 16 if section == "competitive_landscape" else 15
+    if _word_count(normalized) > max_words:
+        raise ValueError(f"Query exceeds {max_words} words: {normalized}")
     if any(phrase in normalized.lower() for phrase in BANNED_QUERY_PHRASES):
         raise ValueError(f"Query contains a banned phrase: {normalized}")
-    if not any(term in normalized.lower() for term in DATA_TERMS):
-        raise ValueError(f"Query missing a required data term: {normalized}")
+    if not any(term in normalized.lower() for term in _required_query_terms(section)):
+        raise ValueError(f"Query missing a required section term: {normalized}")
     if not _contains_topic_signal(normalized, topic):
         raise ValueError(f"Query is missing topic signal: {normalized}")
     if not _contains_location(normalized, context):
@@ -201,7 +230,7 @@ def _compact_topic_for_query(topic: str, remaining_words: int) -> str:
     return " ".join(words[:target_words])
 
 
-def _ensure_required_terms(query: str, *, topic: str, context: LocationContext) -> str:
+def _ensure_required_terms_for_section(query: str, *, topic: str, context: LocationContext, section: str) -> str:
     normalized = _normalize_query(query)
     lowered = normalized.lower()
     rebuilt_parts: List[str] = []
@@ -215,10 +244,12 @@ def _ensure_required_terms(query: str, *, topic: str, context: LocationContext) 
     rebuilt_parts.append(normalized)
     candidate = _normalize_query(" ".join(part for part in rebuilt_parts if part))
 
-    if not any(term in lowered for term in DATA_TERMS):
-        candidate = _normalize_query(f"{candidate} statistics")
+    if not any(term in lowered for term in _required_query_terms(section)):
+        fallback_term = "market share" if section == "competitive_landscape" else "statistics"
+        candidate = _normalize_query(f"{candidate} {fallback_term}")
 
-    return _trim_query_to_limit(candidate.split())
+    max_words = 16 if section == "competitive_landscape" else 15
+    return _trim_query_to_limit(candidate.split(), limit=max_words)
 
 
 def build_fallback_queries(
@@ -231,6 +262,7 @@ def build_fallback_queries(
     normalized_section = str(section or "").strip().lower() or "trends"
     geo = resolved_location_context.value if not resolved_location_context.is_global else ""
     focus_terms = _build_query_focus_terms(normalized_section)
+    max_words = 16 if normalized_section == "competitive_landscape" else 15
 
     fallback_queries: List[str] = []
     seen_queries = set()
@@ -239,9 +271,9 @@ def build_fallback_queries(
             for suffix in SECTION_QUERY_SUFFIXES:
                 fixed_parts = [part for part in [geo, focus_term, qualifier, suffix] if part]
                 fixed_word_count = sum(_word_count(part) for part in fixed_parts)
-                compact_topic = _compact_topic_for_query(normalized_topic, 15 - fixed_word_count)
+                compact_topic = _compact_topic_for_query(normalized_topic, max_words - fixed_word_count)
                 query_parts = [compact_topic, *fixed_parts]
-                normalized_query = _normalize_query(_trim_query_to_limit(query_parts))
+                normalized_query = _normalize_query(_trim_query_to_limit(query_parts, limit=max_words))
                 normalized_key = normalized_query.lower()
                 if not normalized_query or normalized_key in seen_queries:
                     continue
@@ -250,6 +282,7 @@ def build_fallback_queries(
                         normalized_query,
                         resolved_location_context,
                         topic=normalized_topic,
+                        section=normalized_section,
                     )
                 except ValueError:
                     continue
@@ -274,6 +307,7 @@ def _build_query_user_prompt(
     section_focus = {
         "trends": "what is changing in the market",
         "drivers": "why the market is changing",
+        "competitive_landscape": "who the key players are and how they compare",
     }.get(section, "what is changing in the market")
     focus_terms = ", ".join(_build_query_focus_terms(section)[:8])
     location_mode = "Global"
@@ -297,14 +331,14 @@ def _build_query_user_prompt(
         "Runtime rules:\n"
         "- If Country is selected, every query must explicitly include the country name.\n"
         "- If Region is selected, every query must explicitly include the region keyword.\n"
-        '- Every query must include at least one of: "statistics", "report", "forecast", or "data".\n'
+        f'- Every query must include at least one section signal such as: {", ".join(_required_query_terms(section)[:6])}.\n'
         '- Every query must explicitly contain the topic or its obvious key terms.\n'
         f'- Prefer the latest available evidence and bias the query set toward {RECENT_QUERY_YEARS[0]} and {RECENT_QUERY_YEARS[-1]} when useful.\n'
         '- Prefer geography-aware and data-focused wording.\n'
         '- Avoid vague phrases like "analysis of" and "overview of".\n'
         '- Avoid generic forecast headlines and vague academic wording.\n'
         f'- Use varied phrasing across the {MAX_QUERY_COUNT} queries; do not repeat the same frame.\n'
-        "- Keep each query to 15 words or fewer."
+        f'- Keep each query to {16 if section == "competitive_landscape" else 15} words or fewer.'
     ).strip()
 
 
@@ -313,12 +347,14 @@ def _validate_query_batch(
     *,
     topic: str,
     location_context: LocationContext,
+    section: str,
 ) -> List[str]:
     repaired_queries = [
-        _ensure_required_terms(
+        _ensure_required_terms_for_section(
             query,
             topic=topic,
             context=location_context,
+            section=section,
         )
         for query in _deduplicate_queries(queries)
     ]
@@ -327,6 +363,7 @@ def _validate_query_batch(
             query,
             location_context,
             topic=topic,
+            section=section,
         )
         for query in repaired_queries
     ]
@@ -406,6 +443,7 @@ async def generate_search_queries(
                     list(parsed.queries),
                     topic=normalized_topic,
                     location_context=resolved_location_context,
+                    section=normalized_section,
                 )
 
                 _log(f"[QUERY] Generated queries | count={len(final_queries)}")
