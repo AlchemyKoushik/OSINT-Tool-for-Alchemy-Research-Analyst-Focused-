@@ -14,3 +14,4 @@ scrapling[fetchers]
 redis
 boto3
 reportlab
+psutil

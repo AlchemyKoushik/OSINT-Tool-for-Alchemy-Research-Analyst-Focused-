@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Sequence
+from typing import Any, Callable, Dict, List, Sequence
 
 from openai import AsyncOpenAI
 
@@ -483,6 +483,7 @@ async def _collect_company_research_evidence(
         list(queries),
         freshness="high",
         location_context=location_context,
+        workflow=section,
     )
     search_results = list(search_payload.get("results", []))[:MAX_EXAMPLE_RESULTS]
     if not search_results:
@@ -584,6 +585,7 @@ async def _run_example_pass(
         list(queries),
         freshness="high",
         location_context=location_context,
+        workflow="company_research",
     )
     search_results = list(search_payload.get("results", []))[:MAX_EXAMPLE_RESULTS]
     logger.info("Trend example search heading=%s fallback=%s results=%s", heading, fallback_mode, len(search_results))
@@ -835,6 +837,7 @@ async def enrich_items_with_researched_examples(
     section: str,
     location_context: LocationContext,
     session_id: str,
+    progress_callback: Callable[[int, int, Dict[str, Any]], None] | None = None,
 ) -> List[Dict[str, Any]]:
     all_items = [dict(item) for item in list(items)]
     if not all_items:
@@ -861,11 +864,20 @@ async def enrich_items_with_researched_examples(
                 logger.exception("Trend example research failed heading=%s error=%s", heading, exc)
                 return _build_skip_item(dict(item), reason="research_error")
 
-    results_by_index: Dict[int, Dict[str, Any]] = {}
+    async def _run_with_index(item_index: int, item: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+        return item_index, await _bounded(item, item_index)
 
-    primary_results = await asyncio.gather(*[_bounded(item, item_index) for item_index, item in selected_primary])
-    for (item_index, _), result in zip(selected_primary, primary_results):
+    results_by_index: Dict[int, Dict[str, Any]] = {}
+    completed_primary = 0
+    total_primary = len(selected_primary)
+
+    primary_tasks = [asyncio.create_task(_run_with_index(item_index, item)) for item_index, item in selected_primary]
+    for task in asyncio.as_completed(primary_tasks):
+        item_index, result = await task
         results_by_index[item_index] = result
+        completed_primary += 1
+        if progress_callback is not None:
+            progress_callback(completed_primary, total_primary, result)
 
     for item_index, item in enumerate(all_items, start=1):
         if item_index in selected_indexes:
@@ -893,13 +905,20 @@ async def enrich_items_with_researched_examples(
                 _normalize_text(item.get("heading")),
                 "missing_examples",
             )
-        backfill_results = await asyncio.gather(*[_bounded(item, item_index) for item_index, item in backfill_targets])
-        for (item_index, _), result in zip(backfill_targets, backfill_results):
+        total_backfill = len(backfill_targets)
+        completed_backfill = 0
+        backfill_tasks = [asyncio.create_task(_run_with_index(item_index, item)) for item_index, item in backfill_targets]
+        for task in asyncio.as_completed(backfill_tasks):
+            item_index, result = await task
             results_by_index[item_index] = result
+            completed_backfill += 1
+            if progress_callback is not None:
+                progress_callback(total_primary + completed_backfill, total_primary + total_backfill, result)
 
     enriched_items: List[Dict[str, Any]] = []
     for item_index in range(1, len(all_items) + 1):
         result = results_by_index.get(item_index, _build_skip_item(all_items[item_index - 1], reason="not_processed"))
+        result.pop("_example_skip_reason", None)
         result["examples"] = list(result.get("examples", [])) if isinstance(result.get("examples", []), list) else []
         result["example_coverage_status"] = str(result.get("example_coverage_status", "")).strip() or (
             "partial" if result["examples"] else "none"

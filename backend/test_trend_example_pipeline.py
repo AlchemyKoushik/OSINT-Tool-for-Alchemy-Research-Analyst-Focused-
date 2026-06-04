@@ -283,7 +283,7 @@ class TrendExampleBackfillTests(unittest.IsolatedAsyncioTestCase):
             query_calls.append(trend_heading)
             return [f"{trend_heading} announcement 2026"]
 
-        async def fake_search_queries(topic, queries, freshness="high", location_context=None):
+        async def fake_search_queries(topic, queries, freshness="high", location_context=None, workflow=None):
             return {
                 "results": [
                     {

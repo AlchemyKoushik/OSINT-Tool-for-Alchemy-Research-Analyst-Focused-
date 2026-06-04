@@ -31,6 +31,7 @@ A deployment-ready monorepo for an analyst-focused OSINT research workflow.
 ## Stack
 
 - Backend: FastAPI, deployable on Render
+- Worker: dedicated Redis-backed Python job worker for long-running research
 - Frontend: static HTML/CSS/JS, deployable on Vercel
 - UI: restored analyst-facing interface with the original Atelier experience
 
@@ -51,6 +52,13 @@ cd backend
 ..\venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+4. Run the dedicated background worker:
+
+```powershell
+cd backend
+..\venv\Scripts\python.exe -m workers.worker
+```
+
 ## Frontend setup
 
 Open `frontend/index.html` directly for basic local testing, or serve the folder with any static server.
@@ -65,9 +73,12 @@ Before production deploy, replace the placeholder backend URL in `frontend/index
 ## API routes
 
 - `GET /health`
+- `GET /health/detailed`
+- `GET /metrics`
 - `GET /api/locations`
 - `POST /api/research`
 - `POST /api/analyze`
+- `GET /api/research/jobs/{job_id}`
 - `POST /api/analyze-existing`
 - `POST /api/follow-up`
 - `POST /api/feedback`
@@ -76,9 +87,10 @@ Before production deploy, replace the placeholder backend URL in `frontend/index
 
 ### Render
 
-- Root directory: `backend`
-- Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- Deploy two Python services from `backend/render.yaml`:
+- Web service: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- Worker service: `python -m workers.worker`
+- Both services must share the same `REDIS_URL` and backend secrets.
 
 ### Vercel
 
@@ -87,4 +99,7 @@ Before production deploy, replace the placeholder backend URL in `frontend/index
 
 ## Notes
 
+- `POST /api/research` and `POST /api/analyze` now enqueue work and return a `job_id` immediately. Clients should poll `GET /api/research/jobs/{job_id}` until the job reaches `completed` or `failed`.
+- Local Windows launch: double-click `launch_alchemy.bat` to start the backend API, dedicated worker, static frontend, and open Chrome automatically.
+- The backend now exposes detailed runtime diagnostics, queue metrics, and structured stage-by-stage progress for research jobs.
 - `research_artifacts/`, `venv/`, local `.env` files, and generated cache files are intentionally excluded from git.

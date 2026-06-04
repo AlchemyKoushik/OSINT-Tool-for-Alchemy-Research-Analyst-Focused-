@@ -1,21 +1,19 @@
 import asyncio
-import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import router
 from config.settings import settings
+from core.diagnostics import log_shutdown_diagnostics, log_startup_diagnostics
+from core.logging import configure_logging, get_logger
 from services.openai_service import openai_key_loaded, test_openai_connection
 from services.redis_service import ping_redis
 from services.search_service import test_ddg
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 STARTUP_DIAGNOSTIC_TIMEOUT_SECONDS = 30
 STARTUP_REDIS_TIMEOUT_SECONDS = 3
 
@@ -70,6 +68,7 @@ async def _run_startup_diagnostics(redis_available: bool) -> None:
 @app.on_event("startup")
 async def startup_checks() -> None:
     logger.info("startup_check_begin")
+    log_startup_diagnostics("api", {"app_role": settings.APP_ROLE})
     settings.validate_required(
         (
             "OPENAI_API_KEY",
@@ -103,6 +102,6 @@ async def startup_checks() -> None:
     logger.info("startup_check_ready redis_available=%s diagnostics=background", redis_available)
 
 
-@app.get("/health")
-def health_check() -> dict[str, str]:
-    return {"status": "healthy"}
+@app.on_event("shutdown")
+async def shutdown_checks() -> None:
+    log_shutdown_diagnostics("api", {"app_role": settings.APP_ROLE})

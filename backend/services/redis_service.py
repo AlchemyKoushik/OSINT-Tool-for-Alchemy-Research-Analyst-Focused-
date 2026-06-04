@@ -134,8 +134,20 @@ def _run_redis_command(command_name: str, operation, fallback=None):
     raise last_error
 
 
+def run_redis_operation(command_name: str, operation, fallback=None):
+    return _run_redis_command(command_name, operation, fallback=fallback)
+
+
 def ping_redis() -> bool:
     return bool(_run_redis_command("ping", lambda client: client.ping(), fallback=lambda: False))
+
+
+def get_redis_status() -> Dict[str, Any]:
+    healthy = ping_redis()
+    return {
+        "available": healthy,
+        "url": settings.REDIS_URL,
+    }
 
 
 def _session_key(session_id: str) -> str:

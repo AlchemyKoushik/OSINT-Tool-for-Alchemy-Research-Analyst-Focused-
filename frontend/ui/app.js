@@ -13,6 +13,10 @@ import {
   useReducedMotion,
 } from "https://esm.sh/framer-motion@11.15.0?deps=react@18.3.1,react-dom@18.3.1";
 import htm from "https://esm.sh/htm@3.1.1";
+import { mountApp } from "./components/app-root.js";
+import { createResearchJobPoller } from "./hooks/use-research-job-polling.js";
+import { RESEARCH_PAGE_ID } from "./pages/research-page.js";
+import { buildJobProgressMessage } from "./utils/research-utils.js";
 
 const html = htm.bind(React.createElement);
 const DEFAULT_API_CANDIDATES = [
@@ -2695,6 +2699,13 @@ function App() {
   const journalSeedRef = useRef(0);
   const deferredRegionQuery = useDeferredValue(regionQuery);
   const deferredCountryQuery = useDeferredValue(countryQuery);
+  const pollResearchJob = createResearchJobPoller({
+    apiUrl,
+    buildErrorMessage,
+    buildJobProgressMessage,
+    reducedMotion,
+    appendLiveJournalMessage,
+  });
 
   async function handleDownloadResults() {
     if (!analysisResult) {
@@ -2780,43 +2791,6 @@ function App() {
     setCountryQuery("");
     setSecondaryFilterOpen(locationPreference !== "global");
   }, [locationPreference]);
-
-  useEffect(() => {
-    if (analysisState !== "analyzing") {
-      return undefined;
-    }
-
-    setProgressValue(12);
-    journalSeedRef.current += 1;
-    setLiveJournal([
-      {
-        id: `journal-${Date.now()}-${journalSeedRef.current}`,
-        message: LIVE_JOURNAL[0],
-      },
-    ]);
-
-    let progress = 12;
-    let messageIndex = 1;
-    const interval = window.setInterval(() => {
-      progress = Math.min(progress + 13, 90);
-      setProgressValue((current) => Math.max(current, progress));
-      journalSeedRef.current += 1;
-      setLiveJournal((previous) =>
-        [
-          ...previous,
-          {
-            id: `journal-${Date.now()}-${journalSeedRef.current}`,
-            message: LIVE_JOURNAL[messageIndex % LIVE_JOURNAL.length],
-          },
-        ].slice(-6),
-      );
-      messageIndex += 1;
-    }, reducedMotion ? 1500 : 900);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [analysisState, reducedMotion]);
 
   useEffect(() => {
     if (analysisState === "idle") {
@@ -3049,6 +3023,23 @@ function App() {
       if (!response.ok) {
         throw new Error(buildErrorMessage(responsePayload, "Follow-up research failed. Please try again."));
       }
+
+      if (decision !== "SUFFICIENT") {
+        const completedJobPayload = await pollResearchJob(responsePayload?.job_id, resultSection, (jobPayload) => {
+          setFollowUpPending((current) =>
+            current
+              ? {
+                  ...current,
+                  status: "loading",
+                  loading_message: buildJobProgressMessage(jobPayload, resultSection),
+                  progress_percentage: Number(jobPayload?.progress_percentage || 0),
+                }
+              : current,
+          );
+        });
+        responsePayload = completedJobPayload?.result || null;
+      }
+
       const normalizedFollowUpPayload = normalizeResearchResponse(responsePayload, resultSection);
       if (!normalizedFollowUpPayload) {
         throw new Error("Follow-up research returned an unexpected response shape.");
@@ -3106,6 +3097,27 @@ function App() {
     setFollowUpOpen(true);
   }
 
+  function appendLiveJournalMessage(message) {
+    const normalized = String(message || "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    journalSeedRef.current += 1;
+    setLiveJournal((previous) => {
+      if (previous.length && previous[previous.length - 1]?.message === normalized) {
+        return previous;
+      }
+      return [
+        ...previous,
+        {
+          id: `journal-${Date.now()}-${journalSeedRef.current}`,
+          message: normalized,
+        },
+      ].slice(-6);
+    });
+  }
+
   async function handleFollowUpSubmit(event) {
     event.preventDefault();
     if (isProcessing) {
@@ -3142,7 +3154,7 @@ function App() {
     flushSync(() => {
       setIsProcessing(true);
       setAnalysisError("");
-      setProgressValue((current) => Math.max(current, 12));
+      setProgressValue(8);
       setLoaderFrameId((current) => current + 1);
       setWorkspaceSurfaceState("transitioning");
       setLiveJournal([
@@ -3190,11 +3202,11 @@ function App() {
         throw new Error(buildErrorMessage(payload, "Analysis failed. Please try again."));
       }
 
-      if (payload?.error) {
-        throw new Error(payload.error);
-      }
-
-      const normalizedPayload = normalizeResearchResponse(payload, section);
+      const completedJobPayload = await pollResearchJob(payload?.job_id, section, (jobPayload) => {
+        const nextProgress = Number(jobPayload?.progress_percentage || 0);
+        setProgressValue((current) => Math.max(current, nextProgress));
+      });
+      const normalizedPayload = normalizeResearchResponse(completedJobPayload?.result, section);
       if (!normalizedPayload) {
         throw new Error("Analysis returned an unexpected response shape.");
       }
@@ -3321,7 +3333,5 @@ function App() {
 }
 
 const rootElement = document.getElementById("root");
-
-if (rootElement) {
-  createRoot(rootElement).render(html`<${App} />`);
-}
+window.__RESEARCH_PAGE_ID__ = RESEARCH_PAGE_ID;
+mountApp(rootElement, createRoot, html, App);

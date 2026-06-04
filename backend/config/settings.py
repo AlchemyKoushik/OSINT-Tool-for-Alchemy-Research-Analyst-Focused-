@@ -33,6 +33,7 @@ def _resolve_env_files() -> tuple[str, ...]:
 
 
 class Settings(BaseSettings):
+    APP_ROLE: str = "api"
     OPENAI_API_KEY: str = ""
     OPENAI_ANALYSIS_MODEL: str = "gpt-4.1"
     OPENAI_SUPPORT_MODEL: str = "gpt-4.1-mini"
@@ -59,6 +60,11 @@ class Settings(BaseSettings):
     CLEANUP_MAX_RETRIES: int = 2
     MAX_TRENDS_WITH_EXAMPLE_RESEARCH: int | None = None
     BACKFILL_ALL_MISSING_TREND_EXAMPLES: bool = True
+    JOB_QUEUE_NAME: str = "osint:research:queue"
+    JOB_TTL_SECONDS: int = 21600
+    JOB_POLL_TIMEOUT_SECONDS: int = 5
+    JOB_MAX_RETRIES: int = 3
+    WORKER_IDLE_SLEEP_SECONDS: float = 1.0
 
     model_config = SettingsConfigDict(
         env_file=_resolve_env_files(),

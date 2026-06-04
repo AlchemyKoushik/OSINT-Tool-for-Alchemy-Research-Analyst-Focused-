@@ -5,6 +5,7 @@ import asyncio
 from typing import Any, Dict, List
 
 from config.settings import settings
+from core.diagnostics import ProgressCallback, ResearchDiagnostics
 from services.content_processor import prepare_processed_content
 from services.location_service import LocationContext
 from services.redis_service import update_session
@@ -37,6 +38,8 @@ async def execute_pipeline(
     freshness: str = "high",
     location_context: LocationContext | None = None,
     provided_queries: List[str] | None = None,
+    progress_callback: ProgressCallback | None = None,
+    diagnostics: ResearchDiagnostics | None = None,
 ) -> Dict[str, Any]:
     # Keep orchestration in one place so the API route gets a single bounded, observable pipeline call.
     resolved_location_context = location_context or LocationContext()
@@ -65,6 +68,14 @@ async def execute_pipeline(
     }
 
     query_start = time.perf_counter()
+    if diagnostics is not None and progress_callback is not None:
+        progress_callback(
+            diagnostics.mark_stage(
+                "Query Generation",
+                activity="Generating search queries",
+                progress=22,
+            )
+        )
     _log(f"[PIPELINE] Query generation started | session_id={session_id}")
     try:
         if provided_queries:
@@ -87,6 +98,14 @@ async def execute_pipeline(
     _log(f"[PIPELINE] Query generation completed | count={len(queries)} | ms={execution_time['query_ms']} | session_id={session_id}")
 
     search_start = time.perf_counter()
+    if diagnostics is not None and progress_callback is not None:
+        progress_callback(
+            diagnostics.mark_stage(
+                "Search",
+                activity="Searching source candidates",
+                progress=32,
+            )
+        )
     _log(f"[PIPELINE] Search started | query_count={len(queries)} | session_id={session_id}")
     try:
         search_payload = await search_queries(
@@ -94,6 +113,7 @@ async def execute_pipeline(
             queries,
             freshness=freshness,
             location_context=resolved_location_context,
+            workflow=section,
         )
         queries = list(search_payload.get("queries", queries))
         search_results = list(search_payload.get("results", []))
@@ -111,6 +131,15 @@ async def execute_pipeline(
     _log(f"[PIPELINE] Search completed | results={len(search_results)} | ms={execution_time['search_ms']} | session_id={session_id}")
 
     scrape_start = time.perf_counter()
+    if diagnostics is not None and progress_callback is not None:
+        progress_callback(
+            diagnostics.mark_stage(
+                "Scraping",
+                activity="Scraping URLs and collecting artifacts",
+                progress=44,
+                urls_processed=len(search_results),
+            )
+        )
     _log(f"[PIPELINE] Scraping started | candidate_results={len(search_results)} | session_id={session_id}")
     try:
         prioritized_search_results = list(search_results[:MAX_PIPELINE_SCRAPE_RESULTS])
@@ -144,6 +173,16 @@ async def execute_pipeline(
     )
 
     process_start = time.perf_counter()
+    if diagnostics is not None and progress_callback is not None:
+        progress_callback(
+            diagnostics.mark_stage(
+                "Validation",
+                activity="Processing scraped content into evidence",
+                progress=56,
+                urls_processed=int(artifact_bundle.get("counts", {}).get("success_count", 0)),
+                documents_processed=int(artifact_bundle.get("counts", {}).get("usable_text_count", 0)),
+            )
+        )
     _log(f"[PIPELINE] Content processing started | session_id={session_id}")
     try:
         stored_sources = await asyncio.to_thread(load_saved_sources, list(artifact_bundle.get("artifacts", [])))
