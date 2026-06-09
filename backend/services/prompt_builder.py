@@ -21,9 +21,8 @@ SECTION_DEFINITIONS: Final[Dict[str, str]] = {
         "investment, and strategic actions."
     ),
     "competitive_landscape": (
-        "Identify the key players in the market and classify them into top players, mid-level players, "
-        "and small players based on scale, reach, brand strength, breadth of offering, investment capacity, "
-        "and market visibility within the requested geography."
+        "Identify the key players in the market, split them into major players and small / mid-sized / emerging "
+        "players, and ground every company selection in recent evidence from the last 2 to 3 years."
     ),
 }
 
@@ -38,6 +37,46 @@ def get_prompt(section: str, max_items: int = 10) -> str:
     normalized_section = str(section or "").strip().lower()
     if normalized_section not in SECTION_TITLES:
         raise ValueError("Invalid section")
+
+    if normalized_section == "competitive_landscape":
+        return (
+            "You are an analyst building the company-discovery stage for a Competitive Landscape OSINT workflow.\n\n"
+            "Objective:\n"
+            "- Identify and separate the market into Major Players and Small / Mid-sized / Emerging Players.\n"
+            "- Focus company selection on the latest 2 to 3 years of evidence.\n"
+            "- Return only real companies active in the requested industry and geography.\n"
+            "- This stage is discovery only. Do not generate company profiles.\n\n"
+            "Rules:\n"
+            "- Use only the supplied evidence.\n"
+            "- Build a broad candidate company pool before classification.\n"
+            "- Exclude inactive companies, duplicate companies, and companies without meaningful industry participation.\n"
+            "- Exclude companies that are not active in the requested geography.\n"
+            "- Prefer companies with visible activity, expansion, launches, partnerships, funding, acquisitions, deployments, or other concrete signals from the last 2 to 3 years.\n"
+            "- Look beyond market share reports and leading-company lists by considering local companies, regional companies, independent developers, niche specialists, challenger companies, fast-growing companies, solar developers, renewable project developers, and EPC companies when the evidence supports them.\n"
+            "- When evidence supports it, aim to surface roughly 5 to 10 major-player candidates and 5 to 15 emerging-player candidates before downstream research.\n"
+            "- Keep company_name fixed to the company name only.\n"
+            "- market_role must be exactly one concise label such as Market Leader, Global Leader, Regional Leader, Challenger, Emerging Player, Emerging Specialist, Niche Specialist, Technology Provider, Infrastructure Provider, or Local Champion.\n"
+            "- Do not generate business_overview, key_company_facts, recent strategic developments, or competitive_positioning in this stage.\n"
+            "- Every company must include source_ids tied to the evidence blocks.\n\n"
+            "Output JSON:\n"
+            "{\n"
+            '  "major_players": [\n'
+            "    {\n"
+            '      "company_name": "Company name",\n'
+            '      "market_role": "Market Leader",\n'
+            '      "source_ids": [1, 2]\n'
+            "    }\n"
+            "  ],\n"
+            '  "emerging_players": [\n'
+            "    {\n"
+            '      "company_name": "Company name",\n'
+            '      "market_role": "Emerging Player",\n'
+            '      "source_ids": [3, 4]\n'
+            "    }\n"
+            "  ]\n"
+            "}\n\n"
+            f"Final Rule: Return no more than {max(1, int(max_items or 1))} companies per group and return strict JSON only."
+        )
 
     return get_main_output_prompt_template().replace("{max_items}", str(max(1, int(max_items or 1))))
 
@@ -159,6 +198,30 @@ def build_metadata_payload(
         raise ValueError("Invalid section")
 
     resolved_location_context = location_context or LocationContext()
+    if normalized_section == "competitive_landscape":
+        payload = (
+            "INPUT\n"
+            f"- Topic: {topic.strip()}\n"
+            "- Section: Competitive Landscape\n"
+            f"- Research date: {get_current_research_date()}\n"
+            f"{_format_location_line(resolved_location_context)}\n\n"
+            "WORKFLOW\n"
+            "- Build two groups only: major_players and emerging_players.\n"
+            "- Treat emerging_players as the bucket for small, mid-sized, local, regional, niche, challenger, specialist, and fast-growing companies.\n"
+            "- Base company selection on evidence from the last 2 to 3 years whenever possible.\n"
+            "- Prefer companies with recent commercial activity, launches, expansion, partnerships, investments, acquisitions, deployments, contracts, approvals, or visible market participation.\n"
+            "- Exclude inactive companies, duplicate companies, and companies without clear geography fit.\n"
+            "- Keep the output company-specific. Do not produce trend summaries.\n"
+            "- This stage is company discovery only. Do not generate business overviews, key facts, recent developments, or competitive positioning yet.\n"
+            "- Every company must include source_ids tied directly to the evidence blocks.\n"
+            "- When the evidence supports it, try to surface roughly 5 to 10 major-player candidates and 5 to 15 emerging-player candidates before later company research.\n"
+            f"- Return up to {max(1, int(max_items or 1))} companies in each group when supported by evidence.\n\n"
+            "SOURCE_METADATA\n"
+            f"{_format_source_metadata(source_scores, artifact_counts)}\n\n"
+            "EVIDENCE\n"
+            f"{_format_evidence_blocks(evidence_blocks)}"
+        )
+        return payload.strip()
 
     payload = (
         "INPUT\n"
@@ -247,13 +310,14 @@ def build_trend_example_extraction_payload(
             f"- Company name: {trend_heading.strip()}\n"
             f"- Company overview: {trend_body.strip()}\n\n"
             "TASK\n"
-            "- Extract only recent developments for this specific company from the last 12 months.\n\n"
+            "- Extract only recent developments for this specific company from the last 2 to 3 years.\n\n"
             "Rules:\n"
             "- Use only the evidence below.\n"
             "- Extract only developments directly tied to the named company.\n"
             "- Prioritise product launches, service launches, partnerships, contracts, funding, acquisitions, expansions, deployments, approvals, and major strategic moves.\n"
-            "- Every example must have a clear date signal within the last 12 months from the research date.\n"
-            "- If the evidence is older than 12 months, generic, or not clearly tied to the company, exclude it.\n"
+            "- Prefer examples from the current year, previous year, and two years ago.\n"
+            "- Every example must have a clear date signal within roughly the last 36 months from the research date.\n"
+            "- If the evidence is older than 3 years, generic, or not clearly tied to the company, exclude it.\n"
             "- Return an empty examples list if no valid recent developments exist.\n\n"
             "EVIDENCE\n"
             f"{_format_example_evidence_blocks(evidence_blocks)}\n\n"
@@ -318,21 +382,29 @@ def build_company_profile_extraction_payload(
         "- Build a concise company profile for the named company using only the evidence below.\n\n"
         "Rules:\n"
         "- Keep the company name fixed to the named company. Do not rename it.\n"
+        "- Treat the existing company overview draft only as a soft disambiguation hint. Ignore it when the evidence does not support it.\n"
+        "- Before writing the profile, answer these questions from the evidence: why is this company included, what makes it relevant to this market, and what evidence shows activity in this market during the last 24 to 36 months.\n"
+        "- If the evidence cannot answer those questions credibly, return empty profile fields rather than guessing.\n"
         "- Write business_overview as a concise 2 to 3 sentence description of the company business, operating model, customer or end-market focus, and market role.\n"
         "- Do not write generic market size, CAGR, forecast, chapter, or report-summary text in business_overview.\n"
         "- If the evidence does not support business_overview, return an empty string.\n"
-        "- key_company_facts should contain only evidence-backed bullets for this company, such as headquarters, founding year, ownership, revenue or scale, geographic presence, products or services, customer exposure, or market position.\n"
-        "- For public or well-known companies, aggressively extract the maximum supported set of key_company_facts from the evidence rather than returning a sparse list.\n"
-        "- Prioritise these fact categories whenever supported: headquarters, year founded, revenue or scale, geographic presence, key products or services, customer base or end-market exposure, ownership structure, and market position or ranking.\n"
+        "- key_company_facts must contain only quantifiable, verifiable, market-relevant facts for this company.\n"
+        "- Prefer measurable facts such as operating capacity, project pipeline, storage pipeline, major projects, PPAs, customer count, subscribers, user base, ARR, AUM, distribution footprint, coverage, spectrum holdings, assets, or clearly measurable commercial scale.\n"
+        "- Reject generic claims like market leader, strong presence, recognised company, major company, leading player, or similar wording unless the evidence supports that claim with a measurable fact in the same sentence.\n"
+        "- Do not use headquarters, founding year, or generic company history as key_company_facts unless they are directly material to market relevance and supported by evidence.\n"
+        "- Keep key_company_facts concise and evidence-backed.\n"
         "- Return only the fact text, not labels like Fact 1.\n"
         "- Return an empty key_company_facts list if the evidence does not support them.\n"
-        "- recent_developments must include only company-specific developments from the last 12 months.\n"
-        "- Each recent development must be factual, date-supported, and clearly tied to the named company.\n"
-        "- If no recent developments are supported, return an empty recent_developments list.\n"
-        "- competitive_positioning should be one short concluding line about what the company's recent actions imply about its competitive strategy.\n"
+        "- Do not generate recent_developments in this call. A separate extraction step will handle recent developments.\n"
+        '- Always return an empty recent_developments list in this response.\n'
+        "- competitive_positioning should be one concise insight-driven sentence explaining what the company's actions indicate strategically in this market.\n"
+        "- Focus on implications such as scaling project pipeline, moving into storage, entering new customer segments, geographic expansion, defending position, moving up the value chain, or strengthening technology capabilities.\n"
+        "- Do not write generic lines like holds a leading position in the market unless the sentence explains the strategic implication using evidence.\n"
         "- Return an empty competitive_positioning string if the evidence does not support it.\n"
         "- source_ids must reference only the numbered evidence blocks that directly support the profile.\n"
-        "- Prefer official company, investor, regulator, exchange, and reputable trade or news sources when available.\n\n"
+        "- Prefer official company, investor, annual report, regulator, exchange, government, project database, reputable industry publication, and reputable news sources when available.\n"
+        "- Avoid relying primarily on lead-generation websites, contact directories, generic Top X articles, SEO-driven blogs, or unsourced market reports.\n"
+        "- Each company should ideally be supported by 1 to 2 company-specific sources.\n\n"
         "EVIDENCE\n"
         f"{_format_example_evidence_blocks(evidence_blocks)}\n\n"
         "Return strict JSON only in this shape:\n"
@@ -364,6 +436,176 @@ def build_company_profile_extraction_payload(
     ).strip()
 
 
+def build_recent_company_developments_payload(
+    *,
+    topic: str,
+    company_name: str,
+    location_context: Optional[LocationContext] = None,
+    evidence_blocks: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    resolved_location_context = location_context or LocationContext()
+    current_date = get_current_research_date()
+    return (
+        "# COMPETITIVE LANDSCAPE | RECENT COMPANY DEVELOPMENTS\n\n"
+        "## Objective\n"
+        "Identify the most important recent developments for a given company operating within a specified industry.\n\n"
+        "The output should focus only on developments that are strategically significant and relevant to:\n"
+        "- Investors\n"
+        "- Competitors\n"
+        "- Customers\n"
+        "- Industry participants\n\n"
+        "---\n\n"
+        "## Input Variables\n\n"
+        f"- Company Name: {company_name.strip()}\n"
+        f"- Industry Name: {topic.strip()}\n"
+        f"- Research date: {current_date}\n"
+        f"- Geography: {resolved_location_context.label if not resolved_location_context.is_global else 'Global'}\n\n"
+        "---\n\n"
+        "## Time Period\n\n"
+        "Analyze only developments announced within:\n"
+        "- Current calendar year\n"
+        "- Previous calendar year\n"
+        "- Two calendar years prior\n\n"
+        "Total Coverage:\n"
+        "- Last 3 calendar years only\n\n"
+        "Ignore anything older.\n\n"
+        "---\n\n"
+        "## Selection Criteria\n\n"
+        "Include developments that satisfy one or more of the following:\n"
+        "- Acquisitions\n"
+        "- Mergers\n"
+        "- Divestments\n"
+        "- Strategic investments\n"
+        "- Major project awards\n"
+        "- Contract wins\n"
+        "- Commercial agreements\n"
+        "- Funding rounds\n"
+        "- Debt raises\n"
+        "- Capital investments\n"
+        "- Entry into new countries or regions\n"
+        "- Expansion into new customer segments\n"
+        "- Major product launches\n"
+        "- Major technology launches\n"
+        "- Platform launches\n"
+        "- Large-scale project announcements\n"
+        "- Project commissioning\n"
+        "- Operational milestones\n"
+        "- Strategic partnerships\n"
+        "- Joint ventures\n"
+        "- Alliances\n"
+        "- Regulatory approvals\n"
+        "- Licences\n"
+        "- Permits materially impacting growth\n"
+        "- Manufacturing, infrastructure, or operational expansion\n"
+        "- Major restructurings\n"
+        "- Significant leadership changes\n"
+        "- Business transformations\n\n"
+        "---\n\n"
+        "## Exclusion Criteria\n\n"
+        "Do NOT include:\n"
+        "- General company descriptions\n"
+        "- Marketing announcements\n"
+        "- Event participation\n"
+        "- Conference attendance\n"
+        "- Awards\n"
+        "- Rankings\n"
+        "- Certifications\n"
+        "- Industry recognitions\n"
+        "- Minor product updates\n"
+        "- Routine business activities\n"
+        "- Media speculation\n"
+        "- Opinion articles\n"
+        "- Duplicate announcements\n"
+        "- Developments older than 3 years\n"
+        "- Developments lacking verifiable sources\n\n"
+        "---\n\n"
+        "## Source Requirements\n\n"
+        "Use only:\n"
+        "- Company press releases\n"
+        "- Regulatory filings\n"
+        "- Investor presentations\n"
+        "- Stock exchange announcements\n"
+        "- Government announcements\n"
+        "- Reputable industry publications\n"
+        "- Tier-1 business media\n\n"
+        "Do NOT use:\n"
+        "- Blogs\n"
+        "- Aggregator websites\n"
+        "- AI-generated content\n"
+        "- User-generated content\n"
+        "- Forums\n"
+        "- Social media posts\n\n"
+        "Exception:\n"
+        "- Social media posts may be used only if they directly link to an official announcement.\n\n"
+        "---\n\n"
+        "## Verification Requirements\n\n"
+        "Each development must:\n"
+        "- Be supported by at least one verifiable source\n"
+        "- Include the exact announcement date or month/year\n"
+        "- Be factually stated\n"
+        "- Contain no assumptions or interpretations\n"
+        "- Be independently corroborated when possible\n"
+        "- Clearly explain why the development is strategically significant\n\n"
+        "---\n\n"
+        "## Output Requirements\n\n"
+        "### Maximum Results\n"
+        "- Return a maximum of 5 developments\n\n"
+        "### Prioritization Logic\n"
+        "- Rank by strategic importance\n"
+        "- Do NOT rank by recency alone\n\n"
+        "### If Fewer Than 5 Exist\n"
+        "- Return only available developments\n\n"
+        "### If None Exist\n"
+        '- Return exactly an empty "examples" list.\n\n'
+        "---\n\n"
+        "## Quality Control Checklist\n\n"
+        "Verify:\n"
+        "- All developments occurred within the last 3 years\n"
+        "- No duplicate developments are included\n"
+        "- No vague language is used\n"
+        "- No assumptions\n"
+        "- No forecasts\n"
+        "- No analyst opinions\n"
+        "- Every development has a valid source\n"
+        "- Every development is material to competitive positioning\n"
+        "- Only company-specific developments are included\n"
+        "- No general industry trends are included\n\n"
+        "Avoid phrases such as:\n"
+        '- "continued expansion"\n'
+        '- "strengthened position"\n'
+        '- "focused on growth"\n\n'
+        "Before finalizing:\n"
+        "1. Search separately for acquisitions, partnerships, funding activities, project awards, major contracts, market expansions, technology launches, and operational milestones.\n"
+        "2. Do NOT stop after finding five developments.\n"
+        "3. First identify all material developments from the last three years.\n"
+        "4. Rank all identified developments by strategic importance.\n"
+        "5. Return only the top 5 most material developments.\n\n"
+        "## Evidence\n"
+        f"{_format_example_evidence_blocks(evidence_blocks)}\n\n"
+        "Return strict JSON only in this shape:\n"
+        "{\n"
+        '  "examples": [\n'
+        "    {\n"
+        f'      "company": "{company_name.strip()}",\n'
+        '      "event": "specific development title",\n'
+        '      "text": "factual development description",\n'
+        '      "event_date": "YYYY-MM-DD or YYYY-MM or empty",\n'
+        '      "published_date": "YYYY-MM-DD or YYYY-MM or empty",\n'
+        '      "location": "location or empty",\n'
+        '      "example_type": "acquisition | merger | divestment | investment | project_award | contract | partnership | expansion | launch | regulatory | capacity_expansion | restructuring | leadership | other",\n'
+        '      "confidence": "high | medium | low",\n'
+        '      "trend_fit_reason": "why this development is strategically significant",\n'
+        '      "source_quality": "Tier 1 | Tier 2 | Tier 3",\n'
+        '      "validation_score": 0,\n'
+        '      "year": "YYYY-MM-DD or YYYY",\n'
+        '      "source_ids": [1]\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "Return no commentary outside JSON."
+    ).strip()
+
+
 def build_example_search_query_user_prompt(
     *,
     topic: str,
@@ -392,13 +634,14 @@ def build_example_search_query_user_prompt(
             f"- Company: {trend_heading.strip()}\n"
             f"- Company overview: {trend_body.strip()}\n\n"
             "TASK\n"
-            "Generate search queries to find recent developments for this company from the last 12 months.\n\n"
+            "Generate search queries to gather high-quality company evidence for this company in the specified market and geography.\n\n"
             "Rules:\n"
             "- Generate 5 to 8 queries.\n"
             "- Every query must be centered on the named company.\n"
-            "- Cover a mix of partnerships, launches, upgrades, expansions, market entry, M&A, investments, strategic pivots, operational issues, regulatory challenges, financial pressure, leadership changes, and restructuring where relevant.\n"
-            "- Bias toward the current year and previous year only.\n"
-            "- Avoid generic market trend queries.\n"
+            "- Prioritise company overview, portfolio, operating assets, project pipeline, customer exposure, contracts, PPAs, official company publications, investor materials, and company-specific market activity.\n"
+            "- Prefer broader company-evidence queries before narrower event-specific queries.\n"
+            "- Do not generate queries whose main purpose is recent developments, competitor positioning, or generic market trend summaries.\n"
+            "- Avoid brittle year-scope strings such as OR OR combinations.\n"
             "- Avoid unsupported competitor names.\n\n"
             "Return JSON in this shape:\n"
             "{\n"

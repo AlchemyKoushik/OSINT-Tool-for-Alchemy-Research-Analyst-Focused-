@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
@@ -16,6 +17,13 @@ from services.location_service import (
     LocationContext,
     assess_location_relevance,
     should_keep_scraped_content,
+)
+from services.crawlers import (
+    CrawlResultPayload,
+    crawler_result_to_dict,
+    estimate_entity_coverage,
+    get_shared_crawl4ai_crawler,
+    get_shared_playwright_fallback_crawler,
 )
 from services.security.url_guard import assert_public_url
 from services.storage_service import read_from_r2, upload_to_r2
@@ -47,6 +55,7 @@ TOTAL_URL_CAP = 200
 MIN_PDF_CONTENT_LENGTH = 500
 MIN_WEB_CONTENT_LENGTH = 180
 SCRAPLING_TIMEOUT_SECONDS = 8
+CRAWL4AI_MIN_CONTENT_LENGTH = max(120, settings.CRAWL4AI_MIN_CONTENT_LENGTH)
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
@@ -575,6 +584,98 @@ async def _scrape_with_scrapling_payload(url: str) -> Tuple[str, str, str]:
         return "", "", error_message
 
 
+async def _scrape_with_existing_stack_payload(url: str, client: httpx.AsyncClient) -> CrawlResultPayload:
+    started_at = time.perf_counter()
+    scrapedo_text, scrapedo_image_url, scrapedo_error = await _scrape_with_scrapedo_payload(url, client)
+    if scrapedo_text:
+        return CrawlResultPayload(
+            url=url,
+            markdown=scrapedo_text,
+            raw_markdown=scrapedo_text,
+            clean_markdown=scrapedo_text,
+            plain_text=scrapedo_text,
+            crawler_used="legacy_scraper",
+            crawl_duration_ms=int((time.perf_counter() - started_at) * 1000),
+            image_url=scrapedo_image_url,
+            error="",
+        ).ensure_metrics()
+
+    scrapling_text, scrapling_image_url, scrapling_error = await _scrape_with_scrapling_payload(url)
+    if scrapling_text:
+        return CrawlResultPayload(
+            url=url,
+            markdown=scrapling_text,
+            raw_markdown=scrapling_text,
+            clean_markdown=scrapling_text,
+            plain_text=scrapling_text,
+            crawler_used="scrapling",
+            crawl_duration_ms=int((time.perf_counter() - started_at) * 1000),
+            image_url=scrapling_image_url or scrapedo_image_url,
+            error="",
+        ).ensure_metrics()
+
+    combined_errors = [message for message in (scrapedo_error, scrapling_error) if message]
+    return CrawlResultPayload(
+        url=url,
+        crawler_used="legacy_scraper",
+        crawl_duration_ms=int((time.perf_counter() - started_at) * 1000),
+        error=" | ".join(combined_errors) or "All web scraping methods failed.",
+    ).ensure_metrics()
+
+
+def _crawl_quality_is_sufficient(payload: CrawlResultPayload) -> bool:
+    if not payload.is_success:
+        return False
+    if payload.content_length < CRAWL4AI_MIN_CONTENT_LENGTH:
+        return False
+    return payload.extraction_quality_score >= float(settings.CRAWL4AI_QUALITY_THRESHOLD)
+
+
+def _is_probably_dynamic_page(payload: CrawlResultPayload) -> bool:
+    metadata_blob = json.dumps(payload.metadata, ensure_ascii=True).lower() if payload.metadata else ""
+    text = f"{payload.plain_text}\n{payload.markdown}\n{metadata_blob}".lower()
+    dynamic_markers = (
+        "enable javascript",
+        "loading",
+        "please wait",
+        "app shell",
+        "__next",
+        "reactroot",
+        "chunk.js",
+    )
+    return any(marker in text for marker in dynamic_markers)
+
+
+def _benchmark_crawler_outputs(primary: CrawlResultPayload, secondary: CrawlResultPayload) -> Dict[str, Any]:
+    return {
+        "primary": crawler_result_to_dict(primary),
+        "secondary": crawler_result_to_dict(secondary),
+        "content_length_delta": int(primary.content_length) - int(secondary.content_length),
+        "quality_score_delta": round(float(primary.extraction_quality_score) - float(secondary.extraction_quality_score), 4),
+        "entity_coverage": {
+            "primary": estimate_entity_coverage(primary.plain_text),
+            "secondary": estimate_entity_coverage(secondary.plain_text),
+        },
+        "duration_delta_ms": int(primary.crawl_duration_ms) - int(secondary.crawl_duration_ms),
+    }
+
+
+async def _run_crawl4ai_pipeline(url: str) -> CrawlResultPayload:
+    crawl4ai_crawler = await get_shared_crawl4ai_crawler()
+    primary = await crawl4ai_crawler.crawl(url)
+    if _crawl_quality_is_sufficient(primary) and not _is_probably_dynamic_page(primary):
+        return primary
+
+    playwright_crawler = await get_shared_playwright_fallback_crawler()
+    fallback = await playwright_crawler.crawl(url)
+    if fallback.is_success:
+        fallback.fallback_triggered = True
+        return fallback.ensure_metrics()
+
+    primary.fallback_triggered = True
+    return primary.ensure_metrics()
+
+
 def _artifact_counts(artifacts: List[Dict[str, Any]]) -> Dict[str, int]:
     return {
         "total_artifacts": len(artifacts),
@@ -613,6 +714,19 @@ def _empty_artifact(
         "text_available": False,
         "text_chars": 0,
         "content_signature": "",
+        "scrape_method": "",
+        "crawler_used": "",
+        "crawl_duration_ms": 0,
+        "content_length": 0,
+        "markdown_length": 0,
+        "fallback_triggered": False,
+        "extraction_quality_score": 0.0,
+        "raw_markdown_key": "",
+        "clean_markdown_key": "",
+        "markdown_key": "",
+        "metadata_key": "",
+        "structured_content_key": "",
+        "crawler_benchmark": {},
         "location_score": 0,
         "location_matches": [],
         "image_url": "",
@@ -744,20 +858,37 @@ async def scrape_url(
                     "location_matches": list(location_payload.get("location_matches", [])),
                 }
 
-            scrapedo_text, scrapedo_image_url, scrapedo_error = await _scrape_with_scrapedo_payload(url, client)
-            content = scrapedo_text
-            image_url = scrapedo_image_url
-            scrape_method = "scrape.do"
-            fallback_error = ""
-            if not content:
-                scrapling_text, scrapling_image_url, scrapling_error = await _scrape_with_scrapling_payload(url)
-                if not scrapling_text:
-                    combined_errors = [message for message in (scrapedo_error, scrapling_error) if message]
-                    raise RuntimeError(" | ".join(combined_errors) or "All web scraping methods failed.")
-                content = scrapling_text
-                image_url = scrapling_image_url or image_url
-                scrape_method = "scrapling"
-                fallback_error = scrapedo_error
+            crawl_result: CrawlResultPayload
+            crawler_benchmark: Dict[str, Any] = {}
+            if settings.USE_CRAWL4AI and settings.COMPARE_CRAWLERS:
+                crawl_result, legacy_result = await asyncio.gather(
+                    _run_crawl4ai_pipeline(url),
+                    _scrape_with_existing_stack_payload(url, client),
+                )
+                crawler_benchmark = _benchmark_crawler_outputs(crawl_result, legacy_result)
+            elif settings.USE_CRAWL4AI:
+                crawl_result = await _run_crawl4ai_pipeline(url)
+            elif settings.COMPARE_CRAWLERS:
+                legacy_result, crawl4ai_result = await asyncio.gather(
+                    _scrape_with_existing_stack_payload(url, client),
+                    _run_crawl4ai_pipeline(url),
+                )
+                crawl_result = legacy_result
+                crawler_benchmark = _benchmark_crawler_outputs(legacy_result, crawl4ai_result)
+            else:
+                crawl_result = await _scrape_with_existing_stack_payload(url, client)
+
+            if not crawl_result.is_success:
+                raise RuntimeError(crawl_result.error or "All web scraping methods failed.")
+
+            content = crawl_result.plain_text
+            markdown_content = crawl_result.markdown or content
+            raw_markdown = crawl_result.raw_markdown or markdown_content
+            clean_markdown = crawl_result.clean_markdown or markdown_content
+            metadata_json = json.dumps(crawl_result.metadata, ensure_ascii=False, indent=2) if crawl_result.metadata else ""
+            structured_content = crawl_result.structured_content
+            image_url = crawl_result.image_url
+            scrape_method = crawl_result.crawler_used or "legacy_scraper"
 
             normalized_content = _normalize_whitespace(content)
             if len(normalized_content) < MIN_WEB_CONTENT_LENGTH:
@@ -799,19 +930,62 @@ async def scrape_url(
                 f"{index:02d}_{file_seed}.txt",
                 content,
             )
+            markdown_key = await asyncio.to_thread(
+                upload_to_r2,
+                session_id,
+                f"{index:02d}_{file_seed}.md",
+                markdown_content,
+            )
+            raw_markdown_key = await asyncio.to_thread(
+                upload_to_r2,
+                session_id,
+                f"{index:02d}_{file_seed}.raw.md",
+                raw_markdown,
+            )
+            clean_markdown_key = await asyncio.to_thread(
+                upload_to_r2,
+                session_id,
+                f"{index:02d}_{file_seed}.clean.md",
+                clean_markdown,
+            )
+            metadata_key = await asyncio.to_thread(
+                upload_to_r2,
+                session_id,
+                f"{index:02d}_{file_seed}.metadata.json",
+                metadata_json or "{}",
+            )
+            structured_content_key = ""
+            if structured_content.strip():
+                structured_content_key = await asyncio.to_thread(
+                    upload_to_r2,
+                    session_id,
+                    f"{index:02d}_{file_seed}.structured.txt",
+                    structured_content,
+                ) or ""
             if not text_key:
                 raise RuntimeError("Artifact storage failed for web source.")
+            resolved_title = title or crawl_result.title or str(crawl_result.metadata.get("title", "")).strip()
+            logger.info(
+                "crawler_metrics url=%s crawler_used=%s duration_ms=%s content_length=%s markdown_length=%s fallback_triggered=%s quality_score=%.3f",
+                url,
+                crawl_result.crawler_used,
+                crawl_result.crawl_duration_ms,
+                crawl_result.content_length,
+                crawl_result.markdown_length,
+                crawl_result.fallback_triggered,
+                crawl_result.extraction_quality_score,
+            )
             _log(f"[SCRAPER] Success: {url}")
             return {
                 "artifact_id": artifact_id,
                 "artifact_type": "web",
                 "source_type": source_type,
                 "url": url,
-                "title": title,
+                "title": resolved_title,
                 "query": query,
                 "domain": _extract_domain(url),
                 "status": "success",
-                "error": fallback_error,
+                "error": crawl_result.error,
                 "binary_key": "",
                 "text_key": text_key,
                 "binary_path": "",
@@ -820,6 +994,18 @@ async def scrape_url(
                 "text_chars": len(content),
                 "content_signature": _content_signature(content),
                 "scrape_method": scrape_method,
+                "crawler_used": crawl_result.crawler_used,
+                "crawl_duration_ms": int(crawl_result.crawl_duration_ms),
+                "content_length": int(crawl_result.content_length),
+                "markdown_length": int(crawl_result.markdown_length),
+                "fallback_triggered": bool(crawl_result.fallback_triggered),
+                "extraction_quality_score": float(crawl_result.extraction_quality_score),
+                "markdown_key": markdown_key or "",
+                "raw_markdown_key": raw_markdown_key or "",
+                "clean_markdown_key": clean_markdown_key or "",
+                "metadata_key": metadata_key or "",
+                "structured_content_key": structured_content_key,
+                "crawler_benchmark": crawler_benchmark,
                 "location_score": int(location_payload.get("location_score", 0)),
                 "location_matches": list(location_payload.get("location_matches", [])),
                 "image_url": image_url,
@@ -960,6 +1146,18 @@ async def _scrape_batch(
                 "location_score": int(artifact.get("location_score", 0)),
                 "location_matches": list(artifact.get("location_matches", [])),
                 "image_url": str(artifact.get("image_url", "")).strip(),
+                "crawler_used": str(artifact.get("crawler_used", "")).strip(),
+                "crawl_duration_ms": int(artifact.get("crawl_duration_ms", 0)),
+                "content_length": int(artifact.get("content_length", 0)),
+                "markdown_length": int(artifact.get("markdown_length", 0)),
+                "fallback_triggered": bool(artifact.get("fallback_triggered", False)),
+                "extraction_quality_score": float(artifact.get("extraction_quality_score", 0.0)),
+                "markdown_key": str(artifact.get("markdown_key", "")).strip(),
+                "raw_markdown_key": str(artifact.get("raw_markdown_key", "")).strip(),
+                "clean_markdown_key": str(artifact.get("clean_markdown_key", "")).strip(),
+                "metadata_key": str(artifact.get("metadata_key", "")).strip(),
+                "structured_content_key": str(artifact.get("structured_content_key", "")).strip(),
+                "crawler_benchmark": dict(artifact.get("crawler_benchmark", {}) or {}),
             }
         )
 
@@ -1214,6 +1412,18 @@ def load_saved_sources(artifacts: List[Dict[str, Any]]) -> List[Dict[str, str]]:
                 "location_score": int(artifact.get("location_score", 0)),
                 "location_matches": list(artifact.get("location_matches", [])),
                 "image_url": str(artifact.get("image_url", "")).strip(),
+                "crawler_used": str(artifact.get("crawler_used", "")).strip(),
+                "crawl_duration_ms": int(artifact.get("crawl_duration_ms", 0)),
+                "content_length": int(artifact.get("content_length", 0)),
+                "markdown_length": int(artifact.get("markdown_length", 0)),
+                "fallback_triggered": bool(artifact.get("fallback_triggered", False)),
+                "extraction_quality_score": float(artifact.get("extraction_quality_score", 0.0)),
+                "markdown_key": str(artifact.get("markdown_key", "")).strip(),
+                "raw_markdown_key": str(artifact.get("raw_markdown_key", "")).strip(),
+                "clean_markdown_key": str(artifact.get("clean_markdown_key", "")).strip(),
+                "metadata_key": str(artifact.get("metadata_key", "")).strip(),
+                "structured_content_key": str(artifact.get("structured_content_key", "")).strip(),
+                "crawler_benchmark": dict(artifact.get("crawler_benchmark", {}) or {}),
             }
         )
 

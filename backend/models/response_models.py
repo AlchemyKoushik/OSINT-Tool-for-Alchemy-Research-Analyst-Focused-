@@ -1,4 +1,14 @@
-from models.export_models import CompetitiveLandscapeProfile, CompetitiveLandscapeProfileResponse, InsightSource
+from models.export_models import (
+    CompetitiveLandscapeCompanyDraft,
+    CompetitiveLandscapeDiscoveryAgentCompany,
+    CompetitiveLandscapeDiscoveryAgentOutput,
+    CompetitiveLandscapeDiscoveryCompany,
+    CompetitiveLandscapeDiscoveryOutput,
+    CompetitiveLandscapeOutput,
+    CompetitiveLandscapeProfile,
+    CompetitiveLandscapeProfileResponse,
+    InsightSource,
+)
 from models.report_models import AnalyzeResponse, FollowUpResponse, normalize_analyze_response_payload
 from models.research_models import (
     ContentFilterResponse,
@@ -18,6 +28,12 @@ from models.trend_models import Insight
 __all__ = [
     "AnalyzeResponse",
     "CleanedChunk",
+    "CompetitiveLandscapeCompanyDraft",
+    "CompetitiveLandscapeDiscoveryAgentCompany",
+    "CompetitiveLandscapeDiscoveryAgentOutput",
+    "CompetitiveLandscapeDiscoveryCompany",
+    "CompetitiveLandscapeDiscoveryOutput",
+    "CompetitiveLandscapeOutput",
     "CompetitiveLandscapeProfile",
     "CompetitiveLandscapeProfileResponse",
     "ContentFilterResponse",

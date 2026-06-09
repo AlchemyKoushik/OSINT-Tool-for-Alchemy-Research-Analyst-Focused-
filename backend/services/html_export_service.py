@@ -43,6 +43,10 @@ def _count_sources(items: Sequence[Dict[str, Any]]) -> int:
     return total
 
 
+def _count_competitive_landscape_sources(result: Dict[str, Any]) -> int:
+    return _count_sources([*list(result.get("major_players", []) or []), *list(result.get("emerging_players", []) or [])])
+
+
 def _normalize_export_result(payload: Dict[str, Any]) -> Dict[str, Any]:
     fallback_section = _safe_text(payload.get("section"), "trends").lower() or "trends"
     return normalize_analyze_response_payload(payload, fallback_section=fallback_section)
@@ -153,7 +157,8 @@ def _render_fact_list(facts: Sequence[str]) -> str:
 def _render_competitive_landscape_item(item: Dict[str, Any], index: int) -> str:
     heading = _escape(item.get("heading"), "Insight")
     body = _format_multiline_html(item.get("body"))
-    examples = item.get("examples", []) or []
+    market_role = _escape(item.get("market_role"))
+    examples = item.get("recent_strategic_developments") or item.get("examples", []) or []
     sources = item.get("sources", []) or []
     positioning_text = _format_multiline_html(item.get("competitive_positioning"))
     facts_html = _render_fact_list(item.get("key_company_facts", []) or [])
@@ -163,6 +168,7 @@ def _render_competitive_landscape_item(item: Dict[str, Any], index: int) -> str:
         "<div class=\"memo-item__header\">"
         f"<span class=\"memo-item__index\">{index}</span>"
         "<div>"
+        f"{f'<div class=\"memo-item__badge\">{market_role}</div>' if market_role else ''}"
         f"<h3>{heading}</h3>"
         "</div>"
         "</div>"
@@ -175,6 +181,19 @@ def _render_competitive_landscape_item(item: Dict[str, Any], index: int) -> str:
         f"{f'<section class=\"item-subsection\"><h4>Competitive Positioning / Implication</h4><p class=\"memo-item__body\">{positioning_text}</p></section>' if positioning_text else ''}"
         f"{_render_sources_disclosure(sources)}"
         "</article>"
+    )
+
+
+def _render_competitive_landscape_group(title: str, items: Sequence[Dict[str, Any]]) -> str:
+    normalized_items = list(items or [])
+    items_html = "".join(
+        _render_competitive_landscape_item(item, index) for index, item in enumerate(normalized_items, start=1)
+    )
+    return (
+        "<section class=\"competitive-group\">"
+        f"<div class=\"competitive-group__header\"><h2>{html.escape(title)}</h2><span>{len(normalized_items)}</span></div>"
+        f"<div class=\"memo-items\">{items_html or '<div class=\"memo-empty-state\">No strong company profiles found.</div>'}</div>"
+        "</section>"
     )
 
 
@@ -209,7 +228,13 @@ def _render_summary_cards(meta: Dict[str, Any], result: Dict[str, Any]) -> str:
     location_label = _escape(meta.get("location", {}).get("label"), "Global")
     prepared = _escape(meta.get("prepared"), "Prepared now")
     section_title = _escape(result.get("title"), "Industry Trends")
-    source_count = html.escape(str(_count_sources(result.get("items", []) or [])))
+    source_count = html.escape(
+        str(
+            _count_competitive_landscape_sources(result)
+            if _safe_text(result.get("section"), "trends") == "competitive_landscape"
+            else _count_sources(result.get("items", []) or [])
+        )
+    )
 
     cards = [
         ("Section", section_title),
@@ -232,18 +257,25 @@ def _render_section(result: Dict[str, Any], meta: Dict[str, Any], *, title_overr
     description = (
         "Underlying forces accelerating or shaping the market."
         if section == "drivers"
-        else "Key players mapped by relative market position, with concise overviews and recent developments from the last 12 months."
+        else "Major players and emerging players separated into memo-ready company cards, with recent developments from the last 2 to 3 years."
         if section == "competitive_landscape"
         else "Observable patterns, shifts, and momentum lines across the landscape."
     )
-    items_html = "".join(
-        _render_item(item, index, section) for index, item in enumerate(result.get("items", []) or [], start=1)
-    )
-    empty_state_html = (
-        "<div class=\"memo-empty-state\">No strong insights found.</div>"
-        if not (result.get("items", []) or [])
-        else ""
-    )
+    if section == "competitive_landscape":
+        items_html = (
+            _render_competitive_landscape_group("Major Players", result.get("major_players", []) or [])
+            + _render_competitive_landscape_group("Emerging Players", result.get("emerging_players", []) or [])
+        )
+        empty_state_html = ""
+    else:
+        items_html = "".join(
+            _render_item(item, index, section) for index, item in enumerate(result.get("items", []) or [], start=1)
+        )
+        empty_state_html = (
+            "<div class=\"memo-empty-state\">No strong insights found.</div>"
+            if not (result.get("items", []) or [])
+            else ""
+        )
 
     return (
         "<section class=\"memo-section\">"
@@ -428,6 +460,42 @@ def build_html_export(
       display: grid;
       gap: 18px;
       margin-top: 24px;
+    }}
+
+    .competitive-group {{
+      display: grid;
+      gap: 18px;
+    }}
+
+    .competitive-group__header {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 4px;
+    }}
+
+    .competitive-group__header h2 {{
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.1;
+      color: var(--accent);
+    }}
+
+    .competitive-group__header span {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 40px;
+      height: 40px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel-strong);
+      color: var(--muted);
+      font: 700 11px/1 Arial, sans-serif;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
     }}
 
     .memo-item {{

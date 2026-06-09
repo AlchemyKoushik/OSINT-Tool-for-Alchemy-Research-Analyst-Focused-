@@ -47,6 +47,7 @@ class AnalyzeRequest(BaseModel):
     queries: List[str] = []
     follow_up_mode: bool = False
     existing_chunks: List[Dict[str, Any]] = []
+    feature_flags: Dict[str, bool] = {}
 
     model_config = ConfigDict(extra="forbid")
 
@@ -87,6 +88,19 @@ class AnalyzeRequest(BaseModel):
     @classmethod
     def validate_existing_chunks(cls, value: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return _validate_existing_chunks(value)
+
+    @field_validator("feature_flags")
+    @classmethod
+    def validate_feature_flags(cls, value: Dict[str, Any]) -> Dict[str, bool]:
+        if not isinstance(value, dict):
+            return {}
+        normalized_flags: Dict[str, bool] = {}
+        for raw_key, raw_value in value.items():
+            normalized_key = str(raw_key or "").strip().lower()
+            if not normalized_key:
+                continue
+            normalized_flags[normalized_key] = bool(raw_value)
+        return normalized_flags
 
     @model_validator(mode="after")
     def validate_location_selection(self) -> "AnalyzeRequest":
@@ -155,18 +169,23 @@ class AnalyzeExistingRequest(BaseModel):
 
 
 class PdfExportRequest(BaseModel):
-    result: Dict[str, Any]
+    session_id: str | None = None
+    result: Dict[str, Any] = {}
     meta: Dict[str, Any] = {}
     follow_ups: List[Dict[str, Any]] = []
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("session_id")
+    @classmethod
+    def validate_export_session_id(cls, value: str | None) -> str | None:
+        normalized = str(value or "").strip()
+        return normalized or None
+
     @field_validator("result")
     @classmethod
     def validate_result(cls, value: Dict[str, Any]) -> Dict[str, Any]:
-        if not isinstance(value, dict) or not value:
-            raise ValueError("result is required.")
-        return value
+        return value if isinstance(value, dict) else {}
 
     @field_validator("meta")
     @classmethod
@@ -177,4 +196,12 @@ class PdfExportRequest(BaseModel):
     @classmethod
     def validate_follow_ups(cls, value: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return [entry for entry in value if isinstance(entry, dict)]
+
+    @model_validator(mode="after")
+    def validate_export_source(self) -> "PdfExportRequest":
+        if self.result:
+            return self
+        if self.session_id:
+            return self
+        raise ValueError("result or session_id is required.")
 

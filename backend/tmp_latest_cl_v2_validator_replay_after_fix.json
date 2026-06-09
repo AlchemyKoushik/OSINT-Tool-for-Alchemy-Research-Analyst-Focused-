@@ -1,0 +1,739 @@
+{
+  "session_id": "847489b4-a460-447d-8efe-d87948880296",
+  "validator_replay": [
+    {
+      "company": "IEnova (Sempra Infrastructure)",
+      "tier": "Major Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Enel Green Power México",
+      "tier": "Major Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Vive Energía",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Celsol",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Iluméxico",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Biosistemas Sustentables",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Grupo Dragon",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Solarever",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "SunPower México",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Bright",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Galt Energy",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Energía Real",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Grupo Bimbo (Bimbo Solar)",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Zuma Energía",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Solarvatio",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    }
+  ],
+  "kept_total": 0,
+  "removed_total": 15,
+  "kept_major": [],
+  "kept_mid": [],
+  "kept_emerging": [],
+  "removed": [
+    {
+      "company": "IEnova (Sempra Infrastructure)",
+      "tier": "Major Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Enel Green Power México",
+      "tier": "Major Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Vive Energía",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Celsol",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Iluméxico",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Biosistemas Sustentables",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Grupo Dragon",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Solarever",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "SunPower México",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Bright",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Galt Energy",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Energía Real",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Grupo Bimbo (Bimbo Solar)",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Zuma Energía",
+      "tier": "Mid-Sized Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    },
+    {
+      "company": "Solarvatio",
+      "tier": "Emerging Player",
+      "source_ids": [],
+      "kept": false,
+      "classification": "Unrelated",
+      "rejection_reason": "rejected_primary_business_mismatch",
+      "primary_business_fit": false,
+      "industry_centrality": false,
+      "operator_vs_supplier": false,
+      "reason": "No cited evidence supplied to support participation in the distributed solar power generation market."
+    }
+  ],
+  "company_evidence": [
+    {
+      "company": "IEnova (Sempra Infrastructure)",
+      "tier": "Major Player",
+      "confidence": 95,
+      "reasons": [
+        "owns and operates distributed solar assets in Mexico",
+        "recurring mention in Mexican distributed generation market reports",
+        "significant installed capacity"
+      ],
+      "queries": [
+        "IEnova distributed solar projects Mexico",
+        "IEnova installed solar capacity Mexico",
+        "IEnova solar power contracts Mexico",
+        "IEnova distributed generation portfolio Mexico",
+        "IEnova solar power developer activity Mexico",
+        "IEnova utility-scale solar projects Mexico",
+        "IEnova renewable energy market participation Mexico",
+        "IEnova Sempra Infrastructure distributed solar Mexico"
+      ],
+      "search_results": 12,
+      "stored_sources": 11,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Enel Green Power México",
+      "tier": "Major Player",
+      "confidence": 90,
+      "reasons": [
+        "large-scale solar project ownership",
+        "active distributed generation portfolio",
+        "frequent presence in industry rankings"
+      ],
+      "queries": [
+        "Enel Green Power México distributed solar projects Mexico",
+        "Enel Green Power México solar installed capacity Mexico",
+        "Enel Green Power México renewable energy portfolio Mexico",
+        "Enel Green Power México solar power contracts Mexico",
+        "Enel Green Power México utility scale solar plants Mexico",
+        "Enel Green Power México developer activity distributed solar Mexico",
+        "Enel Green Power México market participation distributed solar Mexico",
+        "Enel Green Power México industry rankings Mexico solar"
+      ],
+      "search_results": 12,
+      "stored_sources": 11,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Vive Energía",
+      "tier": "Mid-Sized Player",
+      "confidence": 80,
+      "reasons": [
+        "develops and operates distributed solar projects",
+        "visible project pipeline in Mexico",
+        "local developer with recurring market presence"
+      ],
+      "queries": [
+        "Vive Energía distributed solar projects Mexico",
+        "Vive Energía solar power installed capacity Mexico",
+        "Vive Energía solar project pipeline Mexico",
+        "Vive Energía solar power contracts Mexico",
+        "Vive Energía utility-scale solar projects Mexico",
+        "Vive Energía renewable energy portfolio Mexico",
+        "Vive Energía solar developer activity Mexico",
+        "Vive Energía distributed generation market Mexico"
+      ],
+      "search_results": 12,
+      "stored_sources": 7,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Celsol",
+      "tier": "Mid-Sized Player",
+      "confidence": 75,
+      "reasons": [
+        "notable distributed solar installations",
+        "recognized in Mexican solar developer lists",
+        "focus on commercial and industrial segments"
+      ],
+      "queries": [
+        "Celsol distributed solar installations Mexico",
+        "Celsol solar power capacity installed Mexico",
+        "Celsol commercial industrial solar projects Mexico",
+        "Celsol solar developer Mexico",
+        "Celsol utility scale solar projects Mexico",
+        "Celsol solar contracts Mexico",
+        "Celsol portfolio distributed solar Mexico",
+        "Celsol renewable energy market participation Mexico"
+      ],
+      "search_results": 12,
+      "stored_sources": 8,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Iluméxico",
+      "tier": "Mid-Sized Player",
+      "confidence": 78,
+      "reasons": [
+        "significant rural distributed solar deployments",
+        "recognized for off-grid and distributed solar solutions",
+        "recurring mention in distributed generation reports"
+      ],
+      "queries": [
+        "Iluméxico distributed solar projects Mexico",
+        "Iluméxico rural solar installations Mexico",
+        "Iluméxico off-grid solar solutions Mexico",
+        "Iluméxico solar portfolio Mexico",
+        "Iluméxico solar power contracts Mexico",
+        "Iluméxico installed solar capacity Mexico",
+        "Iluméxico distributed generation reports Mexico",
+        "Iluméxico utility-scale solar projects Mexico"
+      ],
+      "search_results": 12,
+      "stored_sources": 8,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Biosistemas Sustentables",
+      "tier": "Emerging Player",
+      "confidence": 65,
+      "reasons": [
+        "growing distributed solar project portfolio",
+        "local developer with increasing market activity"
+      ],
+      "queries": [
+        "Biosistemas Sustentables distributed solar projects Mexico",
+        "Biosistemas Sustentables solar power installed capacity Mexico",
+        "Biosistemas Sustentables solar project portfolio Mexico",
+        "Biosistemas Sustentables solar power contracts Mexico",
+        "Biosistemas Sustentables utility-scale solar projects Mexico",
+        "Biosistemas Sustentables solar developer activity Mexico",
+        "Biosistemas Sustentables ownership solar assets Mexico",
+        "Biosistemas Sustentables renewable energy market participation Mexico"
+      ],
+      "search_results": 12,
+      "stored_sources": 5,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Grupo Dragon",
+      "tier": "Mid-Sized Player",
+      "confidence": 70,
+      "reasons": [
+        "owns and operates distributed solar assets",
+        "visible in Mexican renewable energy project listings"
+      ],
+      "queries": [
+        "Grupo Dragon distributed solar projects Mexico",
+        "Grupo Dragon solar asset ownership Mexico",
+        "Grupo Dragon renewable energy portfolio Mexico",
+        "Grupo Dragon solar power contracts Mexico",
+        "Grupo Dragon installed solar capacity Mexico",
+        "Grupo Dragon utility scale solar projects Mexico",
+        "Grupo Dragon developer activity distributed solar Mexico",
+        "distributed solar power projects Mexico site:government.gob.mx Grupo Dragon"
+      ],
+      "search_results": 12,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Solarever",
+      "tier": "Emerging Player",
+      "confidence": 68,
+      "reasons": [
+        "local manufacturer and project developer",
+        "increasing presence in distributed solar installations"
+      ],
+      "queries": [
+        "\"Solarever\" Mexico projects",
+        "\"Solarever\" Mexico solar portfolio",
+        "\"Solarever\" Mexico utility-scale assets",
+        "\"Solarever\" Mexico installed capacity",
+        "\"Solarever\" Mexico project ownership",
+        "\"Solarever\" \"Distributed Solar Power Generation Market\" Mexico developer",
+        "\"Solarever\" \"Distributed Solar Power Generation Market\" Mexico power plant",
+        "\"Solarever\" \"Distributed Solar Power Generation Market\" Mexico market share"
+      ],
+      "search_results": 0,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "SunPower México",
+      "tier": "Mid-Sized Player",
+      "confidence": 77,
+      "reasons": [
+        "active in distributed solar project development",
+        "recognized brand with local project portfolio"
+      ],
+      "queries": [
+        "\"SunPower México\" Mexico projects",
+        "\"SunPower México\" Mexico solar portfolio",
+        "\"SunPower México\" Mexico utility-scale assets",
+        "\"SunPower México\" Mexico installed capacity",
+        "\"SunPower México\" Mexico project ownership",
+        "\"SunPower México\" \"Distributed Solar Power Generation Market\" Mexico developer",
+        "\"SunPower México\" \"Distributed Solar Power Generation Market\" Mexico power plant",
+        "\"SunPower México\" \"Distributed Solar Power Generation Market\" Mexico market share"
+      ],
+      "search_results": 0,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Bright",
+      "tier": "Emerging Player",
+      "confidence": 72,
+      "reasons": [
+        "focus on residential and commercial distributed solar",
+        "growing installed base in Mexico"
+      ],
+      "queries": [
+        "\"Bright\" Mexico projects",
+        "\"Bright\" Mexico solar portfolio",
+        "\"Bright\" Mexico utility-scale assets",
+        "\"Bright\" Mexico installed capacity",
+        "\"Bright\" Mexico project ownership",
+        "\"Bright\" \"Distributed Solar Power Generation Market\" Mexico developer",
+        "\"Bright\" \"Distributed Solar Power Generation Market\" Mexico power plant",
+        "\"Bright\" \"Distributed Solar Power Generation Market\" Mexico market share"
+      ],
+      "search_results": 0,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Galt Energy",
+      "tier": "Emerging Player",
+      "confidence": 70,
+      "reasons": [
+        "notable distributed solar installations",
+        "recurring mention in local solar developer rankings"
+      ],
+      "queries": [
+        "\"Galt Energy\" Mexico projects",
+        "\"Galt Energy\" Mexico solar portfolio",
+        "\"Galt Energy\" Mexico utility-scale assets",
+        "\"Galt Energy\" Mexico installed capacity",
+        "\"Galt Energy\" Mexico project ownership",
+        "\"Galt Energy\" \"Distributed Solar Power Generation Market\" Mexico developer",
+        "\"Galt Energy\" \"Distributed Solar Power Generation Market\" Mexico power plant",
+        "\"Galt Energy\" \"Distributed Solar Power Generation Market\" Mexico market share"
+      ],
+      "search_results": 0,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Energía Real",
+      "tier": "Emerging Player",
+      "confidence": 68,
+      "reasons": [
+        "develops distributed solar projects for commercial clients",
+        "visible in Mexican distributed generation market"
+      ],
+      "queries": [
+        "\"Energía Real\" Mexico projects",
+        "\"Energía Real\" Mexico solar portfolio",
+        "\"Energía Real\" Mexico utility-scale assets",
+        "\"Energía Real\" Mexico installed capacity",
+        "\"Energía Real\" Mexico project ownership",
+        "\"Energía Real\" \"Distributed Solar Power Generation Market\" Mexico developer",
+        "\"Energía Real\" \"Distributed Solar Power Generation Market\" Mexico power plant",
+        "\"Energía Real\" \"Distributed Solar Power Generation Market\" Mexico market share"
+      ],
+      "search_results": 0,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Grupo Bimbo (Bimbo Solar)",
+      "tier": "Mid-Sized Player",
+      "confidence": 75,
+      "reasons": [
+        "owns distributed solar assets for self-consumption",
+        "recurring mention in corporate solar adoption reports"
+      ],
+      "queries": [
+        "\"Grupo Bimbo (Bimbo Solar)\" Mexico projects",
+        "\"Grupo Bimbo (Bimbo Solar)\" Mexico solar portfolio",
+        "\"Grupo Bimbo (Bimbo Solar)\" Mexico utility-scale assets",
+        "\"Grupo Bimbo (Bimbo Solar)\" Mexico installed capacity",
+        "\"Grupo Bimbo (Bimbo Solar)\" Mexico project ownership",
+        "\"Grupo Bimbo (Bimbo Solar)\" \"Distributed Solar Power Generation Market\" Mexico developer",
+        "\"Grupo Bimbo (Bimbo Solar)\" \"Distributed Solar Power Generation Market\" Mexico power plant",
+        "\"Grupo Bimbo (Bimbo Solar)\" \"Distributed Solar Power Generation Market\" Mexico market share"
+      ],
+      "search_results": 0,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Zuma Energía",
+      "tier": "Mid-Sized Player",
+      "confidence": 73,
+      "reasons": [
+        "active in distributed and utility-scale solar",
+        "visible project portfolio in Mexico"
+      ],
+      "queries": [
+        "\"Zuma Energía\" Mexico projects",
+        "\"Zuma Energía\" Mexico solar portfolio",
+        "\"Zuma Energía\" Mexico utility-scale assets",
+        "\"Zuma Energía\" Mexico installed capacity",
+        "\"Zuma Energía\" Mexico project ownership",
+        "\"Zuma Energía\" \"Distributed Solar Power Generation Market\" Mexico developer",
+        "\"Zuma Energía\" \"Distributed Solar Power Generation Market\" Mexico power plant",
+        "\"Zuma Energía\" \"Distributed Solar Power Generation Market\" Mexico market share"
+      ],
+      "search_results": 0,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    },
+    {
+      "company": "Solarvatio",
+      "tier": "Emerging Player",
+      "confidence": 65,
+      "reasons": [
+        "growing distributed solar project base",
+        "local developer with increasing market activity"
+      ],
+      "queries": [
+        "\"Solarvatio\" Mexico projects",
+        "\"Solarvatio\" Mexico solar portfolio",
+        "\"Solarvatio\" Mexico utility-scale assets",
+        "\"Solarvatio\" Mexico installed capacity",
+        "\"Solarvatio\" Mexico project ownership",
+        "\"Solarvatio\" \"Distributed Solar Power Generation Market\" Mexico developer",
+        "\"Solarvatio\" \"Distributed Solar Power Generation Market\" Mexico power plant",
+        "\"Solarvatio\" \"Distributed Solar Power Generation Market\" Mexico market share"
+      ],
+      "search_results": 0,
+      "stored_sources": 0,
+      "evidence_blocks": 0,
+      "source_ids": [],
+      "evidence_size_chars": 0
+    }
+  ]
+}

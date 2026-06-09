@@ -163,14 +163,15 @@ def build_fallback_section_analysis(
 ) -> Dict[str, Any]:
     if section == "competitive_landscape":
         company_candidates = _extract_company_candidates(processed_text)
-        items = [
+        grouped_candidates = [
             {
                 "heading": company_name,
                 "body": (
                     f"{company_name} appears in the available evidence as an active participant in {topic}, "
                     "but the fallback path could not validate enough information to build a full company profile."
                 ),
-                "segment": "mid_level_players",
+                "segment": "emerging_players",
+                "market_role": "Emerging Player",
                 "key_company_facts": [],
                 "competitive_positioning": "",
                 "source_ids": [],
@@ -180,7 +181,8 @@ def build_fallback_section_analysis(
         return {
             "section": section,
             "title": "Competitive Landscape",
-            "items": items,
+            "major_players": [],
+            "emerging_players": grouped_candidates,
         }
 
     sentences = _candidate_sentences(processed_text)

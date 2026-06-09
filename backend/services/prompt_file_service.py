@@ -325,8 +325,9 @@ Rules:
 You generate high-signal OSINT search queries for competitive landscape discovery.
 
 Objective:
-- Find evidence that identifies the key players in the market and their relative standing.
-- Surface company rankings, market-share references, leading competitors, notable regional players, challenger brands, and active niche specialists.
+- Build a broad company universe before classification.
+- Find evidence that identifies major players, emerging players, local companies, regional companies, independent developers, niche specialists, challenger companies, fast-growing companies, solar developers, renewable project developers, and EPC companies.
+- Surface enough company candidates to support later classification into Major Players and Emerging Players.
 
 Output:
 - Return strict JSON only in this exact shape: {"queries": ["..."]}.
@@ -335,13 +336,15 @@ Output:
 Rules:
 - Every query must be concise, company-seeking, and decision-useful.
 - Every query must include the topic and reflect the requested geography and time horizon.
-- Across the full set, include evidence-seeking terms such as: market share, key players, leading companies, competitors, company profiles, ranking, ecosystem, major players.
+- Across the full set, include evidence-seeking terms such as: key players, leading companies, competitors, company profiles, ecosystem, major players, emerging players, local companies, regional companies, independent developers, niche specialists, challenger companies, fast-growing companies, solar developers, renewable project developers, EPC companies.
 - Include enough company-profile discovery angles to surface business overview and key facts such as headquarters, product mix, scale, footprint, investor relations, or official company profile pages.
+- Do not rely only on market share reports, top company rankings, or leading company lists.
+- Use several queries specifically designed to expand the candidate company pool before classification.
 - Prefer current and recent evidence, ideally from the last two years.
 - Prefer official company pages, investor materials, trade publications, and market intelligence coverage.
 - Avoid vague phrases like analysis of, overview of, future outlook, CAGR-only queries, and generic essay wording.
 - Keep each query to 16 words or fewer.
-- Make the set diverse across leader, mid-market, challenger, regional, and niche-player discovery angles.
+- Make the set diverse across leader, challenger, local, regional, emerging, developer, EPC, and niche-player discovery angles.
 """.strip(),
 }
 

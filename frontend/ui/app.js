@@ -57,6 +57,12 @@ function withStaticAssetVersion(path) {
   return `${path}${separator}v=${encodeURIComponent(STATIC_ASSET_VERSION)}`;
 }
 
+function buildFeatureFlags(section) {
+  return String(section || "").trim() === "competitive_landscape"
+    ? { competitive_landscape_v2: true }
+    : {};
+}
+
 const DEFAULT_LOCATIONS = {
   preferences: [
     { value: "global", label: "Global" },
@@ -180,7 +186,7 @@ function sectionDescriptor(section) {
     return "Underlying forces accelerating or shaping the market.";
   }
   if (section === "competitive_landscape") {
-    return "Key players mapped by relative market position, with concise company overviews and recent developments from the last 12 months.";
+    return "Major players and emerging players separated into memo-ready company profiles, with recent developments from the last 2 to 3 years.";
   }
   return "Observable patterns, shifts, and momentum lines across the landscape.";
 }
@@ -319,11 +325,12 @@ function normalizeResearchItem(item) {
     heading,
     body,
     segment: String(item.segment || item.player_segment || item.tier || item.bucket || "").trim().toLowerCase(),
+    market_role: String(item.market_role || item.role || item.company_role || "").trim(),
     key_company_facts: Array.isArray(item.key_company_facts || item.key_facts || item.company_facts)
       ? (item.key_company_facts || item.key_facts || item.company_facts)
           .map((fact) => String(fact || "").trim())
           .filter((fact, index, facts) => fact && facts.indexOf(fact) === index)
-          .slice(0, 5)
+          .slice(0, 7)
       : [],
     competitive_positioning: String(
       item.competitive_positioning || item.competitive_implication || item.positioning_implication || "",
@@ -437,18 +444,31 @@ function normalizeResearchResponse(payload, fallbackSection = "trends") {
         : Array.isArray(payload.trends)
           ? "trends"
           : fallbackSection;
+  const normalizedMajorPlayers =
+    inferredSection === "competitive_landscape" && Array.isArray(payload.major_players)
+      ? payload.major_players.map(normalizeResearchItem).filter(Boolean)
+      : [];
+  const normalizedEmergingPlayers =
+    inferredSection === "competitive_landscape" && Array.isArray(payload.emerging_players)
+      ? payload.emerging_players.map(normalizeResearchItem).filter(Boolean)
+      : [];
   const rawItems = Array.isArray(payload.items)
     ? payload.items
     : Array.isArray(payload[inferredSection])
       ? payload[inferredSection]
       : [];
-  const normalizedItems = rawItems.map(normalizeResearchItem).filter(Boolean);
+  const normalizedItems =
+    inferredSection === "competitive_landscape"
+      ? [...normalizedMajorPlayers, ...normalizedEmergingPlayers]
+      : rawItems.map(normalizeResearchItem).filter(Boolean);
   const title = String(payload.title || payload.heading || sectionTitle(inferredSection)).trim() || sectionTitle(inferredSection);
 
   return {
     ...payload,
     section: inferredSection,
     title,
+    major_players: normalizedMajorPlayers,
+    emerging_players: normalizedEmergingPlayers,
     items: normalizedItems,
   };
 }
@@ -458,6 +478,80 @@ function buildDownloadFileName(result, meta) {
   const topic = slugifyFilenamePart(meta?.topic || result?.title || "industry-brief", "industry-brief");
   const section = slugifyFilenamePart(result?.section || "trends", "trends");
   return `${topic}-${section}-${scope}-${formatPreparedDateForFile()}.html`;
+}
+
+function buildExportSources(sources) {
+  if (!Array.isArray(sources)) {
+    return [];
+  }
+  return sources
+    .map((source) => ({
+      title: String(source?.title || "").trim(),
+      url: String(source?.url || "").trim(),
+      domain: String(source?.domain || "").trim(),
+      date: String(source?.date || source?.published_date || "").trim(),
+    }))
+    .filter((source) => source.title || source.url || source.domain || source.date)
+    .slice(0, 5);
+}
+
+function buildExportExamples(examples) {
+  if (!Array.isArray(examples)) {
+    return [];
+  }
+  return examples
+    .map((example) => ({
+      text: String(example?.text || "").trim(),
+      year: String(example?.year || example?.event_date || example?.published_date || "").trim(),
+      why_it_matters: String(example?.why_it_matters || example?.trend_fit_reason || "").trim(),
+    }))
+    .filter((example) => example.text)
+    .slice(0, 5);
+}
+
+function buildExportItem(item) {
+  const normalizedItem = item && typeof item === "object" ? item : {};
+  return {
+    heading: String(normalizedItem?.heading || normalizedItem?.title || "").trim(),
+    body: String(normalizedItem?.body || normalizedItem?.description || "").trim(),
+    segment: String(normalizedItem?.segment || "").trim(),
+    market_role: String(normalizedItem?.market_role || "").trim(),
+    key_company_facts: Array.isArray(normalizedItem?.key_company_facts)
+      ? normalizedItem.key_company_facts
+          .map((fact) => String(fact || "").trim())
+          .filter(Boolean)
+          .slice(0, 5)
+      : [],
+    competitive_positioning: String(normalizedItem?.competitive_positioning || "").trim(),
+    examples: buildExportExamples(normalizedItem?.examples),
+    recent_strategic_developments: buildExportExamples(normalizedItem?.recent_strategic_developments),
+    sources: buildExportSources(normalizedItem?.sources),
+  };
+}
+
+function buildExportResultPayload(result) {
+  const normalizedResult = result && typeof result === "object" ? result : {};
+  const section = String(normalizedResult?.section || "trends").trim() || "trends";
+  const payload = {
+    section,
+    title: String(normalizedResult?.title || "").trim(),
+  };
+
+  if (section === "competitive_landscape") {
+    payload.major_players = Array.isArray(normalizedResult?.major_players)
+      ? normalizedResult.major_players.map(buildExportItem).filter((item) => item.heading || item.body)
+      : [];
+    payload.emerging_players = Array.isArray(normalizedResult?.emerging_players)
+      ? normalizedResult.emerging_players.map(buildExportItem).filter((item) => item.heading || item.body)
+      : [];
+    payload.items = [...payload.major_players, ...payload.emerging_players];
+    return payload;
+  }
+
+  payload.items = Array.isArray(normalizedResult?.items)
+    ? normalizedResult.items.map(buildExportItem).filter((item) => item.heading || item.body)
+    : [];
+  return payload;
 }
 
 async function triggerResultsDownload(result, meta, followUps = []) {
@@ -471,16 +565,16 @@ async function triggerResultsDownload(result, meta, followUps = []) {
         .map((entry) => ({
           title: entry?.title,
           section: entry?.section || result?.section,
-          items: Array.isArray(entry?.results)
-            ? entry.results
-            : Array.isArray(entry?.result?.items)
-              ? entry.result.items
-              : [],
+          ...buildExportResultPayload(
+            Array.isArray(entry?.results)
+              ? { section: entry?.section || result?.section, items: entry.results }
+              : entry?.result,
+          ),
           meta: entry?.meta || meta,
         }))
     : [];
   const payload = {
-    result,
+    result: buildExportResultPayload(result),
     meta: {
       ...meta,
       prepared: formatDate(),
@@ -2352,6 +2446,69 @@ function CompetitiveLandscapePositioning({ text = "" }) {
   `;
 }
 
+function CompetitiveLandscapeGroupTabs({ title, majorPlayers = [], emergingPlayers = [] }) {
+  const [activeTab, setActiveTab] = useState("major_players");
+  const tabs = [
+    { id: "major_players", label: "Major Players", items: Array.isArray(majorPlayers) ? majorPlayers : [] },
+    { id: "emerging_players", label: "Emerging Players", items: Array.isArray(emergingPlayers) ? emergingPlayers : [] },
+  ];
+  const activeGroup = tabs.find((tab) => tab.id === activeTab) || tabs[0];
+
+  return html`
+    <div className="mt-6 space-y-5">
+      <div className="flex flex-wrap gap-3">
+        ${tabs.map(
+          (tab) => html`
+            <button
+              key=${tab.id}
+              type="button"
+              onClick=${() => setActiveTab(tab.id)}
+              className=${cx(
+                "rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] transition-colors duration-200",
+                activeGroup.id === tab.id
+                  ? "border-atelier-forest bg-atelier-forest text-white"
+                  : "border-atelier-line bg-white/80 text-atelier-moss hover:border-atelier-forest/30",
+              )}
+            >
+              ${`${tab.label} (${tab.items.length})`}
+            </button>
+          `,
+        )}
+      </div>
+
+      <div className="rounded-[24px] border border-atelier-line bg-white/54 px-4 py-4 md:px-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">
+            ${activeGroup.label}
+          </p>
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.18em] text-atelier-moss/55">
+            ${`${activeGroup.items.length} companies`}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          ${activeGroup.items.length
+            ? activeGroup.items.map(
+                (item, index) => html`
+                  <${BriefItemCard}
+                    item=${item}
+                    index=${index}
+                    section="competitive_landscape"
+                    title=${`${title}-${activeGroup.id}`}
+                  />
+                `,
+              )
+            : html`
+                <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
+                  No strong company profiles found.
+                </div>
+              `}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function BriefItemCard({ item, index, section, title }) {
   if (section === "competitive_landscape") {
     return html`
@@ -2368,7 +2525,14 @@ function BriefItemCard({ item, index, section, title }) {
             ${index + 1}
           </div>
           <div className="min-w-0 flex-1">
-            <h4 className="mt-2 font-display text-[2rem] font-semibold leading-[1.02] text-atelier-ink">
+            ${item.market_role
+              ? html`
+                  <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-atelier-goldDeep">
+                    ${item.market_role}
+                  </p>
+                `
+              : null}
+            <h4 className="mt-3 font-display text-[2rem] font-semibold leading-[1.02] text-atelier-ink">
               ${item.heading}
             </h4>
             <section className="mt-6">
@@ -2423,6 +2587,8 @@ function ResultSection({
   title,
   section,
   items,
+  majorPlayers = [],
+  emergingPlayers = [],
   meta,
   debug,
   compact = false,
@@ -2458,24 +2624,34 @@ function ResultSection({
 
       <div className="editorial-rule mt-6"></div>
 
-      <div className="mt-6 space-y-4">
-        ${normalizedItems.length
-          ? normalizedItems.map(
-              (item, index) => html`
-                <${BriefItemCard}
-                  item=${item}
-                  index=${index}
-                  section=${section}
-                  title=${title}
-                />
-              `,
-            )
-          : html`
-              <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
-                No strong insights found.
-              </div>
-            `}
-      </div>
+      ${section === "competitive_landscape"
+        ? html`
+            <${CompetitiveLandscapeGroupTabs}
+              title=${title}
+              majorPlayers=${majorPlayers}
+              emergingPlayers=${emergingPlayers}
+            />
+          `
+        : html`
+            <div className="mt-6 space-y-4">
+              ${normalizedItems.length
+                ? normalizedItems.map(
+                    (item, index) => html`
+                      <${BriefItemCard}
+                        item=${item}
+                        index=${index}
+                        section=${section}
+                        title=${title}
+                      />
+                    `,
+                  )
+                : html`
+                    <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
+                      No strong insights found.
+                    </div>
+                  `}
+            </div>
+          `}
     </div>
   `;
 }
@@ -2506,6 +2682,8 @@ function BriefCompleted({
           title=${result.title || sectionTitle(result.section)}
           section=${result.section}
           items=${result.items}
+          majorPlayers=${result.major_players}
+          emergingPlayers=${result.emerging_players}
           meta=${meta}
           debug=${debug}
           aside=${html`<${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />`}
@@ -2553,6 +2731,8 @@ function BriefCompleted({
                         title=${entry.title}
                         section=${entry.section || result.section}
                         items=${entry.results}
+                        majorPlayers=${entry.result?.major_players || []}
+                        emergingPlayers=${entry.result?.emerging_players || []}
                         meta=${entry.meta || meta}
                         debug=${entry.debug || debug}
                         compact=${true}
@@ -3005,6 +3185,7 @@ function App() {
             follow_up_mode: true,
             existing_chunks: existingChunks,
             debug: true,
+            feature_flags: buildFeatureFlags(resultSection),
             ...buildLocationPayload(
               latestContext.meta?.location?.preference || analysisMeta?.location?.preference || locationPreference,
               latestContext.meta?.location?.value || analysisMeta?.location?.value || locationValue,
@@ -3187,6 +3368,7 @@ function App() {
           topic: trimmedTopic,
           section,
           debug: true,
+          feature_flags: buildFeatureFlags(section),
           ...buildLocationPayload(locationPreference, locationValue),
         }),
       });

@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     OPENAI_TEST_MODEL: str = "gpt-4.1-mini"
     SERPAPI_KEY: str = ""
     SCRAPEDO_KEY: str = ""
+    USE_CRAWL4AI: bool = False
+    COMPARE_CRAWLERS: bool = False
     REDIS_URL: str = "redis://localhost:6379/0"
     CLOUDFLARE_R2_ACCOUNT_ID: str = ""
     CLOUDFLARE_R2_ACCESS_KEY_ID: str = ""
@@ -49,10 +51,14 @@ class Settings(BaseSettings):
     CLOUDFLARE_R2_REGION: str = "auto"
     EXTERNAL_TIMEOUT_SECONDS: int = 20
     EXTERNAL_MAX_RETRIES: int = 3
+    CRAWL4AI_TIMEOUT_SECONDS: int = 15
+    CRAWL4AI_QUALITY_THRESHOLD: float = 0.45
+    CRAWL4AI_MIN_CONTENT_LENGTH: int = 180
     CACHE_TTL_SECONDS: int = 3600
     SESSION_TTL_SECONDS: int = 3600
     RATE_LIMIT_REQUESTS_PER_MINUTE: int = 10
     MAX_REQUEST_BYTES: int = 250000
+    MAX_EXPORT_REQUEST_BYTES: int = 2500000
     MAX_QUERY_LENGTH: int = 500
     MAX_FOLLOW_UP_QUERY_LENGTH: int = 500
     MAX_EXISTING_CHUNKS: int = 250

@@ -5,6 +5,7 @@ pydantic-settings
 requests
 beautifulsoup4
 playwright
+crawl4ai
 pypdf
 openai
 python-dotenv

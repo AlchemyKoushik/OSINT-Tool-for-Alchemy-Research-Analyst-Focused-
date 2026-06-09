@@ -30,6 +30,16 @@ COMPETITIVE_LANDSCAPE_TERMS = (
     "company profiles",
     "ranking",
     "major players",
+    "emerging players",
+    "local companies",
+    "regional companies",
+    "independent developers",
+    "niche specialists",
+    "challenger companies",
+    "fast-growing companies",
+    "solar developers",
+    "renewable project developers",
+    "epc companies",
 )
 CURRENT_QUERY_YEAR = datetime.utcnow().year
 RECENT_QUERY_YEARS = tuple(str(CURRENT_QUERY_YEAR - offset) for offset in range(0, 2))
@@ -105,6 +115,16 @@ SECTION_QUERY_FOCUSES = {
         "niche companies",
         "major players",
         "top companies",
+        "emerging players",
+        "local companies",
+        "regional companies",
+        "independent developers",
+        "niche specialists",
+        "challenger companies",
+        "fast-growing companies",
+        "solar developers",
+        "renewable project developers",
+        "epc companies",
     ),
 }
 SECTION_QUERY_SUFFIXES = (
@@ -264,6 +284,35 @@ def build_fallback_queries(
     focus_terms = _build_query_focus_terms(normalized_section)
     max_words = 16 if normalized_section == "competitive_landscape" else 15
 
+    if normalized_section == "competitive_landscape":
+        geography = geo or "global"
+        candidate_queries = [
+            f"{normalized_topic} {geography} key players leading companies",
+            f"{normalized_topic} {geography} emerging players local companies",
+            f"{normalized_topic} {geography} regional companies challenger companies",
+            f"{normalized_topic} {geography} independent developers niche specialists",
+            f"{normalized_topic} {geography} fast-growing companies solar developers",
+            f"{normalized_topic} {geography} renewable project developers epc companies",
+            f"{normalized_topic} {geography} utility solar developers pipeline",
+            f"{normalized_topic} {geography} epc companies solar developers",
+            f"{normalized_topic} {geography} renewable project developers local companies",
+            f"{normalized_topic} {geography} utility scale solar competitors ecosystem",
+        ]
+        validated_queries: List[str] = []
+        for query in candidate_queries:
+            try:
+                validated_queries.append(
+                    _validate_query(
+                        _trim_query_to_limit(query.split(), limit=max_words),
+                        resolved_location_context,
+                        topic=normalized_topic,
+                        section=normalized_section,
+                    )
+                )
+            except ValueError:
+                continue
+        return _deduplicate_queries(validated_queries)[:MAX_QUERY_COUNT]
+
     fallback_queries: List[str] = []
     seen_queries = set()
     for focus_term in focus_terms:
@@ -337,6 +386,9 @@ def _build_query_user_prompt(
         '- Prefer geography-aware and data-focused wording.\n'
         '- Avoid vague phrases like "analysis of" and "overview of".\n'
         '- Avoid generic forecast headlines and vague academic wording.\n'
+        '- For Competitive Landscape, broaden candidate discovery before classification: include emerging players, local companies, regional companies, independent developers, niche specialists, challenger companies, fast-growing companies, solar developers, renewable project developers, and EPC companies.\n'
+        '- For Competitive Landscape, do not rely only on market share reports, top company rankings, or leading company lists.\n'
+        '- For Competitive Landscape, include several company-universe queries that surface broader candidate pools before leader-focused queries.\n'
         f'- Use varied phrasing across the {MAX_QUERY_COUNT} queries; do not repeat the same frame.\n'
         f'- Keep each query to {16 if section == "competitive_landscape" else 15} words or fewer.'
     ).strip()

@@ -31,7 +31,8 @@ from services.memory_service import (
     update_best_sources_for_topic,
     update_domain_authority,
 )
-from services.openai_service import generate_section_analysis
+from services.competitive_landscape_discovery_service import build_competitive_landscape_v2_discovery_bundle
+from services.openai_service import generate_section_analysis, get_last_structured_completion_diagnostics
 from services.pipeline_orchestrator import execute_pipeline
 from services.html_export_service import build_html_export
 from services.prompt_builder import build_metadata_payload, get_prompt
@@ -59,11 +60,12 @@ def _sanitize_for_log(value: str, limit: int = 120) -> str:
     return normalized[:limit] + ("..." if len(normalized) > limit else "")
 
 
-async def _read_json_payload(request: Request) -> Dict[str, Any]:
+async def _read_json_payload(request: Request, *, max_bytes: int | None = None) -> Dict[str, Any]:
     raw_body = await request.body()
     if not raw_body:
         raise ValueError("Empty request body.")
-    if len(raw_body) > settings.MAX_REQUEST_BYTES:
+    applied_max_bytes = int(max_bytes or settings.MAX_REQUEST_BYTES)
+    if len(raw_body) > applied_max_bytes:
         raise HTTPException(status_code=413, detail="Request payload too large.")
 
     try:
@@ -117,10 +119,13 @@ def _build_cache_key(
     freshness: str,
     feedback_summary: Dict[str, Any],
     location_signature: str,
+    variant: str = "",
 ) -> str:
+    variant_fragment = f"::variant={variant}" if variant else ""
     return (
         f"{topic.strip()}::pipeline={PIPELINE_VERSION}::section={section}::depth={depth}::freshness={freshness}"
         f"::location={location_signature}"
+        f"{variant_fragment}"
         f"::rating={float(feedback_summary.get('avg_rating', 0.0)):.2f}"
         f"::rating_count={int(feedback_summary.get('rating_count', 0))}"
     )
@@ -271,6 +276,68 @@ def _build_debug_payload(
     return payload
 def _empty_insight_analysis() -> Dict[str, List[Any]]:
     return {"conflicts": [], "consensus_signals": []}
+
+
+def _resolve_competitive_landscape_mode(request_model: AnalyzeRequest) -> str:
+    if request_model.section != "competitive_landscape":
+        return "v1"
+    feature_flags = dict(getattr(request_model, "feature_flags", {}) or {})
+    if "competitive_landscape_v2" in feature_flags:
+        return "v2" if bool(feature_flags.get("competitive_landscape_v2")) else "v1"
+    return "v2"
+
+
+def _group_competitive_landscape_items(items: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    major_players: List[Dict[str, Any]] = []
+    emerging_players: List[Dict[str, Any]] = []
+    for item in items:
+        normalized_item = dict(item)
+        segment = str(normalized_item.get("segment", "")).strip().lower()
+        if segment == "major_players":
+            major_players.append(normalized_item)
+        else:
+            if not segment:
+                normalized_item["segment"] = "emerging_players"
+            emerging_players.append(normalized_item)
+    return major_players, emerging_players
+
+
+def _prepare_competitive_landscape_payload(
+    payload: Dict[str, Any],
+    evidence_blocks: List[Dict[str, Any]],
+    *,
+    limit: int,
+) -> Dict[str, Any]:
+    major_players = rank_and_limit_insights(list(payload.get("major_players", [])), limit=limit)
+    emerging_players = rank_and_limit_insights(list(payload.get("emerging_players", [])), limit=limit)
+    payload["major_players"] = attach_sources_to_items(major_players, evidence_blocks, max_sources_per_item=6)
+    payload["emerging_players"] = attach_sources_to_items(emerging_players, evidence_blocks, max_sources_per_item=6)
+    payload["items"] = [*payload["major_players"], *payload["emerging_players"]]
+    return payload
+
+
+def _sync_competitive_landscape_groups(payload: Dict[str, Any]) -> Dict[str, Any]:
+    major_players, emerging_players = _group_competitive_landscape_items(list(payload.get("items", [])))
+    payload["major_players"] = major_players
+    payload["emerging_players"] = emerging_players
+    payload["items"] = [*major_players, *emerging_players]
+    return payload
+
+
+def _competitive_landscape_counts(payload: Dict[str, Any]) -> Dict[str, int]:
+    major_players = list(payload.get("major_players", []) or [])
+    emerging_players = list(payload.get("emerging_players", []) or [])
+    return {
+        "major_players": len(major_players),
+        "emerging_players": len(emerging_players),
+    }
+
+
+def _competitive_landscape_company_names(payload: Dict[str, Any]) -> Dict[str, List[str]]:
+    return {
+        "major_players": [str(item.get("heading", "")).strip() for item in list(payload.get("major_players", []) or []) if str(item.get("heading", "")).strip()],
+        "emerging_players": [str(item.get("heading", "")).strip() for item in list(payload.get("emerging_players", []) or []) if str(item.get("heading", "")).strip()],
+    }
 
 
 def _build_existing_chunks(evidence_blocks: List[Dict[str, Any]]) -> List[Dict[str, str]]:
@@ -478,6 +545,8 @@ async def run_analysis_request(
     artifact_manifest = ""
     artifact_counts: Dict[str, Any] = {}
     existing_chunks: List[Dict[str, Any]] = []
+    cl_discovery_bundle: Dict[str, Any] = {}
+    cl_runtime_exception = ""
     provided_queries: List[str] = list(request_model.queries)
     session_id = request_model.session_id or create_session_id()
     follow_up_mode = bool(request_model.follow_up_mode)
@@ -506,12 +575,14 @@ async def run_analysis_request(
         topic_key = build_location_topic_key(topic, location_context)
         depth = INTERNAL_DEPTH
         freshness = INTERNAL_FRESHNESS
+        competitive_landscape_mode = _resolve_competitive_landscape_mode(request_model)
 
         logger.info(
-            "[RUN] Analyze request received | session_id=%s | topic=%s | section=%s | location=%s | follow_up=%s | debug=%s",
+            "[RUN] Analyze request received | session_id=%s | topic=%s | section=%s | competitive_landscape_mode=%s | location=%s | follow_up=%s | debug=%s",
             session_id,
             _sanitize_for_log(topic),
             section,
+            competitive_landscape_mode if section == "competitive_landscape" else "n/a",
             location_summary["label"],
             follow_up_mode,
             debug_mode,
@@ -537,6 +608,7 @@ async def run_analysis_request(
             freshness,
             feedback_summary,
             get_location_signature(location_context),
+            variant=f"competitive_landscape_{competitive_landscape_mode}" if section == "competitive_landscape" else "",
         )
         if follow_up_mode and provided_queries:
             cache_key = f"{cache_key}::followup=1::queries={'|'.join(provided_queries)}"
@@ -557,7 +629,13 @@ async def run_analysis_request(
 
         if cached_result is not None and not follow_up_mode:
             logger.info("[RUN] Cache hit | session_id=%s | section=%s", session_id, section)
-            cached_items_raw = cached_result.get("response", {}).get("items", [])
+            cached_response_raw = cached_result.get("response", {})
+            cached_items_raw = cached_response_raw.get("items", [])
+            if section == "competitive_landscape" and not cached_items_raw:
+                cached_items_raw = [
+                    *list(cached_response_raw.get("major_players", []) or []),
+                    *list(cached_response_raw.get("emerging_players", []) or []),
+                ]
             cache_has_examples_shape = (
                 isinstance(cached_items_raw, list)
                 and bool(cached_items_raw)
@@ -572,19 +650,28 @@ async def run_analysis_request(
                 cached_result.get("response", {}),
                 fallback_section=section,
             )
-            cached_response["items"] = rank_and_limit_insights(
-                list(cached_response.get("items", [])),
-                limit=INITIAL_INSIGHT_LIMIT,
-            )
-            cached_response["items"] = attach_sources_to_items(
-                list(cached_response.get("items", [])),
-                list(cached_result.get("evidence_blocks", [])),
-            )
+            if section == "competitive_landscape":
+                cached_response = _prepare_competitive_landscape_payload(
+                    cached_response,
+                    list(cached_result.get("evidence_blocks", [])),
+                    limit=INITIAL_INSIGHT_LIMIT,
+                )
+            else:
+                cached_response["items"] = rank_and_limit_insights(
+                    list(cached_response.get("items", [])),
+                    limit=INITIAL_INSIGHT_LIMIT,
+                )
+                cached_response["items"] = attach_sources_to_items(
+                    list(cached_response.get("items", [])),
+                    list(cached_result.get("evidence_blocks", [])),
+                )
             if not cached_response["items"]:
                 cached_response["title"] = "No strong insights found"
             cached_meta = dict(cached_response.get("meta", {}))
             cached_meta.setdefault("topic", topic)
             cached_meta.setdefault("location", dict(cached_result.get("location", location_summary)))
+            if section == "competitive_landscape":
+                cached_meta["competitive_landscape_mode"] = competitive_landscape_mode
             cached_response["meta"] = cached_meta
             cached_response["session_id"] = session_id
             if debug_mode:
@@ -833,6 +920,24 @@ async def run_analysis_request(
                 artifact_counts=artifact_counts,
                 max_items=insight_limit,
             )
+            if section == "competitive_landscape" and competitive_landscape_mode == "v2":
+                try:
+                    cl_discovery_bundle = await build_competitive_landscape_v2_discovery_bundle(
+                        topic=topic,
+                        location_context=location_context,
+                        session_id=session_id,
+                    )
+                    override_evidence_blocks = list(cl_discovery_bundle.get("evidence_blocks", []) or [])
+                    if override_evidence_blocks:
+                        evidence_blocks = override_evidence_blocks
+                        num_sources = len(override_evidence_blocks)
+                        processing_chars = sum(
+                            len(str(block.get("excerpt", "")).strip())
+                            for block in override_evidence_blocks
+                        )
+                except Exception as exc:
+                    logger.warning("Competitive landscape v2 discovery override failed: %s", exc)
+                    cl_discovery_bundle = {}
         except Exception as exc:
             logger.warning("Prompt builder failed: %s", exc)
             raise RuntimeError(f"Prompt building failed: {exc}") from exc
@@ -857,9 +962,14 @@ async def run_analysis_request(
                 section,
                 max_items=insight_limit,
                 evidence_blocks=evidence_blocks,
+                competitive_landscape_mode=competitive_landscape_mode,
+                competitive_landscape_discovery_override=cl_discovery_bundle.get("discovery_output"),
             )
         except Exception as exc:
             logger.exception("OpenAI analysis failed for topic %s and section %s", _sanitize_for_log(topic), section)
+            cl_runtime_exception = str(exc).strip()
+            if section == "competitive_landscape":
+                stage_errors["competitive_landscape_validation"] = cl_runtime_exception or exc.__class__.__name__
             analysis_json = build_fallback_section_analysis(
                 topic=topic,
                 processed_text=processed_text,
@@ -867,15 +977,51 @@ async def run_analysis_request(
             )
         execution_time["openai_ms"] = _elapsed_ms(openai_start)
         logger.info("[RUN] Structured analysis completed | session_id=%s | ms=%s", session_id, execution_time["openai_ms"])
+        discovered_cl_counts: Dict[str, int] = {}
+        validated_cl_counts: Dict[str, int] = {}
+        enriched_cl_counts: Dict[str, int] = {}
+        cl_validation_diagnostics: Dict[str, Any] = {}
         analysis_json = normalize_analyze_response_payload(analysis_json, fallback_section=section)
-        analysis_json["items"] = rank_and_limit_insights(
-            list(analysis_json.get("items", [])),
-            limit=insight_limit,
-        )
-        analysis_json["items"] = attach_sources_to_items(
-            list(analysis_json.get("items", [])),
-            evidence_blocks,
-        )
+        if section == "competitive_landscape":
+            cl_validation_diagnostics = dict(analysis_json.pop("_competitive_landscape_validation", {}) or {})
+            discovered_cl_counts = _competitive_landscape_counts(analysis_json)
+            discovered_cl_names = _competitive_landscape_company_names(analysis_json)
+            logger.info(
+                "[RUN] CL diagnostics discovered_major_players=%s discovered_emerging_players=%s major_names=%s emerging_names=%s session_id=%s",
+                discovered_cl_counts["major_players"],
+                discovered_cl_counts["emerging_players"],
+                discovered_cl_names["major_players"],
+                discovered_cl_names["emerging_players"],
+                session_id,
+            )
+            analysis_json = _prepare_competitive_landscape_payload(
+                analysis_json,
+                evidence_blocks,
+                limit=insight_limit,
+            )
+            validated_cl_counts = _competitive_landscape_counts(analysis_json)
+            validated_cl_names = _competitive_landscape_company_names(analysis_json)
+            logger.info(
+                "[RUN] CL diagnostics validated_major_players=%s validated_emerging_players=%s major_names=%s emerging_names=%s rejected_primary_business_mismatch=%s rejected_supplier=%s rejected_adjacent_participant=%s removed=%s session_id=%s",
+                validated_cl_counts["major_players"],
+                validated_cl_counts["emerging_players"],
+                validated_cl_names["major_players"],
+                validated_cl_names["emerging_players"],
+                cl_validation_diagnostics.get("rejected_primary_business_mismatch", 0),
+                cl_validation_diagnostics.get("rejected_supplier", 0),
+                cl_validation_diagnostics.get("rejected_adjacent_participant", 0),
+                cl_validation_diagnostics.get("removed_companies", []),
+                session_id,
+            )
+        else:
+            analysis_json["items"] = rank_and_limit_insights(
+                list(analysis_json.get("items", [])),
+                limit=insight_limit,
+            )
+            analysis_json["items"] = attach_sources_to_items(
+                list(analysis_json.get("items", [])),
+                evidence_blocks,
+            )
         _emit_progress(
             diagnostics,
             progress_callback,
@@ -912,6 +1058,20 @@ async def run_analysis_request(
             session_id=session_id,
             progress_callback=_enrichment_progress,
         )
+        if section == "competitive_landscape":
+            analysis_json = _sync_competitive_landscape_groups(analysis_json)
+            enriched_cl_counts = _competitive_landscape_counts(analysis_json)
+            enriched_cl_names = _competitive_landscape_company_names(analysis_json)
+            logger.info(
+                "[RUN] CL diagnostics enriched_major_players=%s enriched_emerging_players=%s final_major_players=%s final_emerging_players=%s major_names=%s emerging_names=%s session_id=%s",
+                validated_cl_counts["major_players"],
+                validated_cl_counts["emerging_players"],
+                enriched_cl_counts["major_players"],
+                enriched_cl_counts["emerging_players"],
+                enriched_cl_names["major_players"],
+                enriched_cl_names["emerging_players"],
+                session_id,
+            )
         logger.info("[RUN] Item enrichment completed | session_id=%s | items=%s", session_id, len(analysis_json.get("items", [])))
         if not analysis_json["items"]:
             analysis_json["title"] = "No strong insights found"
@@ -945,6 +1105,8 @@ async def run_analysis_request(
             "topic": topic,
             "location": location_summary,
         }
+        if section == "competitive_landscape":
+            response_payload["meta"]["competitive_landscape_mode"] = competitive_landscape_mode
         response_payload["session_id"] = session_id
         trend_metadata = [
             {
@@ -1006,6 +1168,12 @@ async def run_analysis_request(
             logger.warning("Session update failed for session %s: %s", session_id, exc)
 
         if debug_mode:
+            discovery_agent_output = cl_discovery_bundle.get("agent_output")
+            discovery_agent_companies = (
+                list(getattr(discovery_agent_output, "companies", []) or [])
+                if section == "competitive_landscape"
+                else []
+            )
             response_payload["debug"] = _build_debug_payload(
                 queries=queries,
                 selected_urls=selected_urls,
@@ -1031,6 +1199,53 @@ async def run_analysis_request(
                 artifact_counts=artifact_counts,
                 existing_chunks=existing_chunks,
             )
+            if section == "competitive_landscape":
+                discovery_agent_output = cl_discovery_bundle.get("agent_output")
+                discovery_agent_companies = list(getattr(discovery_agent_output, "companies", []) or [])
+                fallback_discovery_count = len(discovery_agent_companies)
+                fallback_validated_count = int(cl_validation_diagnostics.get("validated_count", 0))
+                if not fallback_validated_count and not analysis_json.get("_competitive_landscape_validation"):
+                    fallback_validated_count = discovered_cl_counts.get("major_players", 0) + discovered_cl_counts.get("emerging_players", 0)
+                response_payload["debug"]["competitive_landscape_diagnostics"] = {
+                    "candidate_companies_found": discovered_cl_counts.get("major_players", 0) + discovered_cl_counts.get("emerging_players", 0),
+                    "major_candidates_found": discovered_cl_counts.get("major_players", 0),
+                    "emerging_candidates_found": discovered_cl_counts.get("emerging_players", 0),
+                    "discovered_major_players": discovered_cl_counts.get("major_players", 0),
+                    "discovered_emerging_players": discovered_cl_counts.get("emerging_players", 0),
+                    "validated_major_players": validated_cl_counts.get("major_players", 0),
+                    "validated_emerging_players": validated_cl_counts.get("emerging_players", 0),
+                    "enriched_major_players": enriched_cl_counts.get("major_players", 0),
+                    "enriched_emerging_players": enriched_cl_counts.get("emerging_players", 0),
+                    "final_major_players": enriched_cl_counts.get("major_players", 0),
+                    "final_emerging_players": enriched_cl_counts.get("emerging_players", 0),
+                    "rejected_primary_business_mismatch": int(cl_validation_diagnostics.get("rejected_primary_business_mismatch", 0)),
+                    "rejected_supplier": int(cl_validation_diagnostics.get("rejected_supplier", 0)),
+                    "rejected_adjacent_participant": int(cl_validation_diagnostics.get("rejected_adjacent_participant", 0)),
+                    "removed_companies": list(cl_validation_diagnostics.get("removed_companies", [])),
+                    "competitive_landscape_mode": competitive_landscape_mode,
+                    "validation_mode": str(cl_validation_diagnostics.get("validation_mode", competitive_landscape_mode)),
+                    "discovery_count": int(cl_validation_diagnostics.get("discovery_count", fallback_discovery_count)),
+                    "validated_count": fallback_validated_count,
+                    "rejected_count": int(cl_validation_diagnostics.get("rejected_count", 0)),
+                    "final_major_count": enriched_cl_counts.get("major_players", 0),
+                    "final_emerging_count": enriched_cl_counts.get("emerging_players", 0),
+                    "validator_exception": cl_runtime_exception,
+                    "fallback_used_due_to_exception": bool(cl_runtime_exception),
+                    "structured_output_diagnostics": {
+                        "section_analysis": get_last_structured_completion_diagnostics("structured_section_analysis"),
+                        "cl_relevance_classification": get_last_structured_completion_diagnostics("structured_cl_relevance_classification"),
+                    },
+                    "discovery_agent_output": [
+                        {
+                            "company": str(company.company).strip(),
+                            "tier": str(company.tier).strip(),
+                            "confidence": int(company.confidence),
+                            "reasons": list(company.reasons),
+                        }
+                        for company in discovery_agent_companies
+                    ],
+                    "discovery_agent_query_diagnostics": list(cl_discovery_bundle.get("query_diagnostics", [])),
+                }
 
         _emit_progress(
             diagnostics,
@@ -1080,7 +1295,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         },
     )
     job_record = create_research_job(request_model.model_dump(), session_id=session_id)
-    return {
+    response_payload = {
         "job_id": job_record["job_id"],
         "session_id": session_id,
         "status": job_record["status"],
@@ -1089,6 +1304,9 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
         "progress_percentage": int(job_record.get("progress_percentage", 0)),
         "poll_url": f"/api/research/jobs/{job_record['job_id']}",
     }
+    if request_model.section == "competitive_landscape":
+        response_payload["competitive_landscape_mode"] = _resolve_competitive_landscape_mode(request_model)
+    return response_payload
 
 
 @router.get("/research/jobs/{job_id}")
@@ -1163,7 +1381,7 @@ async def cleanup_session(session_id: str) -> Dict[str, str]:
 @router.post("/export-memo")
 async def export_memo(request: Request) -> Response:
     try:
-        payload = await _read_json_payload(request)
+        payload = await _read_json_payload(request, max_bytes=settings.MAX_EXPORT_REQUEST_BYTES)
         validated = PdfExportRequest(**payload)
     except HTTPException:
         raise
@@ -1172,9 +1390,15 @@ async def export_memo(request: Request) -> Response:
         raise HTTPException(status_code=422, detail=f"Invalid memo export payload: {exc}") from exc
 
     try:
+        result_payload = dict(validated.result or {})
+        if not result_payload and validated.session_id:
+            session = await asyncio.to_thread(get_session, validated.session_id)
+            result_payload = dict(session.get("final_output") or {})
+            if not result_payload:
+                raise HTTPException(status_code=404, detail="No exportable session result was found.")
         html_bytes, filename = await asyncio.to_thread(
             build_html_export,
-            result_payload=validated.result,
+            result_payload=result_payload,
             meta_payload=validated.meta,
             follow_up_payloads=validated.follow_ups,
         )

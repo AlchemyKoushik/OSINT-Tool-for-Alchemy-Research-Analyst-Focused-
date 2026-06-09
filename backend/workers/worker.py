@@ -24,12 +24,18 @@ async def worker_loop() -> None:
                 await asyncio.sleep(settings.WORKER_IDLE_SLEEP_SECONDS)
                 continue
             await run_research_job(job_record, worker_id)
+    except asyncio.CancelledError:
+        logger.info("Worker cancelled worker_id=%s", worker_id)
+        raise
     finally:
         log_shutdown_diagnostics("worker", {"worker_id": worker_id})
 
 
 def main() -> None:
-    asyncio.run(worker_loop())
+    try:
+        asyncio.run(worker_loop())
+    except KeyboardInterrupt:
+        logger.info("Worker stopped by user")
 
 
 if __name__ == "__main__":

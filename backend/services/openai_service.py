@@ -1,4 +1,8 @@
-from services.openai.analysis import extract_validated_examples_from_evidence, generate_section_analysis
+from services.openai.analysis import (
+    extract_validated_examples_from_evidence,
+    generate_section_analysis,
+    get_last_structured_completion_diagnostics,
+)
 from services.openai.client import (
     MODEL_NAME,
     OPENAI_MAX_RETRIES,
@@ -26,6 +30,7 @@ __all__ = [
     "ensure_min_output_tokens",
     "extract_validated_examples_from_evidence",
     "generate_section_analysis",
+    "get_last_structured_completion_diagnostics",
     "get_openai_status_message",
     "openai_key_loaded",
     "test_openai_connection",

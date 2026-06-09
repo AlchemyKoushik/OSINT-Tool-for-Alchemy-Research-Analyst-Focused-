@@ -180,6 +180,10 @@ class CompetitiveLandscapeProfile(BaseModel):
                 continue
             seen_keys.add(dedupe_key)
             normalized_examples.append(example)
+        normalized_examples.sort(
+            key=lambda example: str(example.event_date or example.published_date or example.year or "").strip(),
+            reverse=True,
+        )
         return normalized_examples[:5]
 
     @field_validator("source_ids")
@@ -201,6 +205,196 @@ class CompetitiveLandscapeProfileResponse(BaseModel):
     profile: CompetitiveLandscapeProfile = Field(default_factory=CompetitiveLandscapeProfile)
 
     model_config = ConfigDict(extra="forbid")
+
+
+class CompetitiveLandscapeCompanyDraft(BaseModel):
+    company_name: str
+    market_role: str
+    business_overview: str
+    key_company_facts: List[str] = Field(default_factory=list)
+    competitive_positioning: str = ""
+    source_ids: List[int] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("company_name", "market_role", "business_overview")
+    @classmethod
+    def validate_required_company_text(cls, value: str) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError("Competitive landscape company fields must not be empty.")
+        return normalized
+
+    @field_validator("competitive_positioning")
+    @classmethod
+    def validate_optional_company_text(cls, value: str) -> str:
+        return str(value or "").strip()
+
+    @field_validator("key_company_facts")
+    @classmethod
+    def validate_company_facts(cls, value: List[str]) -> List[str]:
+        normalized_facts: List[str] = []
+        seen_facts = set()
+        for fact in value or []:
+            normalized = str(fact or "").strip()
+            normalized_key = normalized.lower()
+            if not normalized or normalized_key in seen_facts:
+                continue
+            seen_facts.add(normalized_key)
+            normalized_facts.append(normalized)
+        return normalized_facts[:7]
+
+    @field_validator("source_ids")
+    @classmethod
+    def validate_company_source_ids(cls, value: List[int]) -> List[int]:
+        normalized_ids: List[int] = []
+        for source_id in value or []:
+            try:
+                numeric_id = int(source_id)
+            except (TypeError, ValueError):
+                continue
+            if numeric_id <= 0 or numeric_id in normalized_ids:
+                continue
+            normalized_ids.append(numeric_id)
+        return normalized_ids[:20]
+
+
+class CompetitiveLandscapeOutput(BaseModel):
+    major_players: List[CompetitiveLandscapeCompanyDraft] = Field(default_factory=list)
+    emerging_players: List[CompetitiveLandscapeCompanyDraft] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("major_players", "emerging_players")
+    @classmethod
+    def validate_company_groups(cls, value: List[CompetitiveLandscapeCompanyDraft]) -> List[CompetitiveLandscapeCompanyDraft]:
+        deduped: List[CompetitiveLandscapeCompanyDraft] = []
+        seen_names = set()
+        for company in value or []:
+            name_key = str(company.company_name or "").strip().lower()
+            if not name_key or name_key in seen_names:
+                continue
+            seen_names.add(name_key)
+            deduped.append(company)
+        return deduped
+
+    @model_validator(mode="after")
+    def validate_non_empty_groups(self) -> "CompetitiveLandscapeOutput":
+        if not self.major_players and not self.emerging_players:
+            raise ValueError("Competitive landscape output must contain at least one company.")
+        return self
+
+
+class CompetitiveLandscapeDiscoveryCompany(BaseModel):
+    company_name: str
+    market_role: str
+    source_ids: List[int] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("company_name", "market_role")
+    @classmethod
+    def validate_discovery_text(cls, value: str) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError("Competitive landscape discovery fields must not be empty.")
+        return normalized
+
+    @field_validator("source_ids")
+    @classmethod
+    def validate_discovery_source_ids(cls, value: List[int]) -> List[int]:
+        normalized_ids: List[int] = []
+        for source_id in value or []:
+            try:
+                numeric_id = int(source_id)
+            except (TypeError, ValueError):
+                continue
+            if numeric_id <= 0 or numeric_id in normalized_ids:
+                continue
+            normalized_ids.append(numeric_id)
+        return normalized_ids[:20]
+
+
+class CompetitiveLandscapeDiscoveryOutput(BaseModel):
+    major_players: List[CompetitiveLandscapeDiscoveryCompany] = Field(default_factory=list)
+    emerging_players: List[CompetitiveLandscapeDiscoveryCompany] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_discovery_groups(self) -> "CompetitiveLandscapeDiscoveryOutput":
+        if not self.major_players and not self.emerging_players:
+            raise ValueError("Competitive landscape discovery must contain at least one company.")
+        return self
+
+
+class CompetitiveLandscapeDiscoveryAgentCompany(BaseModel):
+    company: str
+    tier: Literal["Major Player", "Mid-Sized Player", "Emerging Player"]
+    confidence: int
+    reasons: List[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("company")
+    @classmethod
+    def validate_agent_company(cls, value: str) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError("Discovery agent company must not be empty.")
+        return normalized
+
+    @field_validator("confidence")
+    @classmethod
+    def validate_agent_confidence(cls, value: int) -> int:
+        numeric_value = int(value)
+        if numeric_value < 0:
+            return 0
+        if numeric_value > 100:
+            return 100
+        return numeric_value
+
+    @field_validator("reasons")
+    @classmethod
+    def validate_agent_reasons(cls, value: List[str]) -> List[str]:
+        normalized_reasons: List[str] = []
+        seen_reasons = set()
+        for reason in value or []:
+            normalized = str(reason or "").strip()
+            normalized_key = normalized.lower()
+            if not normalized or normalized_key in seen_reasons:
+                continue
+            seen_reasons.add(normalized_key)
+            normalized_reasons.append(normalized)
+        return normalized_reasons[:5]
+
+
+class CompetitiveLandscapeDiscoveryAgentOutput(BaseModel):
+    companies: List[CompetitiveLandscapeDiscoveryAgentCompany] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("companies")
+    @classmethod
+    def validate_agent_companies(
+        cls,
+        value: List[CompetitiveLandscapeDiscoveryAgentCompany],
+    ) -> List[CompetitiveLandscapeDiscoveryAgentCompany]:
+        deduped: List[CompetitiveLandscapeDiscoveryAgentCompany] = []
+        seen_names = set()
+        for company in value or []:
+            company_key = str(company.company or "").strip().lower()
+            if not company_key or company_key in seen_names:
+                continue
+            seen_names.add(company_key)
+            deduped.append(company)
+        return deduped[:24]
+
+    @model_validator(mode="after")
+    def validate_agent_output(self) -> "CompetitiveLandscapeDiscoveryAgentOutput":
+        if not self.companies:
+            raise ValueError("Competitive landscape discovery agent must contain at least one company.")
+        return self
 
 
 class ExampleSearchQuery(BaseModel):
@@ -438,6 +632,7 @@ def normalize_research_item_payload(item) -> dict[str, object] | None:
         "heading": heading,
         "body": body,
         "segment": _pick_first_text(item, ["segment", "player_segment", "tier", "bucket"]).lower(),
+        "market_role": _pick_first_text(item, ["market_role", "role", "company_role"]),
         "key_company_facts": [
             normalized_fact
             for normalized_fact in [
@@ -518,6 +713,7 @@ class ResearchItem(BaseModel):
     heading: str
     body: str
     segment: str = ""
+    market_role: str = ""
     key_company_facts: List[str] = Field(default_factory=list)
     competitive_positioning: str = ""
     examples: List[Example] = Field(default_factory=list)
@@ -540,6 +736,11 @@ class ResearchItem(BaseModel):
     @classmethod
     def validate_segment(cls, value: str) -> str:
         return str(value or "").strip().lower()
+
+    @field_validator("market_role")
+    @classmethod
+    def validate_market_role(cls, value: str) -> str:
+        return str(value or "").strip()
 
     @field_validator("example_coverage_status")
     @classmethod
@@ -612,7 +813,9 @@ class ResearchItem(BaseModel):
 class AnalyzeResponse(BaseModel):
     section: ResearchSection
     title: str
-    items: List[ResearchItem]
+    items: List[ResearchItem] = Field(default_factory=list)
+    major_players: List[ResearchItem] = Field(default_factory=list)
+    emerging_players: List[ResearchItem] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -629,12 +832,80 @@ class AnalyzeResponse(BaseModel):
     def validate_items(cls, value: List[ResearchItem]) -> List[ResearchItem]:
         return value
 
+    @field_validator("major_players", "emerging_players")
+    @classmethod
+    def validate_company_groups(cls, value: List[ResearchItem]) -> List[ResearchItem]:
+        return value
+
+    @model_validator(mode="after")
+    def validate_section_payload(self) -> "AnalyzeResponse":
+        if self.section == "competitive_landscape":
+            if not self.major_players and not self.emerging_players:
+                raise ValueError("Competitive Landscape responses must include major_players or emerging_players.")
+        elif not self.items:
+            raise ValueError("Trends and Drivers responses must include items.")
+        return self
+
+
+def _normalize_competitive_landscape_company_payload(item) -> dict[str, object] | None:
+    normalized_item = normalize_research_item_payload(item)
+    if normalized_item is None:
+        return None
+
+    market_role = _pick_first_text(item, ["market_role", "role", "company_role"]).strip()
+    normalized_item["market_role"] = market_role
+    return normalized_item
+
 
 def normalize_analyze_response_payload(payload, fallback_section: str = "trends") -> dict[str, object]:
     normalized_payload = dict(payload) if isinstance(payload, dict) else {}
     normalized_section = _normalize_text_value(normalized_payload.get("section")).lower()
     if normalized_section not in {"trends", "drivers", "competitive_landscape"}:
         normalized_section = _normalize_text_value(fallback_section).lower() or "trends"
+
+    if normalized_section == "competitive_landscape":
+        raw_major_players = normalized_payload.get("major_players")
+        raw_emerging_players = normalized_payload.get("emerging_players")
+
+        if not isinstance(raw_major_players, list) and not isinstance(raw_emerging_players, list):
+            fallback_items = normalized_payload.get("items")
+            if isinstance(fallback_items, list):
+                raw_major_players = [
+                    item
+                    for item in fallback_items
+                    if _pick_first_text(item, ["segment", "player_segment", "tier", "bucket"]).lower()
+                    in {"major_players", "top_players"}
+                ]
+                raw_emerging_players = [
+                    item
+                    for item in fallback_items
+                    if _pick_first_text(item, ["segment", "player_segment", "tier", "bucket"]).lower()
+                    not in {"major_players", "top_players"}
+                ]
+
+        normalized_major_players = [
+            normalized_item
+            for normalized_item in (
+                _normalize_competitive_landscape_company_payload(item) for item in (raw_major_players or [])
+            )
+            if normalized_item
+        ]
+        normalized_emerging_players = [
+            normalized_item
+            for normalized_item in (
+                _normalize_competitive_landscape_company_payload(item) for item in (raw_emerging_players or [])
+            )
+            if normalized_item
+        ]
+        normalized_items = [*normalized_major_players, *normalized_emerging_players]
+
+        normalized_title = _pick_first_text(normalized_payload, ["title", "heading"]) or "Competitive Landscape"
+        normalized_payload["section"] = normalized_section
+        normalized_payload["title"] = normalized_title
+        normalized_payload["major_players"] = normalized_major_players
+        normalized_payload["emerging_players"] = normalized_emerging_players
+        normalized_payload["items"] = normalized_items
+        return normalized_payload
 
     raw_items = normalized_payload.get("items")
     if not isinstance(raw_items, list):

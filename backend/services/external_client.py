@@ -12,6 +12,42 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+_LAST_CALL_FAILURES: Dict[str, Dict[str, Any]] = {}
+
+
+def _failure_key(provider: str, operation: str) -> str:
+    return f"{provider}:{operation}"
+
+
+def get_last_external_call_failure(provider: str, operation: str) -> Dict[str, Any]:
+    return dict(_LAST_CALL_FAILURES.get(_failure_key(provider, operation), {}))
+
+
+def _set_last_failure(
+    *,
+    provider: str,
+    operation: str,
+    attempt: int,
+    max_retries: int,
+    timeout: int,
+    context: Dict[str, Any] | None,
+    error: Exception,
+) -> None:
+    _LAST_CALL_FAILURES[_failure_key(provider, operation)] = {
+        "provider": provider,
+        "operation": operation,
+        "attempt": int(attempt),
+        "max_retries": int(max_retries),
+        "timeout": int(timeout),
+        "context": _sanitize_context(context),
+        "error_type": error.__class__.__name__,
+        "error_message": str(error),
+        "error_repr": repr(error),
+    }
+
+
+def _clear_last_failure(provider: str, operation: str) -> None:
+    _LAST_CALL_FAILURES.pop(_failure_key(provider, operation), None)
 
 
 def _retry_delay_seconds(retry_index: int) -> int:
@@ -92,9 +128,19 @@ async def _call_async(
                 max_retries=max_retries,
                 context=context,
             )
+            _clear_last_failure(provider, operation)
             return resolved
         except Exception as exc:
             last_error = exc
+            _set_last_failure(
+                provider=provider,
+                operation=operation,
+                attempt=attempt,
+                max_retries=max_retries,
+                timeout=timeout,
+                context=context,
+                error=exc,
+            )
             _log_attempt(
                 provider=provider,
                 operation=operation,
@@ -141,9 +187,19 @@ def _call_sync(
                 max_retries=max_retries,
                 context=context,
             )
+            _clear_last_failure(provider, operation)
             return resolved
         except Exception as exc:
             last_error = exc
+            _set_last_failure(
+                provider=provider,
+                operation=operation,
+                attempt=attempt,
+                max_retries=max_retries,
+                timeout=timeout,
+                context=context,
+                error=exc,
+            )
             _log_attempt(
                 provider=provider,
                 operation=operation,

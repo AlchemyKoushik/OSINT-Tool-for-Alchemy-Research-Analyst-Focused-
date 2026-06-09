@@ -1,0 +1,281 @@
+{
+  "status": "completed",
+  "prompt_token_count": 19083,
+  "completion_token_count": 1521,
+  "total_token_count": 20604,
+  "raw_model_output_text": "{\n  \"decisions\": [\n    {\n      \"company_name\": \"IEnova (Sempra Infrastructure)\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"IEnova, now fully integrated into Sempra Infrastructure, develops, owns, and operates solar power plants in Mexico, including long-term solar capacity agreements and significant investments in solar and other renewables. Evidence shows direct project development, ownership, and operation of distributed and utility-scale solar assets.\"\n    },\n    {\n      \"company_name\": \"Vive Energía\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Vive Energía develops, finances, builds, and operates wind and solar farms in Mexico, with a track record of over 200MW of renewable energy projects, including distributed solar. They directly operate and manage solar assets, confirming their core operator role.\"\n    },\n    {\n      \"company_name\": \"Enel Green Power México\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Enel Green Power develops, operates, and manages solar and other renewable generation assets in Mexico, with over 1 GW of new solar capacity connected to the grid and a clear focus on clean power production and commercialization.\"\n    },\n    {\n      \"company_name\": \"Celsol\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Celsol is identified as a solar EPC (engineering, procurement, construction) company active in distributed solar PV projects in Mexico, directly involved in project delivery and installation, which is core to the distributed solar market.\"\n    },\n    {\n      \"company_name\": \"Iluméxico\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Iluméxico develops, installs, and operates solar home systems for off-grid and rural communities in Mexico, with a mission to eliminate lack of electricity access through distributed solar solutions. Their business is centered on distributed solar deployment.\"\n    },\n    {\n      \"company_name\": \"Grupo Dragon\",\n      \"classification\": \"Strategically Significant Participant\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"Grupo Dragon is a major power producer in Mexico with investments in renewables and partnerships for solar storage projects, but the evidence centers more on their role as a key grid partner and investor rather than a direct distributed solar operator.\"\n    },\n    {\n      \"company_name\": \"Biossmann Energía\",\n      \"classification\": \"Unrelated\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": false,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"No direct evidence links Biossmann Energía to core distributed solar project development, ownership, or operation in Mexico. The cited sources discuss the broader market and other companies, not Biossmann's direct participation.\"\n    },\n    {\n      \"company_name\": \"Solarever\",\n      \"classification\": \"Strategically Significant Participant\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"Solarever is a leading Mexican manufacturer of PV solar modules, supplying the distributed solar market and supporting local industry growth, but evidence does not show direct project development or operation; their role is as a key supplier.\"\n    },\n    {\n      \"company_name\": \"Bright\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Bright develops, finances, and installs distributed solar projects for residential and commercial customers in Mexico, with over 30 MW installed and thousands of customers, directly operating in the distributed solar market.\"\n    },\n    {\n      \"company_name\": \"Sunwise\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Sunwise is directly involved in financing and deploying distributed solar projects in Mexico, offering tailored solutions and partnerships for commercial users, indicating direct participation in the distributed solar market.\"\n    },\n    {\n      \"company_name\": \"Energía Real\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Energía Real is the largest distributed generation company in Mexico, investing heavily in distributed solar and private grids, with direct project development, ownership, and operation of distributed solar assets.\"\n    },\n    {\n      \"company_name\": \"Galt Energy\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Galt Energy is a solar technologies company in Monterrey and northern Mexico, directly quoting and delivering distributed solar solutions to corporate clients, indicating direct market participation.\"\n    },\n    {\n      \"company_name\": \"Solarvatio\",\n      \"classification\": \"Unrelated\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": false,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"No direct evidence links Solarvatio to distributed solar project development, ownership, or operation in Mexico. The cited sources discuss market trends and other companies, not Solarvatio's direct participation.\"\n    },\n    {\n      \"company_name\": \"Grupo Bimbo (Bimbo Solar)\",\n      \"classification\": \"Strategically Significant Participant\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"Grupo Bimbo is a major industrial user deploying distributed solar across its facilities, driving significant demand and adoption, but is not a developer or operator of distributed solar projects for the market at large.\"\n    },\n    {\n      \"company_name\": \"Tesla Energy México\",\n      \"classification\": \"Unrelated\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": false,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"No direct evidence of Tesla Energy México developing, owning, or operating distributed solar projects in Mexico; references are to potential supply and general solar market context.\"\n    },\n    {\n      \"company_name\": \"SunPower México\",\n      \"classification\": \"Strategically Significant Participant\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"SunPower is a major supplier of solar panels and technology to the Mexican market, supporting distributed solar growth, but there is no direct evidence of project development or operation in the cited sources.\"\n    }\n  ]\n}",
+  "raw_model_response": {
+    "id": "resp_001bee3b886ff570006a2272e06e6481909489c779ae1d624f",
+    "created_at": 1780642528.0,
+    "error": null,
+    "incomplete_details": null,
+    "instructions": null,
+    "metadata": {},
+    "model": "gpt-4.1-2025-04-14",
+    "object": "response",
+    "output": [
+      {
+        "id": "msg_001bee3b886ff570006a2272e17fd081909f92900e8cbe57a0",
+        "content": [
+          {
+            "annotations": [],
+            "text": "{\n  \"decisions\": [\n    {\n      \"company_name\": \"IEnova (Sempra Infrastructure)\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"IEnova, now fully integrated into Sempra Infrastructure, develops, owns, and operates solar power plants in Mexico, including long-term solar capacity agreements and significant investments in solar and other renewables. Evidence shows direct project development, ownership, and operation of distributed and utility-scale solar assets.\"\n    },\n    {\n      \"company_name\": \"Vive Energía\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Vive Energía develops, finances, builds, and operates wind and solar farms in Mexico, with a track record of over 200MW of renewable energy projects, including distributed solar. They directly operate and manage solar assets, confirming their core operator role.\"\n    },\n    {\n      \"company_name\": \"Enel Green Power México\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Enel Green Power develops, operates, and manages solar and other renewable generation assets in Mexico, with over 1 GW of new solar capacity connected to the grid and a clear focus on clean power production and commercialization.\"\n    },\n    {\n      \"company_name\": \"Celsol\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Celsol is identified as a solar EPC (engineering, procurement, construction) company active in distributed solar PV projects in Mexico, directly involved in project delivery and installation, which is core to the distributed solar market.\"\n    },\n    {\n      \"company_name\": \"Iluméxico\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Iluméxico develops, installs, and operates solar home systems for off-grid and rural communities in Mexico, with a mission to eliminate lack of electricity access through distributed solar solutions. Their business is centered on distributed solar deployment.\"\n    },\n    {\n      \"company_name\": \"Grupo Dragon\",\n      \"classification\": \"Strategically Significant Participant\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"Grupo Dragon is a major power producer in Mexico with investments in renewables and partnerships for solar storage projects, but the evidence centers more on their role as a key grid partner and investor rather than a direct distributed solar operator.\"\n    },\n    {\n      \"company_name\": \"Biossmann Energía\",\n      \"classification\": \"Unrelated\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": false,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"No direct evidence links Biossmann Energía to core distributed solar project development, ownership, or operation in Mexico. The cited sources discuss the broader market and other companies, not Biossmann's direct participation.\"\n    },\n    {\n      \"company_name\": \"Solarever\",\n      \"classification\": \"Strategically Significant Participant\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"Solarever is a leading Mexican manufacturer of PV solar modules, supplying the distributed solar market and supporting local industry growth, but evidence does not show direct project development or operation; their role is as a key supplier.\"\n    },\n    {\n      \"company_name\": \"Bright\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Bright develops, finances, and installs distributed solar projects for residential and commercial customers in Mexico, with over 30 MW installed and thousands of customers, directly operating in the distributed solar market.\"\n    },\n    {\n      \"company_name\": \"Sunwise\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Sunwise is directly involved in financing and deploying distributed solar projects in Mexico, offering tailored solutions and partnerships for commercial users, indicating direct participation in the distributed solar market.\"\n    },\n    {\n      \"company_name\": \"Energía Real\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Energía Real is the largest distributed generation company in Mexico, investing heavily in distributed solar and private grids, with direct project development, ownership, and operation of distributed solar assets.\"\n    },\n    {\n      \"company_name\": \"Galt Energy\",\n      \"classification\": \"Direct Market Participant\",\n      \"primary_business_fit\": true,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": true,\n      \"reason\": \"Galt Energy is a solar technologies company in Monterrey and northern Mexico, directly quoting and delivering distributed solar solutions to corporate clients, indicating direct market participation.\"\n    },\n    {\n      \"company_name\": \"Solarvatio\",\n      \"classification\": \"Unrelated\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": false,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"No direct evidence links Solarvatio to distributed solar project development, ownership, or operation in Mexico. The cited sources discuss market trends and other companies, not Solarvatio's direct participation.\"\n    },\n    {\n      \"company_name\": \"Grupo Bimbo (Bimbo Solar)\",\n      \"classification\": \"Strategically Significant Participant\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"Grupo Bimbo is a major industrial user deploying distributed solar across its facilities, driving significant demand and adoption, but is not a developer or operator of distributed solar projects for the market at large.\"\n    },\n    {\n      \"company_name\": \"Tesla Energy México\",\n      \"classification\": \"Unrelated\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": false,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"No direct evidence of Tesla Energy México developing, owning, or operating distributed solar projects in Mexico; references are to potential supply and general solar market context.\"\n    },\n    {\n      \"company_name\": \"SunPower México\",\n      \"classification\": \"Strategically Significant Participant\",\n      \"primary_business_fit\": false,\n      \"industry_centrality\": true,\n      \"operator_vs_supplier\": false,\n      \"reason\": \"SunPower is a major supplier of solar panels and technology to the Mexican market, supporting distributed solar growth, but there is no direct evidence of project development or operation in the cited sources.\"\n    }\n  ]\n}",
+            "type": "output_text",
+            "logprobs": [],
+            "parsed": {
+              "decisions": [
+                {
+                  "company_name": "IEnova (Sempra Infrastructure)",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "IEnova, now fully integrated into Sempra Infrastructure, develops, owns, and operates solar power plants in Mexico, including long-term solar capacity agreements and significant investments in solar and other renewables. Evidence shows direct project development, ownership, and operation of distributed and utility-scale solar assets."
+                },
+                {
+                  "company_name": "Vive Energía",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "Vive Energía develops, finances, builds, and operates wind and solar farms in Mexico, with a track record of over 200MW of renewable energy projects, including distributed solar. They directly operate and manage solar assets, confirming their core operator role."
+                },
+                {
+                  "company_name": "Enel Green Power México",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "Enel Green Power develops, operates, and manages solar and other renewable generation assets in Mexico, with over 1 GW of new solar capacity connected to the grid and a clear focus on clean power production and commercialization."
+                },
+                {
+                  "company_name": "Celsol",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "Celsol is identified as a solar EPC (engineering, procurement, construction) company active in distributed solar PV projects in Mexico, directly involved in project delivery and installation, which is core to the distributed solar market."
+                },
+                {
+                  "company_name": "Iluméxico",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "Iluméxico develops, installs, and operates solar home systems for off-grid and rural communities in Mexico, with a mission to eliminate lack of electricity access through distributed solar solutions. Their business is centered on distributed solar deployment."
+                },
+                {
+                  "company_name": "Grupo Dragon",
+                  "classification": "Strategically Significant Participant",
+                  "primary_business_fit": false,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": false,
+                  "reason": "Grupo Dragon is a major power producer in Mexico with investments in renewables and partnerships for solar storage projects, but the evidence centers more on their role as a key grid partner and investor rather than a direct distributed solar operator."
+                },
+                {
+                  "company_name": "Biossmann Energía",
+                  "classification": "Unrelated",
+                  "primary_business_fit": false,
+                  "industry_centrality": false,
+                  "operator_vs_supplier": false,
+                  "reason": "No direct evidence links Biossmann Energía to core distributed solar project development, ownership, or operation in Mexico. The cited sources discuss the broader market and other companies, not Biossmann's direct participation."
+                },
+                {
+                  "company_name": "Solarever",
+                  "classification": "Strategically Significant Participant",
+                  "primary_business_fit": false,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": false,
+                  "reason": "Solarever is a leading Mexican manufacturer of PV solar modules, supplying the distributed solar market and supporting local industry growth, but evidence does not show direct project development or operation; their role is as a key supplier."
+                },
+                {
+                  "company_name": "Bright",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "Bright develops, finances, and installs distributed solar projects for residential and commercial customers in Mexico, with over 30 MW installed and thousands of customers, directly operating in the distributed solar market."
+                },
+                {
+                  "company_name": "Sunwise",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "Sunwise is directly involved in financing and deploying distributed solar projects in Mexico, offering tailored solutions and partnerships for commercial users, indicating direct participation in the distributed solar market."
+                },
+                {
+                  "company_name": "Energía Real",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "Energía Real is the largest distributed generation company in Mexico, investing heavily in distributed solar and private grids, with direct project development, ownership, and operation of distributed solar assets."
+                },
+                {
+                  "company_name": "Galt Energy",
+                  "classification": "Direct Market Participant",
+                  "primary_business_fit": true,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": true,
+                  "reason": "Galt Energy is a solar technologies company in Monterrey and northern Mexico, directly quoting and delivering distributed solar solutions to corporate clients, indicating direct market participation."
+                },
+                {
+                  "company_name": "Solarvatio",
+                  "classification": "Unrelated",
+                  "primary_business_fit": false,
+                  "industry_centrality": false,
+                  "operator_vs_supplier": false,
+                  "reason": "No direct evidence links Solarvatio to distributed solar project development, ownership, or operation in Mexico. The cited sources discuss market trends and other companies, not Solarvatio's direct participation."
+                },
+                {
+                  "company_name": "Grupo Bimbo (Bimbo Solar)",
+                  "classification": "Strategically Significant Participant",
+                  "primary_business_fit": false,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": false,
+                  "reason": "Grupo Bimbo is a major industrial user deploying distributed solar across its facilities, driving significant demand and adoption, but is not a developer or operator of distributed solar projects for the market at large."
+                },
+                {
+                  "company_name": "Tesla Energy México",
+                  "classification": "Unrelated",
+                  "primary_business_fit": false,
+                  "industry_centrality": false,
+                  "operator_vs_supplier": false,
+                  "reason": "No direct evidence of Tesla Energy México developing, owning, or operating distributed solar projects in Mexico; references are to potential supply and general solar market context."
+                },
+                {
+                  "company_name": "SunPower México",
+                  "classification": "Strategically Significant Participant",
+                  "primary_business_fit": false,
+                  "industry_centrality": true,
+                  "operator_vs_supplier": false,
+                  "reason": "SunPower is a major supplier of solar panels and technology to the Mexican market, supporting distributed solar growth, but there is no direct evidence of project development or operation in the cited sources."
+                }
+              ]
+            }
+          }
+        ],
+        "role": "assistant",
+        "status": "completed",
+        "type": "message",
+        "phase": null
+      }
+    ],
+    "parallel_tool_calls": true,
+    "temperature": 0.1,
+    "tool_choice": "auto",
+    "tools": [],
+    "top_p": 1.0,
+    "background": false,
+    "completed_at": 1780642544.0,
+    "conversation": null,
+    "max_output_tokens": 2200,
+    "max_tool_calls": null,
+    "previous_response_id": null,
+    "prompt": null,
+    "prompt_cache_key": null,
+    "prompt_cache_retention": "in_memory",
+    "reasoning": {
+      "effort": null,
+      "generate_summary": null,
+      "summary": null,
+      "context": null
+    },
+    "safety_identifier": null,
+    "service_tier": "default",
+    "status": "completed",
+    "text": {
+      "format": {
+        "name": "CompetitiveLandscapeRelevanceResponse",
+        "schema_": {
+          "$defs": {
+            "CompetitiveLandscapeRelevanceDecision": {
+              "additionalProperties": false,
+              "properties": {
+                "company_name": {
+                  "title": "Company Name",
+                  "type": "string"
+                },
+                "classification": {
+                  "title": "Classification",
+                  "type": "string"
+                },
+                "primary_business_fit": {
+                  "title": "Primary Business Fit",
+                  "type": "boolean"
+                },
+                "industry_centrality": {
+                  "title": "Industry Centrality",
+                  "type": "boolean"
+                },
+                "operator_vs_supplier": {
+                  "title": "Operator Vs Supplier",
+                  "type": "boolean"
+                },
+                "reason": {
+                  "default": "",
+                  "title": "Reason",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "company_name",
+                "classification",
+                "primary_business_fit",
+                "industry_centrality",
+                "operator_vs_supplier",
+                "reason"
+              ],
+              "title": "CompetitiveLandscapeRelevanceDecision",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "decisions": {
+              "items": {
+                "$ref": "#/$defs/CompetitiveLandscapeRelevanceDecision"
+              },
+              "title": "Decisions",
+              "type": "array"
+            }
+          },
+          "title": "CompetitiveLandscapeRelevanceResponse",
+          "type": "object",
+          "required": [
+            "decisions"
+          ]
+        },
+        "type": "json_schema",
+        "description": null,
+        "strict": true
+      },
+      "verbosity": "medium"
+    },
+    "top_logprobs": 0,
+    "truncation": "disabled",
+    "usage": {
+      "input_tokens": 19083,
+      "input_tokens_details": {
+        "cached_tokens": 0
+      },
+      "output_tokens": 1521,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 20604
+    },
+    "user": null,
+    "billing": {
+      "payer": "developer"
+    },
+    "frequency_penalty": 0.0,
+    "moderation": null,
+    "presence_penalty": 0.0,
+    "store": true
+  },
+  "error_type": "",
+  "error_message": "",
+  "error_details": {}
+}

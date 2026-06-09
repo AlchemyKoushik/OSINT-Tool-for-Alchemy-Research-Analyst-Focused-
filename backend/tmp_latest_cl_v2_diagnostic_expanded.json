@@ -1,0 +1,1044 @@
+{
+  "session_id": "61947256-36f3-40b5-8d17-70e589c8b86b",
+  "top_level_final_counts": {
+    "major_players": 0,
+    "emerging_players": 1
+  },
+  "diagnostics": {
+    "candidate_companies_found": 1,
+    "major_candidates_found": 0,
+    "emerging_candidates_found": 1,
+    "discovered_major_players": 0,
+    "discovered_emerging_players": 1,
+    "validated_major_players": 0,
+    "validated_emerging_players": 1,
+    "enriched_major_players": 0,
+    "enriched_emerging_players": 1,
+    "final_major_players": 0,
+    "final_emerging_players": 1,
+    "rejected_primary_business_mismatch": 0,
+    "rejected_supplier": 0,
+    "rejected_adjacent_participant": 0,
+    "removed_companies": [],
+    "competitive_landscape_mode": "v2",
+    "validation_mode": "v2",
+    "discovery_agent_output": [
+      {
+        "company": "IEnova (Sempra Infrastructure)",
+        "tier": "Major Player",
+        "confidence": 95,
+        "reasons": [
+          "owns and operates distributed solar assets in Mexico",
+          "recurring mention in Mexican distributed generation reports",
+          "significant installed capacity"
+        ]
+      },
+      {
+        "company": "Enel Green Power México",
+        "tier": "Major Player",
+        "confidence": 90,
+        "reasons": [
+          "large distributed and utility-scale solar portfolio",
+          "active developer and operator in Mexico",
+          "frequent presence in industry rankings"
+        ]
+      },
+      {
+        "company": "Vive Energía",
+        "tier": "Major Player",
+        "confidence": 85,
+        "reasons": [
+          "notable distributed solar project developer",
+          "recognized in Mexican solar market reports",
+          "visible project pipeline"
+        ]
+      },
+      {
+        "company": "Celsol",
+        "tier": "Mid-Sized Player",
+        "confidence": 80,
+        "reasons": [
+          "active distributed solar installer and operator",
+          "local project portfolio",
+          "recurring mention in distributed generation market"
+        ]
+      },
+      {
+        "company": "Iluméxico",
+        "tier": "Mid-Sized Player",
+        "confidence": 78,
+        "reasons": [
+          "focus on rural distributed solar solutions",
+          "significant number of installations",
+          "recognized in local market studies"
+        ]
+      },
+      {
+        "company": "Grupo Dragon",
+        "tier": "Mid-Sized Player",
+        "confidence": 75,
+        "reasons": [
+          "owns and operates distributed solar assets",
+          "visible in Mexican renewable energy project listings"
+        ]
+      },
+      {
+        "company": "Solarever",
+        "tier": "Mid-Sized Player",
+        "confidence": 73,
+        "reasons": [
+          "manufacturer and developer with distributed solar projects",
+          "growing installed base in Mexico"
+        ]
+      },
+      {
+        "company": "Biossmann Energía",
+        "tier": "Emerging Player",
+        "confidence": 65,
+        "reasons": [
+          "active in distributed solar installations",
+          "increasing project activity in Mexico"
+        ]
+      },
+      {
+        "company": "Bright",
+        "tier": "Emerging Player",
+        "confidence": 70,
+        "reasons": [
+          "notable distributed solar developer",
+          "recognized for innovative business models",
+          "growing customer base"
+        ]
+      },
+      {
+        "company": "Energía Real",
+        "tier": "Emerging Player",
+        "confidence": 68,
+        "reasons": [
+          "develops and operates distributed solar projects",
+          "visible in local distributed generation market"
+        ]
+      },
+      {
+        "company": "Sunwise",
+        "tier": "Emerging Player",
+        "confidence": 60,
+        "reasons": [
+          "active in distributed solar installations",
+          "growing presence in Mexican market"
+        ]
+      },
+      {
+        "company": "Galt Energy",
+        "tier": "Emerging Player",
+        "confidence": 62,
+        "reasons": [
+          "distributed solar developer",
+          "increasing project portfolio in Mexico"
+        ]
+      },
+      {
+        "company": "Solarvatio",
+        "tier": "Emerging Player",
+        "confidence": 58,
+        "reasons": [
+          "local distributed solar installer",
+          "visible in regional project listings"
+        ]
+      },
+      {
+        "company": "Energía Solar Aplicada (ESA)",
+        "tier": "Emerging Player",
+        "confidence": 60,
+        "reasons": [
+          "active in distributed solar projects",
+          "recognized in local market directories"
+        ]
+      }
+    ],
+    "discovery_agent_query_diagnostics": [
+      {
+        "company": "IEnova (Sempra Infrastructure)",
+        "tier": "Major Player",
+        "confidence": 95,
+        "reasons": [
+          "owns and operates distributed solar assets in Mexico",
+          "recurring mention in Mexican distributed generation reports",
+          "significant installed capacity"
+        ],
+        "queries": [
+          "IEnova distributed solar projects Mexico",
+          "IEnova installed solar capacity Mexico",
+          "IEnova solar power contracts Mexico",
+          "IEnova distributed generation assets Mexico",
+          "IEnova solar portfolio Mexico",
+          "IEnova solar developer activity Mexico",
+          "IEnova utility scale solar projects Mexico",
+          "IEnova distributed solar power market participation Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 5,
+        "evidence_blocks": 5
+      },
+      {
+        "company": "Enel Green Power México",
+        "tier": "Major Player",
+        "confidence": 90,
+        "reasons": [
+          "large distributed and utility-scale solar portfolio",
+          "active developer and operator in Mexico",
+          "frequent presence in industry rankings"
+        ],
+        "queries": [
+          "Enel Green Power México distributed solar projects Mexico",
+          "Enel Green Power México utility-scale solar capacity Mexico",
+          "Enel Green Power México solar portfolio Mexico",
+          "Enel Green Power México solar power purchase agreements Mexico",
+          "Enel Green Power México solar project development activity Mexico",
+          "Enel Green Power México renewable energy rankings Mexico",
+          "Enel Green Power México solar installations Mexico",
+          "Enel Green Power México distributed generation assets Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 9,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Vive Energía",
+        "tier": "Major Player",
+        "confidence": 85,
+        "reasons": [
+          "notable distributed solar project developer",
+          "recognized in Mexican solar market reports",
+          "visible project pipeline"
+        ],
+        "queries": [
+          "Vive Energía distributed solar projects Mexico",
+          "Vive Energía solar power installed capacity Mexico",
+          "Vive Energía solar project portfolio Mexico",
+          "Vive Energía solar power contracts Mexico",
+          "Vive Energía utility-scale solar projects Mexico",
+          "Vive Energía solar developer activity Mexico",
+          "Vive Energía ownership solar assets Mexico",
+          "Vive Energía distributed solar market participation Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 4,
+        "evidence_blocks": 4
+      },
+      {
+        "company": "Celsol",
+        "tier": "Mid-Sized Player",
+        "confidence": 80,
+        "reasons": [
+          "active distributed solar installer and operator",
+          "local project portfolio",
+          "recurring mention in distributed generation market"
+        ],
+        "queries": [
+          "Celsol distributed solar projects Mexico",
+          "Celsol solar power installed capacity Mexico",
+          "Celsol solar portfolio Mexico",
+          "Celsol distributed generation contracts Mexico",
+          "Celsol solar developer activity Mexico",
+          "Celsol utility scale solar projects Mexico",
+          "Celsol company overview distributed solar Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 7,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Iluméxico",
+        "tier": "Mid-Sized Player",
+        "confidence": 78,
+        "reasons": [
+          "focus on rural distributed solar solutions",
+          "significant number of installations",
+          "recognized in local market studies"
+        ],
+        "queries": [
+          "Iluméxico distributed solar installations Mexico",
+          "Iluméxico rural solar projects Mexico",
+          "Iluméxico solar power capacity Mexico",
+          "Iluméxico solar energy contracts Mexico",
+          "Iluméxico portfolio distributed solar assets Mexico",
+          "Iluméxico utility scale solar projects Mexico",
+          "Iluméxico developer activity solar Mexico",
+          "Iluméxico market participation distributed solar Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 10,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Grupo Dragon",
+        "tier": "Mid-Sized Player",
+        "confidence": 75,
+        "reasons": [
+          "owns and operates distributed solar assets",
+          "visible in Mexican renewable energy project listings"
+        ],
+        "queries": [
+          "Grupo Dragon distributed solar projects Mexico",
+          "Grupo Dragon solar asset ownership Mexico",
+          "Grupo Dragon renewable energy portfolio Mexico",
+          "Grupo Dragon solar power contracts Mexico",
+          "Grupo Dragon utility-scale solar installations Mexico",
+          "distributed solar developers Mexico",
+          "Grupo Dragon Mexico renewable energy news"
+        ],
+        "search_results": 12,
+        "stored_sources": 6,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Solarever",
+        "tier": "Mid-Sized Player",
+        "confidence": 73,
+        "reasons": [
+          "manufacturer and developer with distributed solar projects",
+          "growing installed base in Mexico"
+        ],
+        "queries": [
+          "Solarever distributed solar projects Mexico",
+          "Solarever installed solar capacity Mexico",
+          "Solarever solar power contracts Mexico",
+          "Solarever solar project portfolio Mexico",
+          "Solarever solar developer activity Mexico",
+          "Solarever utility-scale solar projects Mexico",
+          "Solarever solar power ownership Mexico",
+          "Solarever solar manufacturing Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 8,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Biossmann Energía",
+        "tier": "Emerging Player",
+        "confidence": 65,
+        "reasons": [
+          "active in distributed solar installations",
+          "increasing project activity in Mexico"
+        ],
+        "queries": [
+          "Biossmann Energía distributed solar projects Mexico",
+          "Biossmann Energía solar installation portfolio Mexico",
+          "Biossmann Energía solar power contracts Mexico",
+          "Biossmann Energía developer activity distributed solar Mexico",
+          "Biossmann Energía utility-scale solar projects Mexico",
+          "Biossmann Energía ownership distributed solar assets Mexico",
+          "Biossmann Energía installed solar capacity Mexico",
+          "Biossmann Energía distributed solar market participation Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 6,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Bright",
+        "tier": "Emerging Player",
+        "confidence": 70,
+        "reasons": [
+          "notable distributed solar developer",
+          "recognized for innovative business models",
+          "growing customer base"
+        ],
+        "queries": [
+          "Bright distributed solar projects Mexico",
+          "Bright solar power installations Mexico",
+          "Bright solar developer contracts Mexico",
+          "Bright portfolio distributed solar Mexico",
+          "Bright innovative solar business models Mexico",
+          "Bright customer base distributed solar Mexico",
+          "Bright utility scale solar projects Mexico",
+          "Bright solar energy market participation Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 6,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Energía Real",
+        "tier": "Emerging Player",
+        "confidence": 68,
+        "reasons": [
+          "develops and operates distributed solar projects",
+          "visible in local distributed generation market"
+        ],
+        "queries": [
+          "Energía Real distributed solar projects Mexico",
+          "Energía Real solar power installed capacity Mexico",
+          "Energía Real solar project portfolio Mexico",
+          "Energía Real solar power contracts Mexico",
+          "Energía Real distributed generation market participation Mexico",
+          "Energía Real utility-scale solar projects Mexico",
+          "Energía Real renewable energy developer Mexico",
+          "Energía Real company overview Mexico distributed solar"
+        ],
+        "search_results": 12,
+        "stored_sources": 9,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Sunwise",
+        "tier": "Emerging Player",
+        "confidence": 60,
+        "reasons": [
+          "active in distributed solar installations",
+          "growing presence in Mexican market"
+        ],
+        "queries": [
+          "Sunwise distributed solar installations Mexico",
+          "Sunwise solar power projects Mexico",
+          "Sunwise installed solar capacity Mexico",
+          "Sunwise solar portfolio Mexico",
+          "Sunwise solar power contracts Mexico",
+          "Sunwise utility-scale solar projects Mexico",
+          "Sunwise solar developer activity Mexico",
+          "Sunwise renewable energy market participation Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 3,
+        "evidence_blocks": 3
+      },
+      {
+        "company": "Galt Energy",
+        "tier": "Emerging Player",
+        "confidence": 62,
+        "reasons": [
+          "distributed solar developer",
+          "increasing project portfolio in Mexico"
+        ],
+        "queries": [
+          "Galt Energy distributed solar projects Mexico",
+          "Galt Energy solar power installed capacity Mexico",
+          "Galt Energy solar portfolio Mexico",
+          "Galt Energy solar power contracts Mexico",
+          "Galt Energy solar developer activity Mexico",
+          "Galt Energy utility scale solar projects Mexico",
+          "Galt Energy renewable energy market participation Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 6,
+        "evidence_blocks": 6
+      },
+      {
+        "company": "Solarvatio",
+        "tier": "Emerging Player",
+        "confidence": 58,
+        "reasons": [
+          "local distributed solar installer",
+          "visible in regional project listings"
+        ],
+        "queries": [
+          "Solarvatio Mexico distributed solar projects",
+          "Solarvatio installed solar capacity Mexico",
+          "Solarvatio solar power contracts Mexico",
+          "Solarvatio solar portfolio Mexico",
+          "Solarvatio developer activity Mexico distributed solar",
+          "Solarvatio utility scale solar projects Mexico",
+          "Solarvatio Mexico solar installer reviews",
+          "Solarvatio company overview Mexico distributed solar"
+        ],
+        "search_results": 12,
+        "stored_sources": 4,
+        "evidence_blocks": 4
+      },
+      {
+        "company": "Energía Solar Aplicada (ESA)",
+        "tier": "Emerging Player",
+        "confidence": 60,
+        "reasons": [
+          "active in distributed solar projects",
+          "recognized in local market directories"
+        ],
+        "queries": [
+          "\"Energía Solar Aplicada\" distributed solar projects Mexico",
+          "\"Energía Solar Aplicada\" installed solar capacity Mexico",
+          "\"Energía Solar Aplicada\" solar project portfolio Mexico",
+          "\"Energía Solar Aplicada\" solar contracts Mexico",
+          "\"Energía Solar Aplicada\" utility-scale solar projects Mexico",
+          "\"Energía Solar Aplicada\" developer activity Mexico distributed solar",
+          "\"Energía Solar Aplicada\" market directories Mexico solar",
+          "\"Energía Solar Aplicada\" renewable energy assets Mexico"
+        ],
+        "search_results": 12,
+        "stored_sources": 9,
+        "evidence_blocks": 6
+      }
+    ]
+  },
+  "companies": [
+    {
+      "company": "IEnova (Sempra Infrastructure)",
+      "tier": "Major Player",
+      "confidence": 95,
+      "reasons": [
+        "owns and operates distributed solar assets in Mexico",
+        "recurring mention in Mexican distributed generation reports",
+        "significant installed capacity"
+      ],
+      "queries": [
+        "IEnova distributed solar projects Mexico",
+        "IEnova installed solar capacity Mexico",
+        "IEnova solar power contracts Mexico",
+        "IEnova distributed generation assets Mexico",
+        "IEnova solar portfolio Mexico",
+        "IEnova solar developer activity Mexico",
+        "IEnova utility scale solar projects Mexico",
+        "IEnova distributed solar power market participation Mexico"
+      ],
+      "stored_sources": 5,
+      "evidence_blocks": 5,
+      "evidence_size_chars": 24314,
+      "evidence_quality_score_avg": 9.75,
+      "evidence_quality_score_max": 10,
+      "source_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Evidence shows IEnova develops, owns, and operates solar PV parks and other renewable energy assets in Mexico, including the Pima Solar PV Park. The company is directly involved in project development, construction, and operation of solar power plants, making it a core operator in the distributed solar power generation market.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Enel Green Power México",
+      "tier": "Major Player",
+      "confidence": 90,
+      "reasons": [
+        "large distributed and utility-scale solar portfolio",
+        "active developer and operator in Mexico",
+        "frequent presence in industry rankings"
+      ],
+      "queries": [
+        "Enel Green Power México distributed solar projects Mexico",
+        "Enel Green Power México utility-scale solar capacity Mexico",
+        "Enel Green Power México solar portfolio Mexico",
+        "Enel Green Power México solar power purchase agreements Mexico",
+        "Enel Green Power México solar project development activity Mexico",
+        "Enel Green Power México renewable energy rankings Mexico",
+        "Enel Green Power México solar installations Mexico",
+        "Enel Green Power México distributed generation assets Mexico"
+      ],
+      "stored_sources": 9,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 96663,
+      "evidence_quality_score_avg": 8.75,
+      "evidence_quality_score_max": 9,
+      "source_ids": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Enel Green Power México is cited as a major player with a dedicated subsidiary for the Mexican market, actively developing and operating solar PV parks such as Villanueva 3. The company is directly involved in distributed generation and power purchase agreements, confirming its central operator role in the distributed solar market.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Vive Energía",
+      "tier": "Major Player",
+      "confidence": 85,
+      "reasons": [
+        "notable distributed solar project developer",
+        "recognized in Mexican solar market reports",
+        "visible project pipeline"
+      ],
+      "queries": [
+        "Vive Energía distributed solar projects Mexico",
+        "Vive Energía solar power installed capacity Mexico",
+        "Vive Energía solar project portfolio Mexico",
+        "Vive Energía solar power contracts Mexico",
+        "Vive Energía utility-scale solar projects Mexico",
+        "Vive Energía solar developer activity Mexico",
+        "Vive Energía ownership solar assets Mexico",
+        "Vive Energía distributed solar market participation Mexico"
+      ],
+      "stored_sources": 4,
+      "evidence_blocks": 4,
+      "evidence_size_chars": 55107,
+      "evidence_quality_score_avg": 10.5,
+      "evidence_quality_score_max": 12,
+      "source_ids": [
+        12,
+        13,
+        14,
+        15
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Vive Energía develops, finances, constructs, and operates renewable energy projects, including solar farms, in Mexico. The company manages its own assets and is recognized for significant milestones in project development and operation, confirming its direct participation in the distributed solar market.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Celsol",
+      "tier": "Mid-Sized Player",
+      "confidence": 80,
+      "reasons": [
+        "active distributed solar installer and operator",
+        "local project portfolio",
+        "recurring mention in distributed generation market"
+      ],
+      "queries": [
+        "Celsol distributed solar projects Mexico",
+        "Celsol solar power installed capacity Mexico",
+        "Celsol solar portfolio Mexico",
+        "Celsol distributed generation contracts Mexico",
+        "Celsol solar developer activity Mexico",
+        "Celsol utility scale solar projects Mexico",
+        "Celsol company overview distributed solar Mexico"
+      ],
+      "stored_sources": 7,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 53022,
+      "evidence_quality_score_avg": 9.75,
+      "evidence_quality_score_max": 12,
+      "source_ids": [
+        16,
+        17,
+        18,
+        19,
+        20,
+        21
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Celsol is identified as a solar project developer and installer in Mexico, with evidence pointing to its involvement in distributed generation and rooftop solar installations, which are driving recent market growth. This positions Celsol as a direct participant in the distributed solar power generation market.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Iluméxico",
+      "tier": "Mid-Sized Player",
+      "confidence": 78,
+      "reasons": [
+        "focus on rural distributed solar solutions",
+        "significant number of installations",
+        "recognized in local market studies"
+      ],
+      "queries": [
+        "Iluméxico distributed solar installations Mexico",
+        "Iluméxico rural solar projects Mexico",
+        "Iluméxico solar power capacity Mexico",
+        "Iluméxico solar energy contracts Mexico",
+        "Iluméxico portfolio distributed solar assets Mexico",
+        "Iluméxico utility scale solar projects Mexico",
+        "Iluméxico developer activity solar Mexico",
+        "Iluméxico market participation distributed solar Mexico"
+      ],
+      "stored_sources": 10,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 341149,
+      "evidence_quality_score_avg": 9.0,
+      "evidence_quality_score_max": 11,
+      "source_ids": [
+        22,
+        23,
+        24,
+        25,
+        26,
+        27
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Iluméxico provides solar installations to rural and off-grid communities in Mexico, directly distributing, installing, and maintaining solar systems. The company is focused on expanding access to electricity via distributed solar, making it a direct market participant.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Grupo Dragon",
+      "tier": "Mid-Sized Player",
+      "confidence": 75,
+      "reasons": [
+        "owns and operates distributed solar assets",
+        "visible in Mexican renewable energy project listings"
+      ],
+      "queries": [
+        "Grupo Dragon distributed solar projects Mexico",
+        "Grupo Dragon solar asset ownership Mexico",
+        "Grupo Dragon renewable energy portfolio Mexico",
+        "Grupo Dragon solar power contracts Mexico",
+        "Grupo Dragon utility-scale solar installations Mexico",
+        "distributed solar developers Mexico",
+        "Grupo Dragon Mexico renewable energy news"
+      ],
+      "stored_sources": 6,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 54246,
+      "evidence_quality_score_avg": 10.33,
+      "evidence_quality_score_max": 12,
+      "source_ids": [
+        28,
+        29,
+        30,
+        31,
+        32,
+        33
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Strategically Significant Participant",
+        "reason": "Grupo Dragon invests heavily in renewables and has announced distributed solar projects, but the evidence emphasizes broader renewable investments (including geothermal and wind) and does not confirm core operator status in distributed solar. However, its investment and ownership in distributed solar projects make it strategically significant.",
+        "rejection_reason": "",
+        "primary_business_fit": false,
+        "industry_centrality": true,
+        "operator_vs_supplier": false
+      }
+    },
+    {
+      "company": "Solarever",
+      "tier": "Mid-Sized Player",
+      "confidence": 73,
+      "reasons": [
+        "manufacturer and developer with distributed solar projects",
+        "growing installed base in Mexico"
+      ],
+      "queries": [
+        "Solarever distributed solar projects Mexico",
+        "Solarever installed solar capacity Mexico",
+        "Solarever solar power contracts Mexico",
+        "Solarever solar project portfolio Mexico",
+        "Solarever solar developer activity Mexico",
+        "Solarever utility-scale solar projects Mexico",
+        "Solarever solar power ownership Mexico",
+        "Solarever solar manufacturing Mexico"
+      ],
+      "stored_sources": 8,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 22522,
+      "evidence_quality_score_avg": 10.0,
+      "evidence_quality_score_max": 10,
+      "source_ids": [
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Strategically Significant Participant",
+        "reason": "Solarever is a major manufacturer of solar panels and modules in Mexico, supplying the distributed solar market and investing in local production capacity. While not a direct operator of distributed solar assets, its manufacturing scale and ecosystem role make it strategically significant.",
+        "rejection_reason": "",
+        "primary_business_fit": false,
+        "industry_centrality": true,
+        "operator_vs_supplier": false
+      }
+    },
+    {
+      "company": "Biossmann Energía",
+      "tier": "Emerging Player",
+      "confidence": 65,
+      "reasons": [
+        "active in distributed solar installations",
+        "increasing project activity in Mexico"
+      ],
+      "queries": [
+        "Biossmann Energía distributed solar projects Mexico",
+        "Biossmann Energía solar installation portfolio Mexico",
+        "Biossmann Energía solar power contracts Mexico",
+        "Biossmann Energía developer activity distributed solar Mexico",
+        "Biossmann Energía utility-scale solar projects Mexico",
+        "Biossmann Energía ownership distributed solar assets Mexico",
+        "Biossmann Energía installed solar capacity Mexico",
+        "Biossmann Energía distributed solar market participation Mexico"
+      ],
+      "stored_sources": 6,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 65243,
+      "evidence_quality_score_avg": 11.0,
+      "evidence_quality_score_max": 12,
+      "source_ids": [
+        40,
+        41,
+        42,
+        43,
+        44,
+        45
+      ],
+      "validator": {
+        "kept": false,
+        "classification": "Unrelated",
+        "reason": "Evidence shows Biossmann Energía specializes in healthcare technology and operating room solutions, not in solar power generation or distribution. No evidence supports participation in the distributed solar market.",
+        "rejection_reason": "rejected_primary_business_mismatch",
+        "primary_business_fit": false,
+        "industry_centrality": false,
+        "operator_vs_supplier": false
+      }
+    },
+    {
+      "company": "Bright",
+      "tier": "Emerging Player",
+      "confidence": 70,
+      "reasons": [
+        "notable distributed solar developer",
+        "recognized for innovative business models",
+        "growing customer base"
+      ],
+      "queries": [
+        "Bright distributed solar projects Mexico",
+        "Bright solar power installations Mexico",
+        "Bright solar developer contracts Mexico",
+        "Bright portfolio distributed solar Mexico",
+        "Bright innovative solar business models Mexico",
+        "Bright customer base distributed solar Mexico",
+        "Bright utility scale solar projects Mexico",
+        "Bright solar energy market participation Mexico"
+      ],
+      "stored_sources": 6,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 37980,
+      "evidence_quality_score_avg": 10.5,
+      "evidence_quality_score_max": 12,
+      "source_ids": [
+        46,
+        47,
+        48,
+        49,
+        50,
+        51
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Bright is directly involved in distributed solar by installing and financing rooftop solar systems for homes and businesses in Mexico, with over 30 MW installed for 4,700 customers. This makes it a core operator in the distributed solar market.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Energía Real",
+      "tier": "Emerging Player",
+      "confidence": 68,
+      "reasons": [
+        "develops and operates distributed solar projects",
+        "visible in local distributed generation market"
+      ],
+      "queries": [
+        "Energía Real distributed solar projects Mexico",
+        "Energía Real solar power installed capacity Mexico",
+        "Energía Real solar project portfolio Mexico",
+        "Energía Real solar power contracts Mexico",
+        "Energía Real distributed generation market participation Mexico",
+        "Energía Real utility-scale solar projects Mexico",
+        "Energía Real renewable energy developer Mexico",
+        "Energía Real company overview Mexico distributed solar"
+      ],
+      "stored_sources": 9,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 75828,
+      "evidence_quality_score_avg": 10.2,
+      "evidence_quality_score_max": 12,
+      "source_ids": [
+        52,
+        53,
+        54,
+        55,
+        56,
+        57
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Energía Real is cited in the context of distributed energy generation in Mexico, with evidence supporting its direct involvement in distributed solar projects and solutions, confirming its operator status.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Sunwise",
+      "tier": "Emerging Player",
+      "confidence": 60,
+      "reasons": [
+        "active in distributed solar installations",
+        "growing presence in Mexican market"
+      ],
+      "queries": [
+        "Sunwise distributed solar installations Mexico",
+        "Sunwise solar power projects Mexico",
+        "Sunwise installed solar capacity Mexico",
+        "Sunwise solar portfolio Mexico",
+        "Sunwise solar power contracts Mexico",
+        "Sunwise utility-scale solar projects Mexico",
+        "Sunwise solar developer activity Mexico",
+        "Sunwise renewable energy market participation Mexico"
+      ],
+      "stored_sources": 3,
+      "evidence_blocks": 3,
+      "evidence_size_chars": 10094,
+      "evidence_quality_score_avg": 7.0,
+      "evidence_quality_score_max": 7,
+      "source_ids": [
+        58,
+        59,
+        60
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Sunwise is directly involved in financing and enabling large-scale solar projects in Mexico, including distributed generation and storage solutions for commercial users, confirming its role as a direct market participant.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Galt Energy",
+      "tier": "Emerging Player",
+      "confidence": 62,
+      "reasons": [
+        "distributed solar developer",
+        "increasing project portfolio in Mexico"
+      ],
+      "queries": [
+        "Galt Energy distributed solar projects Mexico",
+        "Galt Energy solar power installed capacity Mexico",
+        "Galt Energy solar portfolio Mexico",
+        "Galt Energy solar power contracts Mexico",
+        "Galt Energy solar developer activity Mexico",
+        "Galt Energy utility scale solar projects Mexico",
+        "Galt Energy renewable energy market participation Mexico"
+      ],
+      "stored_sources": 6,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 23412,
+      "evidence_quality_score_avg": 8.67,
+      "evidence_quality_score_max": 10,
+      "source_ids": [
+        61,
+        62,
+        63,
+        64,
+        65,
+        66
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "Galt Energy installs solar systems for residential, commercial, and industrial customers across Mexico, with thousands of projects completed. The company is a direct operator in the distributed solar market.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    },
+    {
+      "company": "Solarvatio",
+      "tier": "Emerging Player",
+      "confidence": 58,
+      "reasons": [
+        "local distributed solar installer",
+        "visible in regional project listings"
+      ],
+      "queries": [
+        "Solarvatio Mexico distributed solar projects",
+        "Solarvatio installed solar capacity Mexico",
+        "Solarvatio solar power contracts Mexico",
+        "Solarvatio solar portfolio Mexico",
+        "Solarvatio developer activity Mexico distributed solar",
+        "Solarvatio utility scale solar projects Mexico",
+        "Solarvatio Mexico solar installer reviews",
+        "Solarvatio company overview Mexico distributed solar"
+      ],
+      "stored_sources": 4,
+      "evidence_blocks": 4,
+      "evidence_size_chars": 16312,
+      "evidence_quality_score_avg": 12.0,
+      "evidence_quality_score_max": 12,
+      "source_ids": [
+        67,
+        68,
+        69,
+        70
+      ],
+      "validator": {
+        "kept": false,
+        "classification": "Unrelated",
+        "reason": "No direct evidence links Solarvatio to distributed solar power generation in Mexico. The cited sources discuss broader market trends and other companies, but not Solarvatio's direct participation.",
+        "rejection_reason": "rejected_primary_business_mismatch",
+        "primary_business_fit": false,
+        "industry_centrality": false,
+        "operator_vs_supplier": false
+      }
+    },
+    {
+      "company": "Energía Solar Aplicada (ESA)",
+      "tier": "Emerging Player",
+      "confidence": 60,
+      "reasons": [
+        "active in distributed solar projects",
+        "recognized in local market directories"
+      ],
+      "queries": [
+        "\"Energía Solar Aplicada\" distributed solar projects Mexico",
+        "\"Energía Solar Aplicada\" installed solar capacity Mexico",
+        "\"Energía Solar Aplicada\" solar project portfolio Mexico",
+        "\"Energía Solar Aplicada\" solar contracts Mexico",
+        "\"Energía Solar Aplicada\" utility-scale solar projects Mexico",
+        "\"Energía Solar Aplicada\" developer activity Mexico distributed solar",
+        "\"Energía Solar Aplicada\" market directories Mexico solar",
+        "\"Energía Solar Aplicada\" renewable energy assets Mexico"
+      ],
+      "stored_sources": 9,
+      "evidence_blocks": 6,
+      "evidence_size_chars": 86394,
+      "evidence_quality_score_avg": 9.5,
+      "evidence_quality_score_max": 12,
+      "source_ids": [
+        71,
+        72,
+        73,
+        74,
+        75,
+        76
+      ],
+      "validator": {
+        "kept": true,
+        "classification": "Direct Market Participant",
+        "reason": "ESA is listed as a solar system installer in Mexico, directly involved in distributed solar installations, which confirms its role as a direct market participant.",
+        "rejection_reason": "",
+        "primary_business_fit": true,
+        "industry_centrality": true,
+        "operator_vs_supplier": true
+      }
+    }
+  ]
+}

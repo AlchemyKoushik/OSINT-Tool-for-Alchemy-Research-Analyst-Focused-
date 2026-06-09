@@ -1,0 +1,22 @@
+[
+  { "topic": "Distributed Solar Power Generation Market", "location_preference": "country_specific", "location_value": "Mexico" },
+  { "topic": "Utility-Scale Solar Market", "location_preference": "country_specific", "location_value": "Chile" },
+  { "topic": "Entertainment Industry", "location_preference": "country_specific", "location_value": "India" },
+  { "topic": "Data Center Market", "location_preference": "country_specific", "location_value": "Malaysia" },
+  { "topic": "Battery Energy Storage Market", "location_preference": "country_specific", "location_value": "Australia" },
+  { "topic": "Electric Vehicle Charging Market", "location_preference": "country_specific", "location_value": "Germany" },
+  { "topic": "Offshore Wind Market", "location_preference": "country_specific", "location_value": "United Kingdom" },
+  { "topic": "Green Hydrogen Market", "location_preference": "country_specific", "location_value": "Saudi Arabia" },
+  { "topic": "E-commerce Market", "location_preference": "country_specific", "location_value": "Indonesia" },
+  { "topic": "Cloud Kitchen Market", "location_preference": "country_specific", "location_value": "United Arab Emirates" },
+  { "topic": "Fintech Market", "location_preference": "country_specific", "location_value": "Brazil" },
+  { "topic": "Semiconductor Industry", "location_preference": "country_specific", "location_value": "India" },
+  { "topic": "Hospitality Industry", "location_preference": "country_specific", "location_value": "Vietnam" },
+  { "topic": "Telecom Tower Market", "location_preference": "country_specific", "location_value": "Nigeria" },
+  { "topic": "Digital Payments Market", "location_preference": "country_specific", "location_value": "Philippines" },
+  { "topic": "Logistics Market", "location_preference": "country_specific", "location_value": "Mexico" },
+  { "topic": "Luxury Retail Market", "location_preference": "country_specific", "location_value": "South Korea" },
+  { "topic": "Food Delivery Market", "location_preference": "country_specific", "location_value": "Japan" },
+  { "topic": "Utility-Scale Battery Storage Market", "location_preference": "country_specific", "location_value": "United States" },
+  { "topic": "Commercial Solar Installation Market", "location_preference": "country_specific", "location_value": "Spain" }
+]

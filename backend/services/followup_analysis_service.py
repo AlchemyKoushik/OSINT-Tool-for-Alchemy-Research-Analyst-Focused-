@@ -89,6 +89,9 @@ def _validate_research_items(items: Any) -> List[Dict[str, Any]]:
                 "heading": heading,
                 "body": body,
                 "segment": _normalize_text(item.get("segment")),
+                "market_role": _normalize_text(item.get("market_role")),
+                "key_company_facts": list(item.get("key_company_facts", [])) if isinstance(item.get("key_company_facts", []), list) else [],
+                "competitive_positioning": _normalize_text(item.get("competitive_positioning")),
                 "examples": list(item.get("examples", [])) if isinstance(item.get("examples", []), list) else [],
                 "sources": list(item.get("sources", [])) if isinstance(item.get("sources", []), list) else [],
                 "source_ids": list(item.get("source_ids", [])) if isinstance(item.get("source_ids", []), list) else [],
@@ -96,6 +99,20 @@ def _validate_research_items(items: Any) -> List[Dict[str, Any]]:
         )
 
     return valid_items
+
+
+def _group_competitive_landscape_items(items: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    major_players: List[Dict[str, Any]] = []
+    emerging_players: List[Dict[str, Any]] = []
+    for item in items:
+        normalized_item = dict(item)
+        if str(normalized_item.get("segment", "")).strip().lower() == "major_players":
+            major_players.append(normalized_item)
+        else:
+            if not str(normalized_item.get("segment", "")).strip():
+                normalized_item["segment"] = "emerging_players"
+            emerging_players.append(normalized_item)
+    return major_players, emerging_players
 
 
 async def analyze_existing_chunks(
@@ -123,8 +140,9 @@ async def analyze_existing_chunks(
 
     usable_chunks = [chunk for chunk in resolved_chunks if _normalize_text(chunk.get("text"))]
     if not usable_chunks:
-        return {
-            "section": str((metadata or {}).get("section", "trends")).strip().lower() or "trends",
+        empty_section = str((metadata or {}).get("section", "trends")).strip().lower() or "trends"
+        empty_payload = {
+            "section": empty_section,
             "title": "No strong insights found",
             "items": [
                 {
@@ -136,6 +154,13 @@ async def analyze_existing_chunks(
             ],
             "error": None,
             "session_id": session_id,
+        }
+        if empty_section == "competitive_landscape":
+            empty_payload["major_players"] = []
+            empty_payload["emerging_players"] = list(empty_payload["items"])
+            empty_payload["items"][0]["segment"] = "emerging_players"
+        return {
+            **empty_payload,
         }
 
     resolved_metadata = metadata or {}
@@ -180,14 +205,27 @@ async def analyze_existing_chunks(
         )
 
     analysis_json = normalize_analyze_response_payload(analysis_json, fallback_section=section)
-    ranked_items = rank_and_limit_insights(
-        list(analysis_json.get("items", [])),
-        limit=FOLLOW_UP_INSIGHT_LIMIT,
-    )
-    sourced_items = attach_sources_to_items(
-        list(ranked_items),
-        evidence_blocks,
-    )
+    if section == "competitive_landscape":
+        analysis_json["major_players"] = attach_sources_to_items(
+            rank_and_limit_insights(list(analysis_json.get("major_players", [])), limit=FOLLOW_UP_INSIGHT_LIMIT),
+            evidence_blocks,
+            max_sources_per_item=6,
+        )
+        analysis_json["emerging_players"] = attach_sources_to_items(
+            rank_and_limit_insights(list(analysis_json.get("emerging_players", [])), limit=FOLLOW_UP_INSIGHT_LIMIT),
+            evidence_blocks,
+            max_sources_per_item=6,
+        )
+        sourced_items = [*analysis_json["major_players"], *analysis_json["emerging_players"]]
+    else:
+        ranked_items = rank_and_limit_insights(
+            list(analysis_json.get("items", [])),
+            limit=FOLLOW_UP_INSIGHT_LIMIT,
+        )
+        sourced_items = attach_sources_to_items(
+            list(ranked_items),
+            evidence_blocks,
+        )
     sourced_items = await enrich_items_with_researched_examples(
         items=list(sourced_items),
         topic=normalized_query,
@@ -207,6 +245,10 @@ async def analyze_existing_chunks(
             }
         ]
     analysis_json["items"] = validated_items
+    if section == "competitive_landscape":
+        major_players, emerging_players = _group_competitive_landscape_items(validated_items)
+        analysis_json["major_players"] = major_players
+        analysis_json["emerging_players"] = emerging_players
     if not _normalize_text(analysis_json.get("title")):
         analysis_json["title"] = "No strong insights found"
 
