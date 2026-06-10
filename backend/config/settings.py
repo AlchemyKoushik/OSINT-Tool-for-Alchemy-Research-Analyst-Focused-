@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     JOB_POLL_TIMEOUT_SECONDS: int = 5
     JOB_MAX_RETRIES: int = 3
     WORKER_IDLE_SLEEP_SECONDS: float = 1.0
+    WORKER_HEARTBEAT_FILE: str = "/tmp/osint-worker-heartbeat"
+    WORKER_HEARTBEAT_MAX_AGE_SECONDS: int = 120
 
     model_config = SettingsConfigDict(
         env_file=_resolve_env_files(),
