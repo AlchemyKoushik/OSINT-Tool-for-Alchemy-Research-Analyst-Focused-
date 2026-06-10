@@ -9,7 +9,7 @@
 - `frontend/.dockerignore`: frontend build context exclusions
 - `frontend/nginx/default.conf`: frontend static server config
 - `frontend/docker-entrypoint.d/40-render-config.sh`: runtime frontend config renderer
-- `docker-compose.yml`: single-VPS production stack
+- `docker-compose.yaml`: single-VPS production stack
 - `.env.production.example`: production env template
 - `deploy/nginx/nginx.conf`: edge reverse proxy
 - `deploy/redis/redis.conf`: Redis persistence and memory policy
@@ -45,7 +45,7 @@
 1. Copy `.env.production.example` to `.env.production`.
 2. Fill in all required secrets.
 3. In Coolify, create a Docker Compose application from this repo.
-4. Set the compose file to `docker-compose.yml`.
+4. Set the compose file to `docker-compose.yaml`.
 5. Attach the domain to the `nginx` service and expose container port `80` through Coolify.
 6. Deploy.
 
