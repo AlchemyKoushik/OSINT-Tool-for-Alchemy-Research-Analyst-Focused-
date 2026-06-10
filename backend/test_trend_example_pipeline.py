@@ -27,6 +27,7 @@ from services.prompt_builder import (
 )
 from services.trend_example_research_service import _build_fallback_queries
 from services.trend_example_research_service import (
+    _build_company_profile_fallback_overview,
     _coverage_status,
     _filter_company_profile_facts,
     _filter_recent_developments,
@@ -459,6 +460,44 @@ class CompetitiveLandscapeV2RegressionTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    def test_company_profile_fact_filter_rejects_stale_forecast_language(self):
+        filtered = _filter_company_profile_facts(
+            [
+                "A 2024 market report projected the company would reach 5 GW by 2025.",
+                "Operates 2.9 GW of renewable capacity across 14 projects.",
+            ]
+        )
+        self.assertEqual(
+            filtered,
+            ["Operates 2.9 GW of renewable capacity across 14 projects."],
+        )
+
+    def test_company_profile_fact_filter_rejects_project_construction_and_equipment_details(self):
+        filtered = _filter_company_profile_facts(
+            [
+                "Began construction of a 200 MW solar project in 2025.",
+                "The project uses 154,710 bifacial panels.",
+                "Operates 2.9 GW of renewable capacity across Chile and Peru.",
+            ]
+        )
+        self.assertEqual(
+            filtered,
+            ["Operates 2.9 GW of renewable capacity across Chile and Peru."],
+        )
+
+    def test_company_profile_fact_filter_rejects_fact_repeated_in_business_overview(self):
+        filtered = _filter_company_profile_facts(
+            [
+                "Operates a renewable energy portfolio exceeding 2.0 GW across Chile.",
+                "Part of Enel Group, one of the world's largest integrated power utilities.",
+            ],
+            business_overview="The company operates a renewable energy portfolio exceeding 2.0 GW across Chile.",
+        )
+        self.assertEqual(
+            filtered,
+            ["Part of Enel Group, one of the world's largest integrated power utilities."],
+        )
+
     def test_recent_development_filter_rejects_static_capacity_fact(self):
         filtered = _filter_recent_developments(
             [
@@ -481,6 +520,42 @@ class CompetitiveLandscapeV2RegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(filtered), 1)
         self.assertIn("announced a 200 MW solar project", filtered[0].text)
 
+    def test_recent_development_filter_rejects_stale_forecast_language(self):
+        filtered = _filter_recent_developments(
+            [
+                ExtractedExample(
+                    company="Example Energy",
+                    text="A 2024 report projected Example Energy would reach 5 GW by 2025.",
+                    event_date="2024-06-01",
+                    published_date="2024-06-01",
+                    source_ids=[1],
+                ),
+                ExtractedExample(
+                    company="Example Energy",
+                    text="Example Energy signed a 300 MW PPA in January 2026.",
+                    event_date="2026-01-15",
+                    published_date="2026-01-15",
+                    source_ids=[2],
+                ),
+            ]
+        )
+        self.assertEqual(len(filtered), 1)
+        self.assertIn("signed a 300 MW PPA", filtered[0].text)
+
+    def test_company_profile_fallback_overview_does_not_invent_summary(self):
+        overview = _build_company_profile_fallback_overview(
+            company_name="Bright",
+            evidence_blocks=[
+                _evidence_block(
+                    1,
+                    title="Distributed Solar Market Outlook",
+                    excerpt="A 2024 report projected the market would reach $8 billion by 2025.",
+                    published_date="2024-05-01",
+                )
+            ],
+        )
+        self.assertEqual(overview, "")
+
     def test_company_profile_prompt_defers_recent_developments_to_separate_call(self):
         prompt = build_company_profile_extraction_payload(
             topic="Distributed Solar Power Generation Market",
@@ -491,6 +566,8 @@ class CompetitiveLandscapeV2RegressionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("Do not generate recent_developments in this call.", prompt)
         self.assertIn("Always return an empty recent_developments list", prompt)
+        self.assertIn("Reject number of panels, turbines, modules, or equipment-level details.", prompt)
+        self.assertIn("Use company-level evidence first.", prompt)
 
     def test_recent_company_developments_prompt_uses_last_three_calendar_years_logic(self):
         prompt = build_recent_company_developments_payload(

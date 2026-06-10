@@ -160,6 +160,9 @@ def _format_example_evidence_blocks(evidence_blocks: Optional[List[Dict[str, Any
                 "published_date": str(block.get("published_date", "") or block.get("date", "")).strip(),
                 "retrieved_date": str(block.get("retrieved_date", "")).strip() or get_current_research_date(),
                 "source_tier": str(block.get("source_tier", "")).strip() or "Tier 3",
+                "evidence_scope": str(block.get("evidence_scope", "")).strip() or "company_level_evidence",
+                "company_specific": bool(block.get("company_specific", False)),
+                "source_quality_score": block.get("source_quality_score"),
                 "snippet": snippet,
                 "full_text_excerpt": excerpt,
             }
@@ -388,13 +391,22 @@ def build_company_profile_extraction_payload(
         "- Write business_overview as a concise 2 to 3 sentence description of the company business, operating model, customer or end-market focus, and market role.\n"
         "- Do not write generic market size, CAGR, forecast, chapter, or report-summary text in business_overview.\n"
         "- If the evidence does not support business_overview, return an empty string.\n"
-        "- key_company_facts must contain only quantifiable, verifiable, market-relevant facts for this company.\n"
-        "- Prefer measurable facts such as operating capacity, project pipeline, storage pipeline, major projects, PPAs, customer count, subscribers, user base, ARR, AUM, distribution footprint, coverage, spectrum holdings, assets, or clearly measurable commercial scale.\n"
-        "- Reject generic claims like market leader, strong presence, recognised company, major company, leading player, or similar wording unless the evidence supports that claim with a measurable fact in the same sentence.\n"
-        "- Do not use headquarters, founding year, or generic company history as key_company_facts unless they are directly material to market relevance and supported by evidence.\n"
-        "- Keep key_company_facts concise and evidence-backed.\n"
+        "- Generate 3 to 5 key_company_facts for the company.\n"
+        "- Focus only on company-level facts that explain the company's scale, market relevance, ownership, portfolio, geographic footprint, business model, or strategic positioning.\n"
+        "- Key Company Facts should capture company-level, investor-relevant facts, not project descriptions or marketing claims.\n"
+        "- Prioritise facts in this order: portfolio scale / installed capacity / AUM / assets under management; geographic footprint and core operating markets; market position or ranking, only when supported by evidence; ownership structure / parent company / strategic shareholders; business model and revenue model such as PPAs, regulated contracts, merchant exposure, EPC, development, ownership, or O&M; strategic differentiators such as hybrid projects, storage capability, large development pipeline, or long-term customer relationships.\n"
+        "- Each fact must be company-level rather than single-project-level, current or recently updated, quantifiable wherever possible, verifiable from the evidence, a maximum of one sentence, and useful for understanding the company's scale, positioning, or relevance in the market.\n"
+        "- Good facts include installed capacity, portfolio size, AUM, project pipeline, number of operating assets, customer base, contracted capacity, parent company or ownership structure where relevant, country or regional footprint, market position supported by evidence, renewable technology mix or asset mix, and long-term PPAs, regulated contracts, or commercial model.\n"
+        "- Reject individual project construction updates unless the project materially changes the company's scale or market position.\n"
+        "- Reject number of panels, turbines, modules, or equipment-level details.\n"
+        "- Reject project investment values unless strategically material.\n"
+        "- Reject expected generation output of a single asset.\n"
+        "- Reject outdated phrases such as under construction, expected to complete, began construction, or due by.\n"
+        "- Reject vague claims such as leading player, strong presence, or innovative company unless backed by measurable evidence.\n"
+        "- Reject founding year, headquarters, or company history unless directly relevant to market positioning.\n"
+        "- Reject facts that duplicate the business_overview.\n"
         "- Return only the fact text, not labels like Fact 1.\n"
-        "- Return an empty key_company_facts list if the evidence does not support them.\n"
+        "- If the evidence does not support at least 3 strong company-level facts, return fewer facts rather than filling with weak information.\n"
         "- Do not generate recent_developments in this call. A separate extraction step will handle recent developments.\n"
         '- Always return an empty recent_developments list in this response.\n'
         "- competitive_positioning should be one concise insight-driven sentence explaining what the company's actions indicate strategically in this market.\n"
@@ -403,7 +415,8 @@ def build_company_profile_extraction_payload(
         "- Return an empty competitive_positioning string if the evidence does not support it.\n"
         "- source_ids must reference only the numbered evidence blocks that directly support the profile.\n"
         "- Prefer official company, investor, annual report, regulator, exchange, government, project database, reputable industry publication, and reputable news sources when available.\n"
-        "- Avoid relying primarily on lead-generation websites, contact directories, generic Top X articles, SEO-driven blogs, or unsourced market reports.\n"
+        "- Avoid relying primarily on generic news articles, old project announcements, duplicated syndicated content, pages focused only on one project, lead-generation websites, contact directories, generic Top X articles, SEO-driven blogs, or unsourced market reports.\n"
+        "- Use company-level evidence first. Project-level evidence should only be used when it changes the company's overall scale, market position, or strategic relevance.\n"
         "- Each company should ideally be supported by 1 to 2 company-specific sources.\n\n"
         "EVIDENCE\n"
         f"{_format_example_evidence_blocks(evidence_blocks)}\n\n"

@@ -134,6 +134,104 @@ FACT_METRIC_MARKERS = (
     "states",
     "countries",
 )
+COMPANY_LEVEL_METRIC_MARKERS = (
+    "mw",
+    "gw",
+    "kw",
+    "pipeline",
+    "portfolio",
+    "aum",
+    "assets under management",
+    "revenue",
+    "customers",
+    "customer base",
+    "subscribers",
+    "user base",
+    "users",
+    "projects",
+    "assets",
+    "contracts",
+    "capacity",
+    "footprint",
+    "markets",
+    "countries",
+    "regions",
+    "operating assets",
+    "contracted capacity",
+)
+PROJECT_LEVEL_CONSTRUCTION_MARKERS = (
+    "began construction",
+    "under construction",
+    "expected to complete",
+    "due by",
+    "construction started",
+    "started construction",
+    "scheduled to complete",
+    "planned to complete",
+)
+EQUIPMENT_LEVEL_MARKERS = ("panels", "panel", "modules", "module", "turbines", "turbine", "inverters", "inverter")
+SINGLE_ASSET_OUTPUT_MARKERS = ("gwh per year", "annual generation", "generate per year", "generation output", "mwh per year")
+OWNERSHIP_FACT_MARKERS = (
+    "part of",
+    "owned by",
+    "subsidiary of",
+    "backed by",
+    "parent company",
+    "strategic shareholder",
+    "majority-owned",
+    "joint venture",
+)
+GEOGRAPHIC_FOOTPRINT_MARKERS = (
+    "across",
+    "footprint",
+    "presence in",
+    "operates in",
+    "active in",
+    "markets",
+    "countries",
+    "regions",
+    "regional",
+    "global",
+)
+BUSINESS_MODEL_FACT_MARKERS = (
+    "ppa",
+    "ppas",
+    "regulated contract",
+    "regulated contracts",
+    "merchant exposure",
+    "merchant market",
+    "epc",
+    "developer",
+    "development",
+    "ownership",
+    "o&m",
+    "operation and maintenance",
+    "asset mix",
+    "technology mix",
+    "hybrid",
+    "storage",
+    "offtake",
+)
+MARKET_POSITION_FACT_MARKERS = (
+    "ranked",
+    "largest",
+    "top ",
+    "top-",
+    "market share",
+    "market position",
+    "leading",
+    "major role",
+)
+CURRENT_STATE_FACT_MARKERS = (
+    "operates",
+    "maintains",
+    "owns",
+    "includes",
+    "supplies",
+    "serves",
+    "has ",
+    "is part of",
+)
 STRATEGIC_EVENT_MARKERS = (
     "announced",
     "launched",
@@ -185,6 +283,11 @@ GENERIC_COMPANY_OVERVIEW_MARKERS = (
     "forecast period",
     "market size",
     "report examines",
+)
+STALE_FORECAST_PATTERNS = (
+    re.compile(r"\bproject(?:ed|ion)?\b[^.]*\bby\s+(20\d{2})\b", re.IGNORECASE),
+    re.compile(r"\bexpect(?:ed|s)?\b[^.]*\bby\s+(20\d{2})\b", re.IGNORECASE),
+    re.compile(r"\bforecast(?:ed)?\b[^.]*\bby\s+(20\d{2})\b", re.IGNORECASE),
 )
 INVALID_COMPANY_TITLE_MARKERS = (
     "market",
@@ -275,6 +378,123 @@ def _is_recent_profile_date(value: Any) -> bool:
     return year in {current_year, previous_year, two_years_ago}
 
 
+def _contains_stale_forecast_language(value: Any) -> bool:
+    normalized = _normalize_text(value)
+    if not normalized:
+        return False
+    current_year = _research_date_context()[0]
+    for pattern in STALE_FORECAST_PATTERNS:
+        for match in pattern.finditer(normalized):
+            try:
+                target_year = int(match.group(1))
+            except (TypeError, ValueError, IndexError):
+                continue
+            if target_year <= current_year:
+                return True
+    return False
+
+
+def _contains_any_marker(value: str, markers: Sequence[str]) -> bool:
+    normalized = _normalize_text(value).lower()
+    return any(marker in normalized for marker in markers)
+
+
+def _count_fact_sentences(value: str) -> int:
+    normalized = _normalize_text(value)
+    if not normalized:
+        return 0
+    return len([segment for segment in re.split(r"(?<=[.!?])\s+", normalized) if segment.strip()])
+
+
+def _looks_like_project_only_fact(value: str) -> bool:
+    normalized = _normalize_text(value).lower()
+    if not normalized:
+        return False
+    if _contains_any_marker(normalized, PROJECT_LEVEL_CONSTRUCTION_MARKERS):
+        return True
+    if _contains_any_marker(normalized, EQUIPMENT_LEVEL_MARKERS):
+        return True
+    if _contains_any_marker(normalized, SINGLE_ASSET_OUTPUT_MARKERS):
+        return True
+    return False
+
+
+def _has_company_level_metric_fact(value: str) -> bool:
+    normalized = _normalize_text(value).lower()
+    return bool(re.search(r"\d", normalized)) and _contains_any_marker(normalized, COMPANY_LEVEL_METRIC_MARKERS)
+
+
+def _has_ownership_fact(value: str) -> bool:
+    return _contains_any_marker(value, OWNERSHIP_FACT_MARKERS)
+
+
+def _has_geographic_footprint_fact(value: str) -> bool:
+    normalized = _normalize_text(value).lower()
+    if not _contains_any_marker(normalized, GEOGRAPHIC_FOOTPRINT_MARKERS):
+        return False
+    return bool(re.search(r"\b(?:countries|markets|regions|states)\b", normalized)) or " across " in f" {normalized} "
+
+
+def _has_business_model_fact(value: str) -> bool:
+    return _contains_any_marker(value, BUSINESS_MODEL_FACT_MARKERS)
+
+
+def _has_market_position_fact(value: str) -> bool:
+    normalized = _normalize_text(value).lower()
+    if not _contains_any_marker(normalized, MARKET_POSITION_FACT_MARKERS):
+        return False
+    return bool(re.search(r"\b(?:no\.?\s*\d+|top\s+\d+|largest|ranked|market share)\b", normalized)) or _has_company_level_metric_fact(normalized)
+
+
+def _is_isolated_investment_fact(value: str) -> bool:
+    normalized = _normalize_text(value).lower()
+    has_money = bool(re.search(r"(?:[$€£]\s?\d|\b\d+(?:\.\d+)?\s?(?:m|bn|million|billion)\b)", normalized))
+    if not has_money:
+        return False
+    return not any(
+        checker(normalized)
+        for checker in (
+            _has_company_level_metric_fact,
+            _has_ownership_fact,
+            _has_geographic_footprint_fact,
+            _has_business_model_fact,
+            _has_market_position_fact,
+        )
+    )
+
+
+def _fact_repeats_overview(fact: str, business_overview: str) -> bool:
+    normalized_fact = _normalize_text(fact).lower().strip(".")
+    normalized_overview = _normalize_text(business_overview).lower()
+    if not normalized_fact or not normalized_overview:
+        return False
+    if normalized_fact in normalized_overview:
+        return True
+    fact_tokens = set(_tokenize(normalized_fact))
+    overview_tokens = set(_tokenize(normalized_overview))
+    if not fact_tokens or not overview_tokens:
+        return False
+    overlap = len(fact_tokens & overview_tokens) / max(1, len(fact_tokens))
+    return overlap >= 0.8
+
+
+def _classify_company_profile_evidence_scope(source: Dict[str, Any]) -> str:
+    combined = " ".join(
+        [
+            _normalize_text(source.get("title")),
+            _normalize_text(source.get("snippet")),
+            _normalize_text(source.get("summary")),
+            _normalize_text(source.get("description")),
+            _normalize_text(source.get("content"))[:1200],
+        ]
+    ).lower()
+    if _contains_any_marker(combined, PROJECT_LEVEL_CONSTRUCTION_MARKERS) or _contains_any_marker(combined, EQUIPMENT_LEVEL_MARKERS):
+        return "project_level_evidence"
+    if _contains_any_marker(combined, STRATEGIC_EVENT_MARKERS):
+        return "recent_developments"
+    return "company_level_evidence"
+
+
 def _is_company_specific_source(company_name: str, source: Dict[str, Any]) -> bool:
     company_key = _normalize_text(company_name).lower()
     combined = " ".join(
@@ -305,6 +525,7 @@ def _company_profile_source_quality_score(source: Dict[str, Any], company_name: 
     score = 0
     source_tier = _source_tier_for_source(source)
     source_type = _normalize_text(source.get("source_type") or source.get("artifact_type")).lower()
+    evidence_scope = _classify_company_profile_evidence_scope(source)
     if source_tier == "Tier 1":
         score += 8
     elif source_tier == "Tier 2":
@@ -317,6 +538,10 @@ def _company_profile_source_quality_score(source: Dict[str, Any], company_name: 
         score += 5
     if _is_recent_profile_date(source.get("published_date") or source.get("date") or source.get("year")):
         score += 2
+    if source_type == "news":
+        score -= 2
+    if evidence_scope == "project_level_evidence":
+        score -= 4
     if _is_low_value_company_source(source):
         score -= 8
     if not _normalize_text(source.get("content")) and not _normalize_text(source.get("snippet")):
@@ -554,6 +779,8 @@ def _looks_like_generic_company_overview(company_name: str, overview: str) -> bo
         return True
     if normalized_company and normalized_company not in normalized_overview:
         return True
+    if _contains_stale_forecast_language(normalized_overview):
+        return True
     return any(marker in normalized_overview for marker in GENERIC_COMPANY_OVERVIEW_MARKERS)
 
 
@@ -580,6 +807,8 @@ def _extract_company_focus_sentences(company_name: str, evidence_blocks: Sequenc
                 continue
             if company_key and company_key not in normalized_sentence.lower():
                 continue
+            if _contains_stale_forecast_language(normalized_sentence):
+                continue
             sentence_key = normalized_sentence.lower()
             if sentence_key in seen_sentences:
                 continue
@@ -590,47 +819,29 @@ def _extract_company_focus_sentences(company_name: str, evidence_blocks: Sequenc
     return normalized_sentences
 
 
-def _summarize_source_window(evidence_blocks: Sequence[Dict[str, Any]]) -> str:
-    years = sorted(
-        {
-            str(block.get("date", "")).strip()
-            for block in evidence_blocks
-            if str(block.get("date", "")).strip()
-        }
-    )
-    if not years:
-        return "recent company and market sources"
-    if len(years) == 1:
-        return f"sources from {years[0]}"
-    return f"sources from {years[0]} to {years[-1]}"
-
-
 def _build_company_profile_fallback_overview(
     *,
-    topic: str,
     company_name: str,
-    location_context: LocationContext,
     evidence_blocks: Sequence[Dict[str, Any]],
 ) -> str:
     focus_sentences = _extract_company_focus_sentences(company_name, evidence_blocks)
     if focus_sentences:
         selected = focus_sentences[:2]
         return " ".join(selected)
-
-    scope = location_context.value if not location_context.is_global else "the market"
-    source_window = _summarize_source_window(evidence_blocks)
-    return (
-        f"Available evidence from {source_window} indicates {company_name} is active in {scope} within {topic}. "
-        f"The current source set confirms company relevance, although the scraped material provides only limited detail on operations and strategy."
-    )
+    return ""
 
 
 def _build_company_profile_fallback_facts(
     *,
     company_name: str,
     evidence_blocks: Sequence[Dict[str, Any]],
+    business_overview: str = "",
 ) -> List[str]:
-    return _build_company_profile_fallback_fact_candidates(company_name=company_name, evidence_blocks=evidence_blocks)[:4]
+    return _build_company_profile_fallback_fact_candidates(
+        company_name=company_name,
+        evidence_blocks=evidence_blocks,
+        business_overview=business_overview,
+    )[:5]
 
 
 def _clean_company_profile_sentence(value: str) -> str:
@@ -643,27 +854,40 @@ def _is_actionable_company_fact(fact: str) -> bool:
     normalized_lower = normalized.lower()
     if not normalized:
         return False
+    if _count_fact_sentences(normalized) > 1:
+        return False
+    if _contains_stale_forecast_language(normalized_lower):
+        return False
+    if _looks_like_project_only_fact(normalized_lower):
+        return False
     if any(marker in normalized_lower for marker in GENERIC_COMPANY_FACT_MARKERS) and not re.search(r"\d", normalized_lower):
         return False
-    has_numeric = bool(re.search(r"\d", normalized_lower))
-    has_metric = any(marker in normalized_lower for marker in FACT_METRIC_MARKERS)
-    has_named_asset_signal = any(
-        marker in normalized_lower
-        for marker in ("project", "portfolio", "plant", "farm", "site", "ppa", "contract", "deployment")
+    if _is_isolated_investment_fact(normalized_lower):
+        return False
+    return any(
+        checker(normalized_lower)
+        for checker in (
+            _has_company_level_metric_fact,
+            _has_ownership_fact,
+            _has_geographic_footprint_fact,
+            _has_business_model_fact,
+            _has_market_position_fact,
+        )
     )
-    return (has_numeric and has_metric) or has_named_asset_signal
 
 
 def _build_company_profile_fallback_fact_candidates(
     *,
     company_name: str,
     evidence_blocks: Sequence[Dict[str, Any]],
+    business_overview: str = "",
 ) -> List[str]:
     candidates: List[str] = []
     seen = set()
     company_key = _normalize_text(company_name).lower()
     for block in evidence_blocks:
         excerpt = _normalize_text(block.get("excerpt") or block.get("full_text_excerpt"))
+        block_date = block.get("published_date") or block.get("date")
         if not excerpt:
             continue
         for sentence in re.split(r"(?<=[.!?])\s+", excerpt):
@@ -672,7 +896,13 @@ def _build_company_profile_fallback_fact_candidates(
                 continue
             if company_key and company_key not in cleaned_sentence.lower():
                 continue
+            if not _is_recent_profile_date(block_date) and not _contains_any_marker(cleaned_sentence, CURRENT_STATE_FACT_MARKERS):
+                continue
+            if _contains_stale_forecast_language(cleaned_sentence):
+                continue
             if not _is_actionable_company_fact(cleaned_sentence):
+                continue
+            if _fact_repeats_overview(cleaned_sentence, business_overview):
                 continue
             sentence_key = cleaned_sentence.lower()
             if sentence_key in seen:
@@ -684,7 +914,7 @@ def _build_company_profile_fallback_fact_candidates(
     return candidates
 
 
-def _filter_company_profile_facts(facts: Sequence[str]) -> List[str]:
+def _filter_company_profile_facts(facts: Sequence[str], *, business_overview: str = "") -> List[str]:
     filtered: List[str] = []
     seen = set()
     for fact in facts:
@@ -692,23 +922,104 @@ def _filter_company_profile_facts(facts: Sequence[str]) -> List[str]:
         fact_key = cleaned_fact.lower()
         if not cleaned_fact or fact_key in seen:
             continue
+        if _contains_stale_forecast_language(cleaned_fact):
+            continue
         if not _is_actionable_company_fact(cleaned_fact):
+            continue
+        if _fact_repeats_overview(cleaned_fact, business_overview):
             continue
         seen.add(fact_key)
         filtered.append(cleaned_fact.rstrip(".") + ".")
     return filtered[:5]
 
 
+def _evidence_blocks_for_source_ids(
+    evidence_blocks: Sequence[Dict[str, Any]],
+    source_ids: Sequence[int],
+) -> List[Dict[str, Any]]:
+    requested_ids = set()
+    for source_id in source_ids or []:
+        try:
+            numeric_id = int(source_id)
+        except (TypeError, ValueError):
+            continue
+        if numeric_id > 0:
+            requested_ids.add(numeric_id)
+    if not requested_ids:
+        return list(evidence_blocks)
+    filtered_blocks: List[Dict[str, Any]] = []
+    for block in evidence_blocks:
+        try:
+            block_id = int(block.get("source_id"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if block_id in requested_ids:
+            filtered_blocks.append(block)
+    return filtered_blocks
+
+
+def _has_evidence_support(
+    text: str,
+    *,
+    evidence_blocks: Sequence[Dict[str, Any]],
+    company_name: str,
+    source_ids: Sequence[int] | None = None,
+    minimum_overlap: int = 2,
+) -> bool:
+    normalized_text = _normalize_text(text)
+    if not normalized_text:
+        return False
+    relevant_blocks = _evidence_blocks_for_source_ids(evidence_blocks, list(source_ids or []))
+    if not relevant_blocks:
+        return False
+    candidate_tokens = [
+        token
+        for token in _tokenize(normalized_text)
+        if not re.fullmatch(r"20\d{2}", token)
+    ]
+    if not candidate_tokens:
+        return False
+    combined_evidence = " ".join(
+        _normalize_text(block.get("excerpt") or block.get("full_text_excerpt") or block.get("snippet"))
+        for block in relevant_blocks
+    ).lower()
+    if not combined_evidence:
+        return False
+    company_key = _normalize_text(company_name).lower()
+    if company_key and company_key not in combined_evidence:
+        block_hits = 0
+        for block in relevant_blocks:
+            block_context = {
+                "title": block.get("title"),
+                "snippet": block.get("snippet"),
+                "content": block.get("excerpt") or block.get("full_text_excerpt"),
+            }
+            if _is_company_specific_source(company_name, block_context):
+                block_hits += 1
+        if block_hits == 0:
+            return False
+    overlap = len({token for token in candidate_tokens if token in combined_evidence})
+    required_overlap = min(max(1, minimum_overlap), max(1, len(set(candidate_tokens))))
+    return overlap >= required_overlap
+
+
 def _is_strategic_development_text(text: str) -> bool:
     normalized = _normalize_text(text).lower()
     if not normalized:
+        return False
+    if _contains_stale_forecast_language(normalized):
         return False
     has_event = any(marker in normalized for marker in STRATEGIC_EVENT_MARKERS)
     has_static_only = any(marker in normalized for marker in STATIC_DEVELOPMENT_MARKERS)
     return has_event and not (has_static_only and not has_event)
 
 
-def _filter_recent_developments(examples: Sequence[ExtractedExample]) -> List[ExtractedExample]:
+def _filter_recent_developments(
+    examples: Sequence[ExtractedExample],
+    *,
+    company_name: str = "",
+    evidence_blocks: Sequence[Dict[str, Any]] | None = None,
+) -> List[ExtractedExample]:
     filtered: List[ExtractedExample] = []
     seen = set()
     for example in examples:
@@ -717,7 +1028,17 @@ def _filter_recent_developments(examples: Sequence[ExtractedExample]) -> List[Ex
         text = _normalize_text(example.text or example.event)
         if not _is_strategic_development_text(text):
             continue
+        if _contains_stale_forecast_language(text):
+            continue
         if not _is_recent_profile_date(example.event_date or example.published_date or example.year or text):
+            continue
+        if evidence_blocks and not _has_evidence_support(
+            text,
+            evidence_blocks=evidence_blocks,
+            company_name=company_name or _normalize_text(example.company),
+            source_ids=list(example.source_ids or []),
+            minimum_overlap=2,
+        ):
             continue
         dedupe_key = (
             text.lower(),
@@ -752,6 +1073,8 @@ def _build_company_profile_fallback_developments(
                 continue
             if company_key and company_key not in cleaned_sentence.lower():
                 continue
+            if _contains_stale_forecast_language(cleaned_sentence):
+                continue
             if not _is_strategic_development_text(cleaned_sentence):
                 continue
             event_date = _normalize_text(block.get("date") or block.get("published_date"))
@@ -784,42 +1107,58 @@ def _build_company_profile_fallback_developments(
 
 def _looks_like_generic_positioning(value: str) -> bool:
     normalized = _normalize_text(value).lower()
-    return not normalized or any(marker in normalized for marker in GENERIC_POSITIONING_MARKERS)
+    return not normalized or _contains_stale_forecast_language(normalized) or any(
+        marker in normalized for marker in GENERIC_POSITIONING_MARKERS
+    )
 
 
-def _build_company_profile_fallback_positioning(
+def _sanitize_company_profile_overview(
     *,
-    topic: str,
     company_name: str,
-    location_context: LocationContext,
-    business_overview: str,
-    facts: Sequence[str],
-    developments: Sequence[ExtractedExample],
+    overview: str,
+    evidence_blocks: Sequence[Dict[str, Any]],
+    source_ids: Sequence[int],
 ) -> str:
-    scope = location_context.value if not location_context.is_global else "the market"
-    combined = " ".join(
-        [business_overview, *list(facts or []), *[_normalize_text(example.text) for example in developments]]
-    ).lower()
-    if any(marker in combined for marker in ("storage", "battery")):
-        move = "moving into adjacent storage capabilities"
-    elif any(marker in combined for marker in ("expanded", "pipeline", "portfolio", "commissioned", "construction")):
-        move = "scaling its project pipeline"
-    elif any(marker in combined for marker in ("customers", "commercial", "residential", "industrial")):
-        move = "expanding customer coverage"
-    elif any(marker in combined for marker in ("manufactur", "module", "technology")):
-        move = "strengthening technology and value-chain control"
-    elif any(marker in combined for marker in ("ppa", "contract", "partnered", "signed")):
-        move = "locking in commercial demand through contracts and partnerships"
-    else:
-        move = "reinforcing its position through recent market activity"
-    return f"Recent evidence suggests {company_name} is {move} in {scope}, which supports its relevance to {topic}."
+    cleaned_overview = _normalize_text(overview)
+    if not cleaned_overview:
+        return ""
+    if _looks_like_generic_company_overview(company_name, cleaned_overview):
+        return ""
+    if not _has_evidence_support(
+        cleaned_overview,
+        evidence_blocks=evidence_blocks,
+        company_name=company_name,
+        source_ids=source_ids,
+        minimum_overlap=2,
+    ):
+        return ""
+    return cleaned_overview
+
+
+def _sanitize_company_profile_positioning(
+    *,
+    company_name: str,
+    positioning: str,
+    evidence_blocks: Sequence[Dict[str, Any]],
+    source_ids: Sequence[int],
+) -> str:
+    cleaned_positioning = _normalize_text(positioning)
+    if not cleaned_positioning or _looks_like_generic_positioning(cleaned_positioning):
+        return ""
+    if not _has_evidence_support(
+        cleaned_positioning,
+        evidence_blocks=evidence_blocks,
+        company_name=company_name,
+        source_ids=source_ids,
+        minimum_overlap=2,
+    ):
+        return ""
+    return cleaned_positioning
 
 
 def _company_profile_has_market_relevance(
     *,
-    topic: str,
     company_name: str,
-    location_context: LocationContext,
     evidence_blocks: Sequence[Dict[str, Any]],
 ) -> bool:
     company_specific_recent_sources = 0
@@ -934,6 +1273,7 @@ def _build_company_profile_evidence_blocks(
                 "location": _normalize_text(source.get("location")),
                 "source_quality_score": _company_profile_source_quality_score(source, company_name),
                 "company_specific": _is_company_specific_source(company_name, source),
+                "evidence_scope": _classify_company_profile_evidence_scope(source),
             }
         )
     logger.info(
@@ -1274,9 +1614,7 @@ async def _research_examples_for_item(
             logger.info('Competitive landscape enrichment skipped company="%s" reason="%s"', heading, "no_company_evidence")
             return _build_skip_item(normalized_item, reason="no_company_evidence")
         if not _company_profile_has_market_relevance(
-            topic=topic,
             company_name=heading,
-            location_context=location_context,
             evidence_blocks=evidence_blocks,
         ):
             logger.info(
@@ -1297,20 +1635,30 @@ async def _research_examples_for_item(
 
         attached_item = dict(normalized_item)
         fallback_overview = _build_company_profile_fallback_overview(
-            topic=topic,
             company_name=heading,
-            location_context=location_context,
             evidence_blocks=evidence_blocks,
         )
-        if profile.business_overview and not _looks_like_generic_company_overview(heading, profile.business_overview):
-            attached_item["body"] = profile.business_overview
+        sanitized_overview = _sanitize_company_profile_overview(
+            company_name=heading,
+            overview=profile.business_overview,
+            evidence_blocks=evidence_blocks,
+            source_ids=list(profile.source_ids or []),
+        )
+        if sanitized_overview:
+            attached_item["body"] = sanitized_overview
         elif fallback_overview:
             attached_item["body"] = fallback_overview
-        attached_item["key_company_facts"] = _filter_company_profile_facts(list(profile.key_company_facts or []))
+        else:
+            attached_item["body"] = ""
+        attached_item["key_company_facts"] = _filter_company_profile_facts(
+            list(profile.key_company_facts or []),
+            business_overview=attached_item["body"],
+        )
         if not attached_item["key_company_facts"]:
             attached_item["key_company_facts"] = _build_company_profile_fallback_facts(
                 company_name=heading,
                 evidence_blocks=evidence_blocks,
+                business_overview=attached_item["body"],
             )
         try:
             recent_developments_response = await _extract_recent_company_developments_from_evidence(
@@ -1319,7 +1667,11 @@ async def _research_examples_for_item(
                 location_context=location_context,
                 evidence_blocks=evidence_blocks,
             )
-            filtered_developments = _filter_recent_developments(list(recent_developments_response.examples or []))
+            filtered_developments = _filter_recent_developments(
+                list(recent_developments_response.examples or []),
+                company_name=heading,
+                evidence_blocks=evidence_blocks,
+            )
         except Exception as exc:
             logger.warning(
                 'Competitive landscape recent developments fallback company="%s" error=%s',
@@ -1327,16 +1679,12 @@ async def _research_examples_for_item(
                 exc,
             )
             filtered_developments = []
-        positioning_text = _normalize_text(profile.competitive_positioning)
-        if _looks_like_generic_positioning(positioning_text):
-            positioning_text = _build_company_profile_fallback_positioning(
-                topic=topic,
-                company_name=heading,
-                location_context=location_context,
-                business_overview=_normalize_text(attached_item.get("body")),
-                facts=attached_item["key_company_facts"],
-                developments=filtered_developments,
-            )
+        positioning_text = _sanitize_company_profile_positioning(
+            company_name=heading,
+            positioning=profile.competitive_positioning,
+            evidence_blocks=evidence_blocks,
+            source_ids=list(profile.source_ids or []),
+        )
         attached_item["competitive_positioning"] = positioning_text
         attached_item["examples"] = [
             {
@@ -1363,6 +1711,13 @@ async def _research_examples_for_item(
                     if source_id not in profile_source_ids:
                         profile_source_ids.append(source_id)
         attached_item["source_ids"] = profile_source_ids[:10]
+        if not _has_retained_company_content(attached_item):
+            logger.info(
+                'Competitive landscape enrichment skipped company="%s" reason="%s"',
+                heading,
+                "no_supported_company_content",
+            )
+            return _build_skip_item(normalized_item, reason="no_supported_company_content")
         attached_with_sources = attach_sources_to_items([attached_item], evidence_blocks, max_sources_per_item=6)
         attached_item = attached_with_sources[0] if attached_with_sources else attached_item
         attached_item["fallback_used"] = False
