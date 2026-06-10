@@ -186,7 +186,7 @@ function sectionDescriptor(section) {
     return "Underlying forces accelerating or shaping the market.";
   }
   if (section === "competitive_landscape") {
-    return "Major players and emerging players separated into memo-ready company profiles, with recent developments from the last 2 to 3 years.";
+    return "Key players and other players separated into memo-ready company profiles, with recent developments from the last 2 to 3 years.";
   }
   return "Observable patterns, shifts, and momentum lines across the landscape.";
 }
@@ -2449,8 +2449,8 @@ function CompetitiveLandscapePositioning({ text = "" }) {
 function CompetitiveLandscapeGroupTabs({ title, majorPlayers = [], emergingPlayers = [] }) {
   const [activeTab, setActiveTab] = useState("major_players");
   const tabs = [
-    { id: "major_players", label: "Major Players", items: Array.isArray(majorPlayers) ? majorPlayers : [] },
-    { id: "emerging_players", label: "Emerging Players", items: Array.isArray(emergingPlayers) ? emergingPlayers : [] },
+    { id: "major_players", label: "Key Players", items: Array.isArray(majorPlayers) ? majorPlayers : [] },
+    { id: "emerging_players", label: "Other Players", items: Array.isArray(emergingPlayers) ? emergingPlayers : [] },
   ];
   const activeGroup = tabs.find((tab) => tab.id === activeTab) || tabs[0];
 

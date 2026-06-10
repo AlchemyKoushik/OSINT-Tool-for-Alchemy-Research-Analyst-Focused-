@@ -257,14 +257,14 @@ def _render_section(result: Dict[str, Any], meta: Dict[str, Any], *, title_overr
     description = (
         "Underlying forces accelerating or shaping the market."
         if section == "drivers"
-        else "Major players and emerging players separated into memo-ready company cards, with recent developments from the last 2 to 3 years."
+        else "Key players and other players separated into memo-ready company cards, with recent developments from the last 2 to 3 years."
         if section == "competitive_landscape"
         else "Observable patterns, shifts, and momentum lines across the landscape."
     )
     if section == "competitive_landscape":
         items_html = (
-            _render_competitive_landscape_group("Major Players", result.get("major_players", []) or [])
-            + _render_competitive_landscape_group("Emerging Players", result.get("emerging_players", []) or [])
+            _render_competitive_landscape_group("Key Players", result.get("major_players", []) or [])
+            + _render_competitive_landscape_group("Other Players", result.get("emerging_players", []) or [])
         )
         empty_state_html = ""
     else:
