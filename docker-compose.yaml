@@ -81,15 +81,14 @@ services:
       - osint
 
   nginx:
-    image: nginx:1.27-alpine
+    build:
+      context: ./deploy/nginx
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
       frontend:
         condition: service_healthy
-    volumes:
-      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
       interval: 30s
