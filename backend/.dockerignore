@@ -15,3 +15,5 @@ uvicorn-*.log
 runtime_logs/
 docs/
 data/
+!data/
+!data/locations.json

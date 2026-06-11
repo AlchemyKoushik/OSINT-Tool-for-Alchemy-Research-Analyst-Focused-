@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
-LOCATION_DATA_RELATIVE_PATH = Path("backend") / "data" / "locations.json"
+LOCATION_DATA_RELATIVE_PATHS = (
+    Path("backend") / "data" / "locations.json",
+    Path("data") / "locations.json",
+)
 LOCATION_PREFERENCES = (
     {"value": "global", "label": "Global"},
     {"value": "region_specific", "label": "Region Specific"},
@@ -54,10 +57,12 @@ def _candidate_location_data_paths(
         candidates.append(candidate)
 
     for base in (resolved_anchor.parent, *resolved_anchor.parents):
-        add_candidate(base / LOCATION_DATA_RELATIVE_PATH)
+        for relative_path in LOCATION_DATA_RELATIVE_PATHS:
+            add_candidate(base / relative_path)
 
     for base in (resolved_cwd, *resolved_cwd.parents):
-        add_candidate(base / LOCATION_DATA_RELATIVE_PATH)
+        for relative_path in LOCATION_DATA_RELATIVE_PATHS:
+            add_candidate(base / relative_path)
 
     return tuple(candidates)
 
