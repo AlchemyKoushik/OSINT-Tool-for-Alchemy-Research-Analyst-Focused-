@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-LOCATION_DATA_PATH = PROJECT_ROOT / "backend" / "data" / "locations.json"
+LOCATION_DATA_RELATIVE_PATH = Path("backend") / "data" / "locations.json"
 LOCATION_PREFERENCES = (
     {"value": "global", "label": "Global"},
     {"value": "region_specific", "label": "Region Specific"},
@@ -35,6 +34,49 @@ GENERIC_GLOBAL_MARKERS = (
     "multi country",
     "multicountry",
 )
+
+
+def _candidate_location_data_paths(
+    *,
+    anchor_path: Path | None = None,
+    cwd: Path | None = None,
+) -> Tuple[Path, ...]:
+    resolved_anchor = Path(anchor_path) if anchor_path is not None else Path(__file__).resolve()
+    resolved_cwd = Path(cwd) if cwd is not None else Path.cwd()
+    candidates: List[Path] = []
+    seen = set()
+
+    def add_candidate(candidate: Path) -> None:
+        normalized = str(candidate)
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        candidates.append(candidate)
+
+    for base in (resolved_anchor.parent, *resolved_anchor.parents):
+        add_candidate(base / LOCATION_DATA_RELATIVE_PATH)
+
+    for base in (resolved_cwd, *resolved_cwd.parents):
+        add_candidate(base / LOCATION_DATA_RELATIVE_PATH)
+
+    return tuple(candidates)
+
+
+def _resolve_location_data_path(
+    *,
+    anchor_path: Path | None = None,
+    cwd: Path | None = None,
+) -> Path:
+    candidates = _candidate_location_data_paths(anchor_path=anchor_path, cwd=cwd)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    searched_paths = ", ".join(str(candidate) for candidate in candidates[:8])
+    raise FileNotFoundError(
+        "locations.json could not be found. "
+        f"Searched: {searched_paths}"
+    )
 
 
 @dataclass(frozen=True)
@@ -77,7 +119,7 @@ def _extract_domain(url: str) -> str:
 
 @lru_cache(maxsize=1)
 def _load_location_payload() -> Dict[str, Any]:
-    raw_content = LOCATION_DATA_PATH.read_text(encoding="utf-8")
+    raw_content = _resolve_location_data_path().read_text(encoding="utf-8")
     parsed = json.loads(raw_content)
     if not isinstance(parsed, dict):
         raise ValueError("Location dataset is invalid.")
