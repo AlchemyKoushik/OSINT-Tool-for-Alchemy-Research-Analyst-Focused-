@@ -783,6 +783,105 @@ class CompetitiveLandscapeV2RegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item["heading"] for item in result["emerging_players"]], ["Bright"])
         self.assertNotIn("Join Solar Media", [item["heading"] for item in result["items"]])
 
+    async def test_v2_validation_failure_does_not_return_generic_fallback_companies(self):
+        async def fake_execute_pipeline(**kwargs):
+            return {
+                "queries": ["utility-scale solar chile"],
+                "search_results": [
+                    {
+                        "url": "https://example.com/chile-solar",
+                        "title": "Chile Utility-Scale Solar Market",
+                        "snippet": "Market overview",
+                        "domain": "example.com",
+                    }
+                ],
+                "query_performance": {},
+                "stage_errors": {},
+                "artifact_bundle": {
+                    "artifact_dir": "",
+                    "manifest_path": "",
+                    "artifacts": [],
+                    "counts": {},
+                    "pages": [],
+                },
+                "processed_payload": {
+                    "processed_text": "Utility-scale solar market evidence in Chile.",
+                    "evidence_blocks": [
+                        {
+                            "source_id": 1,
+                            "title": "Chile utility-scale solar market",
+                            "excerpt": "Atlas Renewable Energy and Enel Green Power Chile operate large utility-scale solar portfolios in Chile.",
+                            "url": "https://example.com/chile-solar",
+                            "domain": "example.com",
+                            "date": "2026-04-02",
+                        }
+                    ],
+                    "selected_urls": ["https://example.com/chile-solar"],
+                    "num_sources": 1,
+                    "processing_chars": 96,
+                    "source_scores": [],
+                    "signal_weights": [],
+                },
+                "execution_time": {},
+            }
+
+        async def fake_discovery_bundle(**kwargs):
+            return {
+                "discovery_output": CompetitiveLandscapeDiscoveryOutput(
+                    major_players=[
+                        CompetitiveLandscapeDiscoveryCompany(
+                            company_name="Atlas Renewable Energy",
+                            market_role="Major Player",
+                            source_ids=[1],
+                        )
+                    ],
+                    emerging_players=[],
+                ),
+                "evidence_blocks": [
+                    {
+                        "source_id": 1,
+                        "title": "Chile utility-scale solar market",
+                        "excerpt": "Atlas Renewable Energy and Enel Green Power Chile operate large utility-scale solar portfolios in Chile.",
+                        "url": "https://example.com/chile-solar",
+                        "domain": "example.com",
+                        "date": "2026-04-02",
+                    }
+                ],
+                "agent_output": CompetitiveLandscapeDiscoveryAgentOutput(
+                    companies=[
+                        CompetitiveLandscapeDiscoveryAgentCompany(
+                            company="Atlas Renewable Energy",
+                            tier="Major Player",
+                            confidence=95,
+                            reasons=["large utility-scale solar portfolio in Chile"],
+                        )
+                    ]
+                ),
+                "query_diagnostics": [],
+            }
+
+        request = AnalyzeRequest(
+            topic="Utility-Scale Solar Market",
+            section="competitive_landscape",
+            location_preference="country_specific",
+            location_value="Chile",
+            debug=True,
+            feature_flags={"competitive_landscape_v2": True},
+        )
+
+        with patch("api.analyze.get_cached_result", return_value=None), \
+            patch("api.analyze.set_cached_result"), \
+            patch("api.analyze.update_session"), \
+            patch("api.analyze.update_best_sources_for_topic"), \
+            patch("api.analyze.update_domain_authority"), \
+            patch("api.analyze.get_best_sources_for_topic", return_value=[]), \
+            patch("api.analyze.get_feedback_adjustment", return_value={"avg_rating": 0.0, "rating_count": 0, "confidence_adjustment": 0}), \
+            patch("api.analyze.execute_pipeline", side_effect=fake_execute_pipeline), \
+            patch("api.analyze.build_competitive_landscape_v2_discovery_bundle", side_effect=fake_discovery_bundle), \
+            patch("api.analyze.generate_section_analysis", side_effect=RuntimeError("429 rate_limit_exceeded")):
+            with self.assertRaisesRegex(RuntimeError, "Competitive landscape validation failed"):
+                await run_analysis_request(request_model=request, progress_callback=None, diagnostics=None)
+
 
 if __name__ == "__main__":
     unittest.main()

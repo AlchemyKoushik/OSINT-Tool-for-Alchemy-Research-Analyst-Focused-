@@ -970,6 +970,7 @@ async def run_analysis_request(
             cl_runtime_exception = str(exc).strip()
             if section == "competitive_landscape":
                 stage_errors["competitive_landscape_validation"] = cl_runtime_exception or exc.__class__.__name__
+                raise RuntimeError(f"Competitive landscape validation failed: {cl_runtime_exception or exc.__class__.__name__}") from exc
             analysis_json = build_fallback_section_analysis(
                 topic=topic,
                 processed_text=processed_text,

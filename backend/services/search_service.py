@@ -1,5 +1,6 @@
 ﻿import asyncio
 import logging
+import random
 import re
 import warnings
 from datetime import datetime, timezone
@@ -234,6 +235,15 @@ def _extract_query_terms(query: str) -> Tuple[Set[str], Set[str]]:
 
 def _uses_ranking_only_relevance(workflow: str | None) -> bool:
     return str(workflow or "").strip().lower() in RANKING_ONLY_WORKFLOWS
+
+
+def _search_concurrency_for_workflow(workflow: str | None) -> int:
+    normalized_workflow = str(workflow or "").strip().lower()
+    if normalized_workflow == "company_research":
+        return 1
+    if normalized_workflow in {"competitive_landscape", "company_profile"}:
+        return 2
+    return MAX_CONCURRENT_REQUESTS
 
 
 def _result_sort_key(item: Dict[str, Any], *, workflow: str | None = None) -> tuple[int, ...]:
@@ -647,10 +657,13 @@ async def search_queries(
         seen_queries.add(normalized_query.lower())
         deduplicated_queries.append(normalized_query)
 
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    effective_concurrency = _search_concurrency_for_workflow(workflow)
+    semaphore = asyncio.Semaphore(effective_concurrency)
 
-    async def _bounded_search(query: str) -> List[Dict[str, Any]]:
+    async def _bounded_search(query: str, query_index: int) -> List[Dict[str, Any]]:
         async with semaphore:
+            if effective_concurrency < MAX_CONCURRENT_REQUESTS:
+                await asyncio.sleep(min(0.15 * query_index, 0.6) + random.uniform(0.0, 0.1))
             return await get_search_results(
                 query,
                 freshness=freshness,
@@ -658,7 +671,7 @@ async def search_queries(
                 workflow=workflow,
             )
 
-    tasks = [_bounded_search(query) for query in deduplicated_queries]
+    tasks = [_bounded_search(query, index) for index, query in enumerate(deduplicated_queries)]
     results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
     aggregated_results: List[Dict[str, Any]] = []

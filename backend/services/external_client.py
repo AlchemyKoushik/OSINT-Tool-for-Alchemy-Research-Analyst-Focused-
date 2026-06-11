@@ -4,6 +4,8 @@ import asyncio
 import concurrent.futures
 import inspect
 import logging
+import math
+import re
 import time
 from typing import Any, Awaitable, Callable, Dict, TypeVar
 
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 _LAST_CALL_FAILURES: Dict[str, Dict[str, Any]] = {}
+_RATE_LIMIT_WAIT_PATTERN = re.compile(r"(?:try again in|retry after)\s*([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
 
 
 def _failure_key(provider: str, operation: str) -> str:
@@ -50,7 +53,21 @@ def _clear_last_failure(provider: str, operation: str) -> None:
     _LAST_CALL_FAILURES.pop(_failure_key(provider, operation), None)
 
 
-def _retry_delay_seconds(retry_index: int) -> int:
+def _retry_delay_seconds(retry_index: int, error: Exception | None = None) -> int:
+    if error is not None:
+        match = _RATE_LIMIT_WAIT_PATTERN.search(str(error))
+        if match:
+            try:
+                hinted_delay = float(match.group(1))
+            except (TypeError, ValueError):
+                hinted_delay = 0.0
+            if hinted_delay > 0:
+                return max(1, min(int(math.ceil(hinted_delay + 0.5)), 12))
+
+        lowered_error = str(error).lower()
+        if "rate_limit" in lowered_error or "too many requests" in lowered_error or "429" in lowered_error:
+            return min(2 ** (retry_index + 1), 12)
+
     return min(2**retry_index, 4)
 
 
@@ -150,7 +167,7 @@ async def _call_async(
                 error=exc,
             )
             if retry_index < max_retries:
-                await asyncio.sleep(_retry_delay_seconds(retry_index))
+                await asyncio.sleep(_retry_delay_seconds(retry_index, exc))
 
     logger.error(
         "external_call_fallback provider=%s operation=%s context=%s error=%s",
@@ -209,7 +226,7 @@ def _call_sync(
                 error=exc,
             )
             if retry_index < max_retries:
-                time.sleep(_retry_delay_seconds(retry_index))
+                time.sleep(_retry_delay_seconds(retry_index, exc))
 
     logger.error(
         "external_call_fallback provider=%s operation=%s context=%s error=%s",
