@@ -141,6 +141,7 @@ CL_ENTERTAINMENT_OPERATOR_TERMS = (
     "film studio",
 )
 CL_RELEVANCE_MAX_OUTPUT_TOKENS = 2200
+CL_RELEVANCE_BATCH_SIZE = 4
 SENTENCE_BOUNDARY_PATTERN = re.compile(r"(?<=[.!?])\s+")
 TITLE_DESCRIPTION_PREFIX_WORDS = 5
 CURRENT_YEAR = datetime.now().year
@@ -623,33 +624,44 @@ async def _classify_competitive_landscape_relevance(
     if not companies:
         return {}
 
-    prompt = _build_competitive_landscape_relevance_prompt(
-        topic=topic,
-        companies=companies,
-        evidence_by_source_id=evidence_by_source_id,
-    )
-    parsed = await _request_structured_completion(
-        client,
-        operation="structured_cl_relevance_classification",
-        input_payload=[{"role": "user", "content": prompt}],
-        response_model=CompetitiveLandscapeRelevanceResponse,
-        max_output_tokens=CL_RELEVANCE_MAX_OUTPUT_TOKENS,
-    )
-
     decisions_by_name: Dict[str, CompetitiveLandscapeRelevanceDecision] = {}
-    for decision in list(parsed.decisions or []):
-        company_name = _normalize_text(decision.company_name)
-        if not company_name:
-            continue
-        normalized_decision = CompetitiveLandscapeRelevanceDecision(
-            company_name=company_name,
-            classification=_normalize_text(decision.classification),
-            primary_business_fit=bool(decision.primary_business_fit),
-            industry_centrality=bool(decision.industry_centrality),
-            operator_vs_supplier=bool(decision.operator_vs_supplier),
-            reason=_normalize_text(decision.reason),
+    company_list = list(companies)
+    total_batches = max(1, (len(company_list) + CL_RELEVANCE_BATCH_SIZE - 1) // CL_RELEVANCE_BATCH_SIZE)
+
+    for batch_index, start in enumerate(range(0, len(company_list), CL_RELEVANCE_BATCH_SIZE), start=1):
+        company_batch = company_list[start:start + CL_RELEVANCE_BATCH_SIZE]
+        prompt = _build_competitive_landscape_relevance_prompt(
+            topic=topic,
+            companies=company_batch,
+            evidence_by_source_id=evidence_by_source_id,
         )
-        decisions_by_name[company_name.lower()] = normalized_decision
+        logger.info(
+            "Competitive landscape relevance classification batch=%s/%s companies=%s",
+            batch_index,
+            total_batches,
+            [company.company_name for company in company_batch],
+        )
+        parsed = await _request_structured_completion(
+            client,
+            operation=f"structured_cl_relevance_classification_batch_{batch_index}",
+            input_payload=[{"role": "user", "content": prompt}],
+            response_model=CompetitiveLandscapeRelevanceResponse,
+            max_output_tokens=CL_RELEVANCE_MAX_OUTPUT_TOKENS,
+        )
+
+        for decision in list(parsed.decisions or []):
+            company_name = _normalize_text(decision.company_name)
+            if not company_name:
+                continue
+            normalized_decision = CompetitiveLandscapeRelevanceDecision(
+                company_name=company_name,
+                classification=_normalize_text(decision.classification),
+                primary_business_fit=bool(decision.primary_business_fit),
+                industry_centrality=bool(decision.industry_centrality),
+                operator_vs_supplier=bool(decision.operator_vs_supplier),
+                reason=_normalize_text(decision.reason),
+            )
+            decisions_by_name[company_name.lower()] = normalized_decision
     return decisions_by_name
 
 
