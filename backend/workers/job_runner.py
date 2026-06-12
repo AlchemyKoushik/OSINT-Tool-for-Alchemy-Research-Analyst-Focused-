@@ -12,6 +12,15 @@ from workers.job_manager import mark_job_completed, mark_job_failed, mark_job_ru
 logger = get_logger(__name__)
 
 
+def _is_non_retriable_job_error(error: Exception) -> bool:
+    message = str(error).strip().lower()
+    return (
+        message.startswith("response validation failed:")
+        or "missing required environment variables" in message
+        or "validation error for analyzerequest" in message
+    )
+
+
 async def run_research_job(job_record: Dict[str, Any], worker_id: str) -> None:
     from api.routes import run_analysis_request
 
@@ -67,7 +76,9 @@ async def run_research_job(job_record: Dict[str, Any], worker_id: str) -> None:
             metadata={"traceback": traceback.format_exc(limit=20)},
         )
         attempt_count = int(running_record.get("attempts", job_record.get("attempts", 0)) or 0)
-        if attempt_count < settings.JOB_MAX_RETRIES:
+        if _is_non_retriable_job_error(exc):
+            mark_job_failed(job_id, str(exc), failure_snapshot)
+        elif attempt_count < settings.JOB_MAX_RETRIES:
             await asyncio.sleep(min(2 ** max(attempt_count, 0), 8))
             requeue_research_job(job_id, str(exc), failure_snapshot)
         else:

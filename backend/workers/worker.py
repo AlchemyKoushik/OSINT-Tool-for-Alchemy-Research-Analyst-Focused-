@@ -12,6 +12,16 @@ from workers.job_runner import run_research_job
 configure_logging()
 logger = get_logger(__name__)
 
+REQUIRED_WORKER_SETTINGS = (
+    "OPENAI_API_KEY",
+    "SCRAPEDO_KEY",
+    "REDIS_URL",
+    "CLOUDFLARE_R2_ACCOUNT_ID",
+    "CLOUDFLARE_R2_ACCESS_KEY_ID",
+    "CLOUDFLARE_R2_SECRET_ACCESS_KEY",
+    "CLOUDFLARE_R2_BUCKET_NAME",
+)
+
 
 def _write_heartbeat() -> None:
     heartbeat_path = Path(settings.WORKER_HEARTBEAT_FILE).expanduser()
@@ -22,6 +32,17 @@ def _write_heartbeat() -> None:
 async def worker_loop() -> None:
     worker_id = f"{socket.gethostname()}-{int(time.time())}"
     log_startup_diagnostics("worker", {"worker_id": worker_id, "app_role": settings.APP_ROLE})
+    settings.validate_required(REQUIRED_WORKER_SETTINGS)
+    logger.info(
+        "Worker runtime config worker_id=%s openai_model=%s query_model=%s scrapedo_configured=%s serpapi_configured=%s use_crawl4ai=%s compare_crawlers=%s",
+        worker_id,
+        settings.OPENAI_ANALYSIS_MODEL,
+        settings.OPENAI_QUERY_MODEL,
+        bool(settings.SCRAPEDO_KEY.strip()),
+        bool(settings.SERPAPI_KEY.strip()),
+        settings.USE_CRAWL4AI,
+        settings.COMPARE_CRAWLERS,
+    )
     logger.info("Worker started worker_id=%s queue=%s", worker_id, settings.JOB_QUEUE_NAME)
     _write_heartbeat()
 

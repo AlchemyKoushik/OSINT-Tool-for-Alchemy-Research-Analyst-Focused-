@@ -36,21 +36,35 @@ except ImportError:
     except ImportError:
         PdfReader = None  # type: ignore[assignment]
 
+SCRAPLING_IMPORT_ERRORS: List[str] = []
 try:
-    from scrapling.fetchers import DynamicFetcher, Fetcher, StealthyFetcher
-    SCRAPLING_IMPORT_ERROR = ""
+    from scrapling.fetchers import Fetcher
+except Exception as exc:
+    Fetcher = None  # type: ignore[assignment]
+    SCRAPLING_IMPORT_ERRORS.append(f"Fetcher: {exc}")
+
+try:
+    from scrapling.fetchers import DynamicFetcher
 except Exception as exc:
     DynamicFetcher = None  # type: ignore[assignment]
-    Fetcher = None  # type: ignore[assignment]
+    SCRAPLING_IMPORT_ERRORS.append(f"DynamicFetcher: {exc}")
+
+try:
+    from scrapling.fetchers import StealthyFetcher
+except Exception as exc:
     StealthyFetcher = None  # type: ignore[assignment]
-    SCRAPLING_IMPORT_ERROR = f"Scrapling import failed: {exc}"
+    SCRAPLING_IMPORT_ERRORS.append(f"StealthyFetcher: {exc}")
+
+SCRAPLING_IMPORT_ERROR = "Scrapling import failed: " + "; ".join(SCRAPLING_IMPORT_ERRORS)
+if Fetcher is not None or DynamicFetcher is not None or StealthyFetcher is not None:
+    SCRAPLING_IMPORT_ERROR = ""
 
 logger = logging.getLogger(__name__)
 
 DEBUG = True
 SCRAPE_TIMEOUT_SECONDS = min(settings.EXTERNAL_TIMEOUT_SECONDS, 8)
 SCRAPE_MAX_RETRIES = min(settings.EXTERNAL_MAX_RETRIES, 1)
-MAX_CONCURRENT_REQUESTS = 8
+MAX_CONCURRENT_REQUESTS = max(1, min(int(settings.SCRAPER_MAX_CONCURRENT_REQUESTS), 8))
 TOTAL_URL_CAP = 200
 MIN_PDF_CONTENT_LENGTH = 500
 MIN_WEB_CONTENT_LENGTH = 180
@@ -103,6 +117,7 @@ def _log(message: str) -> None:
 
 def _error_message(exc: Exception) -> str:
     message = str(exc).strip()
+    message = re.sub(r"([?&]token=)[^&\s']+", r"\1<redacted>", message)
     return message or exc.__class__.__name__
 
 

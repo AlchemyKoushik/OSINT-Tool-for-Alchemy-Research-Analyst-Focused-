@@ -10,6 +10,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from models.request_models import AnalyzeRequest, PdfExportRequest
 from models.response_models import (
+    AnalyzeResponse,
     CompetitiveLandscapeDiscoveryAgentCompany,
     CompetitiveLandscapeDiscoveryAgentOutput,
     CompetitiveLandscapeDiscoveryCompany,
@@ -70,6 +71,40 @@ class TrendExamplePipelineTests(unittest.TestCase):
             "topic": "battery storage",
             "location": "Germany",
         }
+
+    def test_competitive_landscape_allows_empty_business_overview(self):
+        response = AnalyzeResponse(
+            section="competitive_landscape",
+            title="Competitive Landscape",
+            major_players=[
+                {
+                    "heading": "Atlas Renewable Energy",
+                    "body": "",
+                    "segment": "major_players",
+                    "key_company_facts": [],
+                    "competitive_positioning": "Visible Chile utility-scale solar participant.",
+                }
+            ],
+            emerging_players=[],
+            items=[
+                {
+                    "heading": "Atlas Renewable Energy",
+                    "body": "",
+                    "segment": "major_players",
+                    "key_company_facts": [],
+                    "competitive_positioning": "Visible Chile utility-scale solar participant.",
+                }
+            ],
+        )
+        self.assertEqual(response.major_players[0].body, "")
+
+    def test_trends_still_require_item_body(self):
+        with self.assertRaises(ValueError):
+            AnalyzeResponse(
+                section="trends",
+                title="Industry Trends",
+                items=[{"heading": "Storage growth", "body": ""}],
+            )
 
     def test_recent_example_kept(self):
         evidence = [

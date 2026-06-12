@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import unquote, urlparse
 
+import httpx
+
 try:
     from ddgs import DDGS
 except Exception:
@@ -41,6 +43,7 @@ YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
 TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9&/%+\-]{1,}")
 QUOTED_PHRASE_PATTERN = re.compile(r'"([^"]+)"')
 SEARCH_BACKENDS = ("auto", "html", "lite")
+SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 HIGH_VALUE_DOMAINS = (".gov", ".edu", ".org")
 CONSULTING_DOMAINS = ("mckinsey", "deloitte", "pwc", "kpmg", "bain", "bcg")
 HIGH_VALUE_KEYWORDS = ("report", "analysis", "market", "outlook", "research", "forecast")
@@ -507,6 +510,53 @@ def _run_ddg_search_sync(
             return list(ddgs.text(query, **kwargs))
 
 
+def _serpapi_location(context: LocationContext) -> str:
+    if context.is_global:
+        return ""
+    return str(context.value or context.label or "").strip()
+
+
+def _run_serpapi_search_sync(
+    query: str,
+    max_results: int,
+    location_context: LocationContext,
+) -> List[Dict[str, Any]]:
+    api_key = settings.SERPAPI_KEY.strip()
+    if not api_key:
+        return []
+
+    params: Dict[str, Any] = {
+        "engine": "google",
+        "q": query,
+        "api_key": api_key,
+        "num": max(1, min(max_results, MAX_RESULTS_PER_QUERY)),
+        "hl": "en",
+        "output": "json",
+    }
+    location = _serpapi_location(location_context)
+    if location:
+        params["location"] = location
+
+    response = httpx.get(SERPAPI_ENDPOINT, params=params, timeout=SEARCH_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    payload = response.json()
+    if isinstance(payload, dict) and payload.get("error"):
+        raise RuntimeError(str(payload.get("error")))
+
+    normalized_results: List[Dict[str, Any]] = []
+    for result in list(payload.get("organic_results", []))[:max_results]:
+        if not isinstance(result, dict):
+            continue
+        normalized_results.append(
+            {
+                "url": str(result.get("link") or result.get("url") or "").strip(),
+                "title": str(result.get("title") or "").strip(),
+                "snippet": str(result.get("snippet") or result.get("description") or "").strip(),
+            }
+        )
+    return normalized_results
+
+
 def _filter_backend_results(
     raw_results: List[Dict[str, Any]],
     *,
@@ -606,6 +656,56 @@ def _run_ddg_search_resilient_sync(
     raise RuntimeError("All DDG backends returned zero usable results.")
 
 
+def _run_serpapi_search_resilient_sync(
+    query: str,
+    *,
+    authority_boosts: Dict[str, int],
+    freshness_level: str,
+    resolved_location_context: LocationContext,
+    workflow: str | None = None,
+) -> List[Dict[str, Any]]:
+    if not settings.SERPAPI_KEY.strip():
+        return []
+
+    last_error: Exception | None = None
+    for query_variant in _build_query_variants(query):
+        try:
+            raw_results = _run_serpapi_search_sync(
+                query_variant,
+                MAX_RESULTS_PER_QUERY,
+                resolved_location_context,
+            )
+            filtered_results = _filter_backend_results(
+                raw_results,
+                normalized_query=query,
+                authority_boosts=authority_boosts,
+                freshness_level=freshness_level,
+                resolved_location_context=resolved_location_context,
+                workflow=workflow,
+            )
+            logger.info(
+                "[SEARCH] Backend=serpapi variant=%s raw=%s filtered=%s | query=%s",
+                "exact" if query_variant == query else "relaxed",
+                len(raw_results),
+                len(filtered_results),
+                query,
+            )
+            if filtered_results:
+                return filtered_results
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                "[SEARCH] Backend failed backend=serpapi variant=%s | query=%s | error=%s",
+                "exact" if query_variant == query else "relaxed",
+                query,
+                _error_message(exc),
+            )
+
+    if last_error is not None:
+        raise RuntimeError(f"SerpAPI failed or returned unusable results: {_error_message(last_error)}")
+    return []
+
+
 async def get_search_results(
     query: str,
     freshness: str = "high",
@@ -617,6 +717,27 @@ async def get_search_results(
     resolved_location_context = location_context or LocationContext()
     authority_boosts = get_domain_authority_boosts()
     _log(f"[SEARCH] Query: {normalized_query}")
+    if settings.SERPAPI_KEY.strip():
+        serpapi_results = await call_search(
+            "serpapi_search",
+            lambda: asyncio.to_thread(
+                _run_serpapi_search_resilient_sync,
+                normalized_query,
+                authority_boosts=authority_boosts,
+                freshness_level=freshness_level,
+                resolved_location_context=resolved_location_context,
+                workflow=workflow,
+            ),
+            fallback=[],
+            timeout=SEARCH_TIMEOUT_SECONDS,
+            max_retries=SEARCH_MAX_RETRIES,
+            context={"query": normalized_query, "location": resolved_location_context.label},
+        )
+        if serpapi_results:
+            _log(f"[SEARCH] Results: {len(serpapi_results)} | provider=serpapi | query={normalized_query}")
+            return serpapi_results
+        logger.warning("[SEARCH] SerpAPI returned no usable results. Falling back to DDG backends. query=%s", normalized_query)
+
     filtered_results = await call_search(
         "ddg_search",
         lambda: asyncio.to_thread(

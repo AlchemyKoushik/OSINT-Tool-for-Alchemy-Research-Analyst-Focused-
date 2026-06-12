@@ -29,20 +29,23 @@
 3. Store secrets in Coolify environment variables, not in the repo.
 4. Add a persistent volume for `redis-data`.
 5. Keep `USE_CRAWL4AI=false` unless you confirm the VPS still has enough memory under load.
-6. Start with one worker only on a `4 vCPU / 16 GB` VPS.
-7. Watch `GET /metrics` and queue growth before increasing worker count.
+6. Set `SERPAPI_KEY` in production if Competitive Landscape quality matters; VPS/datacenter IPs often hit captcha/rate-limit pages through free metasearch providers.
+7. Start with one worker only on a `4 vCPU / 16 GB` VPS.
+8. Watch `GET /metrics` and queue growth before increasing worker count.
 
 ## Suggested production env values on this VPS
 
 - `USE_CRAWL4AI=false`
 - `COMPARE_CRAWLERS=false`
+- `SERPAPI_KEY` configured for stable Google search results on VPS deployments
+- `SCRAPER_MAX_CONCURRENT_REQUESTS=4` to reduce Scrape.do `429 Too Many Requests` failures
 - `JOB_MAX_RETRIES=2` or `3`
 - `STATIC_ASSET_VERSION` set to your release tag or commit SHA
 - `OSINT_PUBLIC_API_URL` blank if Nginx serves frontend and backend on the same domain
 
 ## Deploy steps
 
-1. Copy `.env.production.example` to `.env.production`.
+1. Copy `.env.production.example` to `.env` for plain Docker Compose, or add the same keys as Coolify environment variables.
 2. Fill in all required secrets.
 3. In Coolify, create a Docker Compose application from this repo.
 4. Set the compose file to `docker-compose.yaml`.
@@ -54,4 +57,5 @@
 - The frontend does not need a separate public domain when Nginx fronts both app layers.
 - Do not publish `80:80` in Compose on Coolify-managed hosts because Coolify already owns ports `80/443`.
 - The worker health check uses a heartbeat file updated in `backend/workers/worker.py`.
-- Backend startup still validates required secrets, Redis, OpenAI, and DDG availability.
+- Backend startup still validates required secrets, Redis, OpenAI, and search availability.
+- The worker also validates required secrets at startup. If the worker exits immediately, check its first log lines for missing provider or R2 variables.
