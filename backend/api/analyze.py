@@ -36,7 +36,7 @@ from services.openai_service import generate_section_analysis, get_last_structur
 from services.pipeline_orchestrator import execute_pipeline
 from services.html_export_service import build_html_export
 from services.prompt_builder import build_metadata_payload, get_prompt
-from services.redis_service import check_rate_limit, delete_session, get_session, update_session
+from services.redis_service import check_rate_limit, delete_session, get_session, ping_redis, update_session
 from services.ranking_service import rank_and_limit_insights
 from services.session_service import create_session_id
 from services.source_attribution_service import attach_sources_to_items
@@ -76,6 +76,18 @@ async def _read_json_payload(request: Request, *, max_bytes: int | None = None) 
     if not isinstance(payload, dict):
         raise ValueError("JSON payload must be an object.")
     return payload
+
+
+def _ensure_background_job_queue_available() -> None:
+    if ping_redis():
+        return
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "Research jobs are temporarily unavailable because Redis is not reachable. "
+            "Check /api/health/detailed and restore Redis before launching another run."
+        ),
+    )
 
 
 def _build_rate_limit_identity(request: Request, session_id: str | None) -> str:
@@ -1287,6 +1299,7 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
     session_id = request_model.session_id or create_session_id()
     request_model.session_id = session_id
     _enforce_rate_limit(request, "analyze", session_id)
+    _ensure_background_job_queue_available()
 
     update_session(
         session_id,
