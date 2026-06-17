@@ -781,6 +781,7 @@ async def run_analysis_request(
         execution_time["ranking_ms"] = 0
 
         search_results = list(pipeline_payload.get("search_results", []))
+        search_diagnostics = dict(pipeline_payload.get("search_diagnostics", {}))
         queries = [str(query) for query in pipeline_payload.get("queries", [])]
         query_performance = dict(pipeline_payload.get("query_performance", {}))
         stage_errors = dict(pipeline_payload.get("stage_errors", {}))
@@ -994,6 +995,8 @@ async def run_analysis_request(
         validated_cl_counts: Dict[str, int] = {}
         enriched_cl_counts: Dict[str, int] = {}
         cl_validation_diagnostics: Dict[str, Any] = {}
+        cl_recall_diagnostics: Dict[str, Any] = {}
+        cl_diagnostics_path = "pipeline_search"
         analysis_json = normalize_analyze_response_payload(analysis_json, fallback_section=section)
         if section == "competitive_landscape":
             cl_validation_diagnostics = dict(analysis_json.pop("_competitive_landscape_validation", {}) or {})
@@ -1075,6 +1078,35 @@ async def run_analysis_request(
             analysis_json = _sync_competitive_landscape_groups(analysis_json)
             enriched_cl_counts = _competitive_landscape_counts(analysis_json)
             enriched_cl_names = _competitive_landscape_company_names(analysis_json)
+            active_search_diagnostics = dict(search_diagnostics)
+            active_artifact_counts = dict(artifact_counts)
+            if cl_discovery_bundle and evidence_blocks == list(cl_discovery_bundle.get("evidence_blocks", []) or []):
+                active_search_diagnostics = dict(cl_discovery_bundle.get("search_diagnostics", {}))
+                active_artifact_counts = {
+                    "success_count": int(active_search_diagnostics.get("urls_scraped", 0)),
+                    "failed_count": int(active_search_diagnostics.get("urls_failed", 0)),
+                }
+                cl_diagnostics_path = str(active_search_diagnostics.get("path", "competitive_landscape_discovery"))
+            cl_recall_diagnostics = {
+                "path": cl_diagnostics_path,
+                "urls_found": int(
+                    active_search_diagnostics.get(
+                        "urls_discovered",
+                        active_search_diagnostics.get("raw_results", 0),
+                    )
+                ),
+                "urls_filtered": int(active_search_diagnostics.get("filtered_results", active_search_diagnostics.get("urls_filtered", 0))),
+                "urls_scraped": int(active_artifact_counts.get("success_count", 0)),
+                "urls_failed": int(active_artifact_counts.get("failed_count", 0)),
+                "urls_sent_to_ai": int(active_search_diagnostics.get("urls_sent_to_ai", len(evidence_blocks))),
+                "companies_detected": enriched_cl_counts.get("major_players", 0) + enriched_cl_counts.get("emerging_players", 0),
+                "major_players": enriched_cl_counts.get("major_players", 0),
+                "emerging_players": enriched_cl_counts.get("emerging_players", 0),
+                "provider_requested_cap": int(active_search_diagnostics.get("provider_requested_cap", 0)),
+                "provider_effective_cap": int(active_search_diagnostics.get("provider_effective_cap", 0)),
+                "provider_supported_cap": int(active_search_diagnostics.get("provider_supported_cap", 0)),
+                "providers_used": list(active_search_diagnostics.get("providers_used", []) or []),
+            }
             logger.info(
                 "[RUN] CL diagnostics enriched_major_players=%s enriched_emerging_players=%s final_major_players=%s final_emerging_players=%s major_names=%s emerging_names=%s session_id=%s",
                 validated_cl_counts["major_players"],
@@ -1085,6 +1117,7 @@ async def run_analysis_request(
                 enriched_cl_names["emerging_players"],
                 session_id,
             )
+            logger.info("[RUN] CL recall diagnostics %s", json.dumps(cl_recall_diagnostics, sort_keys=True))
         logger.info("[RUN] Item enrichment completed | session_id=%s | items=%s", session_id, len(analysis_json.get("items", [])))
         if not analysis_json["items"]:
             analysis_json["title"] = "No strong insights found"
@@ -1258,6 +1291,7 @@ async def run_analysis_request(
                         for company in discovery_agent_companies
                     ],
                     "discovery_agent_query_diagnostics": list(cl_discovery_bundle.get("query_diagnostics", [])),
+                    "search_recall_diagnostics": cl_recall_diagnostics,
                 }
 
         _emit_progress(

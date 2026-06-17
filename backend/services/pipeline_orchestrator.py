@@ -49,6 +49,7 @@ async def execute_pipeline(
     queries: List[str] = []
     search_results: List[Dict[str, Any]] = []
     query_performance: Dict[str, Any] = {}
+    search_diagnostics: Dict[str, Any] = {}
     stage_errors: Dict[str, str] = {}
     artifact_bundle: Dict[str, Any] = {
         "artifact_dir": "",
@@ -118,6 +119,7 @@ async def execute_pipeline(
         queries = list(search_payload.get("queries", queries))
         search_results = list(search_payload.get("results", []))
         query_performance = dict(search_payload.get("query_performance", {}))
+        search_diagnostics = dict(search_payload.get("diagnostics", {}))
     except Exception as exc:
         logger.exception("Pipeline search failed for topic %s section %s", topic, section)
         _log(f"[PIPELINE] Search failed | error={exc}")
@@ -314,6 +316,7 @@ async def execute_pipeline(
         "queries": queries,
         "search_results": search_results,
         "query_performance": query_performance,
+        "search_diagnostics": search_diagnostics,
         "artifact_bundle": artifact_bundle,
         "processed_payload": processed_payload,
         "stage_errors": stage_errors,

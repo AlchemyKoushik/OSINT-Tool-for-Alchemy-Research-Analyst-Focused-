@@ -104,8 +104,10 @@ def _build_market_discovery_prompt(
         "- Do not infer the company list from supplied search results because none are provided at this stage.\n"
         "- Identify the primary competitive participants in the requested market and geography.\n\n"
         "Market selection criteria:\n"
-        "- Prefer companies supported by signals such as installed capacity, project ownership, utility-scale assets, market share, developer rankings, pipeline visibility, and repeated inclusion in industry reports.\n"
-        "- Focus on direct market participants, owners, developers, operators, or strategically significant players in the requested market and geography.\n"
+        "- Prefer companies supported by signals such as market share, customer footprint, operating presence, geographic footprint, product coverage, distribution scale, deal activity, hiring or expansion signals, and repeated inclusion in industry reports.\n"
+        "- Focus on direct market participants, operators, brands, service providers, platform companies, manufacturers, distributors, or strategically significant players in the requested market and geography.\n"
+        "- Prefer broad market coverage: include regional companies, private firms, niche specialists, challenger brands, emerging companies, and fast-growing startups when they are genuine market participants.\n"
+        "- Treat association rosters, conference participant lists, vendor ecosystems, market directories, and industry reports as valid competitor-discovery signals when they point to real market participants.\n"
         "- Exclude consultants, generic software vendors, financial-only actors, and adjacent ecosystem participants unless they directly own, operate, develop, or control assets in the market.\n"
         "- Use three tiers only: Major Player, Mid-Sized Player, Emerging Player.\n"
         "- Aim for a balanced company universe instead of only market leaders.\n"
@@ -116,10 +118,10 @@ def _build_market_discovery_prompt(
         "{\n"
         '  "companies": [\n'
         "    {\n"
-        '      "company": "Atlas Renewable Energy",\n'
+        '      "company": "Example Company",\n'
         '      "tier": "Major Player",\n'
         '      "confidence": 95,\n'
-        '      "reasons": ["large utility-scale solar portfolio in Chile", "recurring presence in Chile solar developer rankings"]\n'
+        '      "reasons": ["recurring presence in India entertainment company rankings", "visible operating footprint and recent expansion activity in India"]\n'
         "    }\n"
         "  ]\n"
         "}\n\n"
@@ -152,16 +154,16 @@ def _build_company_query_user_prompt(
         "You are generating company-specific OSINT search queries for Competitive Landscape validation.\n\n"
         "Task:\n"
         "- Create search queries that verify whether the company is a real participant in the target market and geography.\n"
-        "- Search for projects, portfolios, assets, installed capacity, ownership, developer activity, contracts, utility-scale presence, and market participation.\n"
-        "- Start broad, then narrow into assets, projects, and portfolio evidence.\n"
+        "- Search for company profile pages, product or service footprint, operating presence, customer or partner evidence, ownership, expansion activity, and market participation.\n"
+        "- Start broad, then narrow into company-specific operating evidence and market footprint.\n"
         "- Avoid generic company overview queries unless needed as one fallback.\n\n"
         f"Input:\n- Market: {topic}\n- Geography: {geography}\n- Company: {candidate.company}\n- Discovery tier: {candidate.tier}\n- Discovery reasons: {reasons}\n\n"
         "Return JSON in this shape:\n"
         "{\n"
         '  "queries": [\n'
         "    {\n"
-        '      "query": "Atlas Renewable Energy Chile projects",\n'
-        '      "purpose": "verify local project footprint",\n'
+        '      "query": "Example Company India company profile",\n'
+        '      "purpose": "verify local operating footprint",\n'
         '      "priority": "high"\n'
         "    }\n"
         "  ]\n"
@@ -178,13 +180,13 @@ def _fallback_company_queries(
     geography = _location_label(location_context)
     company_name = candidate.company
     templates = [
-        '"{company}" {geo} projects',
-        '"{company}" {geo} solar portfolio',
-        '"{company}" {geo} utility-scale assets',
-        '"{company}" {geo} installed capacity',
-        '"{company}" {geo} project ownership',
-        '"{company}" "{topic}" {geo} developer',
-        '"{company}" "{topic}" {geo} power plant',
+        '"{company}" {geo} company profile',
+        '"{company}" {geo} official website',
+        '"{company}" {geo} products services',
+        '"{company}" {geo} expansion announcement',
+        '"{company}" {geo} partnerships customers',
+        '"{company}" "{topic}" {geo} market presence',
+        '"{company}" "{topic}" {geo} press release',
         '"{company}" "{topic}" {geo} market share',
     ]
     return _dedupe_queries(
@@ -333,6 +335,18 @@ async def build_competitive_landscape_v2_discovery_bundle(
     emerging_players: List[CompetitiveLandscapeDiscoveryCompany] = []
     all_evidence_blocks: List[Dict[str, Any]] = []
     query_diagnostics: List[Dict[str, Any]] = []
+    discovery_search_diagnostics: Dict[str, Any] = {
+        "path": "competitive_landscape_discovery",
+        "urls_discovered": 0,
+        "urls_filtered": 0,
+        "urls_scraped": 0,
+        "urls_failed": 0,
+        "urls_sent_to_ai": 0,
+        "provider_requested_cap": 0,
+        "provider_effective_cap": 0,
+        "provider_supported_cap": 0,
+        "providers_used": [],
+    }
     global_source_id = 1
 
     for candidate_index, candidate in enumerate(discovery_output.companies, start=1):
@@ -346,9 +360,27 @@ async def build_competitive_landscape_v2_discovery_bundle(
             list(queries),
             freshness="high",
             location_context=location_context,
-            workflow="company_research",
+            workflow="competitive_landscape_discovery",
         )
         search_results = list(search_payload.get("results", []))[:DISCOVERY_MAX_SEARCH_RESULTS]
+        search_diagnostics = dict(search_payload.get("diagnostics", {}))
+        discovery_search_diagnostics["urls_discovered"] += int(search_diagnostics.get("raw_results", 0))
+        discovery_search_diagnostics["urls_filtered"] += int(search_diagnostics.get("filtered_results", 0))
+        discovery_search_diagnostics["provider_requested_cap"] = max(
+            int(discovery_search_diagnostics.get("provider_requested_cap", 0)),
+            int(search_diagnostics.get("provider_requested_cap", 0)),
+        )
+        discovery_search_diagnostics["provider_effective_cap"] = max(
+            int(discovery_search_diagnostics.get("provider_effective_cap", 0)),
+            int(search_diagnostics.get("provider_effective_cap", 0)),
+        )
+        discovery_search_diagnostics["provider_supported_cap"] = max(
+            int(discovery_search_diagnostics.get("provider_supported_cap", 0)),
+            int(search_diagnostics.get("provider_supported_cap", 0)),
+        )
+        for provider_name in list(search_diagnostics.get("providers_used", []) or []):
+            if provider_name not in discovery_search_diagnostics["providers_used"]:
+                discovery_search_diagnostics["providers_used"].append(provider_name)
         stored_sources: List[Dict[str, Any]] = []
         evidence_blocks: List[Dict[str, Any]] = []
         source_ids: List[int] = []
@@ -360,6 +392,9 @@ async def build_competitive_landscape_v2_discovery_bundle(
                 location_context=location_context,
                 search_results=search_results,
             )
+            artifact_counts = dict(artifact_bundle.get("counts", {}))
+            discovery_search_diagnostics["urls_scraped"] += int(artifact_counts.get("success_count", 0))
+            discovery_search_diagnostics["urls_failed"] += int(artifact_counts.get("failed_count", 0))
             stored_sources = await asyncio.to_thread(load_saved_sources, list(artifact_bundle.get("artifacts", [])))
             evidence_blocks, source_ids = _build_company_evidence_blocks(
                 stored_sources,
@@ -367,6 +402,7 @@ async def build_competitive_landscape_v2_discovery_bundle(
             )
             global_source_id += len(source_ids)
             all_evidence_blocks.extend(evidence_blocks)
+            discovery_search_diagnostics["urls_sent_to_ai"] += len(evidence_blocks)
 
         query_diagnostics.append(
             {
@@ -375,6 +411,7 @@ async def build_competitive_landscape_v2_discovery_bundle(
                 "confidence": int(candidate.confidence),
                 "reasons": list(candidate.reasons),
                 "queries": list(queries),
+                "search_diagnostics": search_diagnostics,
                 "search_results": len(search_results),
                 "stored_sources": len(stored_sources),
                 "evidence_blocks": len(evidence_blocks),
@@ -399,4 +436,5 @@ async def build_competitive_landscape_v2_discovery_bundle(
         "evidence_blocks": all_evidence_blocks,
         "agent_output": discovery_output,
         "query_diagnostics": query_diagnostics,
+        "search_diagnostics": discovery_search_diagnostics,
     }

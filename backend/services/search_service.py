@@ -38,6 +38,8 @@ MAX_RESULTS_PER_QUERY = 20
 MAX_CONCURRENT_REQUESTS = 4
 TOTAL_URL_CAP = 200
 MIN_SNIPPET_LENGTH = 50
+DDG_MAX_RESULTS_PER_QUERY = 30
+SERPAPI_MAX_RESULTS_PER_QUERY = 20
 CURRENT_YEAR = datetime.now(timezone.utc).year
 YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
 TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9&/%+\-]{1,}")
@@ -99,6 +101,7 @@ GENERIC_RESULT_TITLE_MARKERS = (
     "jobs",
 )
 RANKING_ONLY_WORKFLOWS = {"competitive_landscape", "company_profile", "company_research"}
+COMPETITIVE_LANDSCAPE_DISCOVERY_WORKFLOWS = {"competitive_landscape", "competitive_landscape_discovery"}
 SOCIAL_DOMAINS = (
     "facebook.com",
     "instagram.com",
@@ -115,6 +118,53 @@ BLOCKED_REFERENCE_DOMAINS = (
     "wikimedia.org",
     "wikia.com",
     "fandom.com",
+)
+COMPETITOR_DISCOVERY_SIGNAL_WEIGHTS = {
+    "company profile": 4,
+    "company profiles": 4,
+    "company website": 4,
+    "official website": 4,
+    "our company": 4,
+    "about us": 3,
+    "press release": 4,
+    "announces": 4,
+    "launches": 4,
+    "expands": 4,
+    "acquires": 4,
+    "portfolio": 3,
+    "regional companies": 3,
+    "private companies": 3,
+    "private company": 3,
+    "startup": 3,
+    "startups": 3,
+    "challenger": 3,
+    "emerging": 2,
+    "niche": 2,
+    "specialist": 2,
+    "local companies": 2,
+    "vendor ecosystem": 1,
+    "association": 1,
+    "conference": 1,
+    "directory": 1,
+    "event": 1,
+    "exhibitor": 1,
+    "member": 1,
+    "membership": 1,
+    "participant": 1,
+    "vendor list": 1,
+}
+LOW_VALUE_COMPETITIVE_PAGE_MARKERS = (
+    "login",
+    "log in",
+    "member login",
+    "members only",
+    "sign in",
+    "subscribe",
+    "subscription",
+    "cookie policy",
+    "privacy policy",
+    "terms of service",
+    "contact us",
 )
 
 
@@ -240,9 +290,15 @@ def _uses_ranking_only_relevance(workflow: str | None) -> bool:
     return str(workflow or "").strip().lower() in RANKING_ONLY_WORKFLOWS
 
 
+def _is_competitive_landscape_search_mode(workflow: str | None) -> bool:
+    return str(workflow or "").strip().lower() in COMPETITIVE_LANDSCAPE_DISCOVERY_WORKFLOWS
+
+
 def _search_concurrency_for_workflow(workflow: str | None) -> int:
     normalized_workflow = str(workflow or "").strip().lower()
     if normalized_workflow == "company_research":
+        return 1
+    if normalized_workflow == "competitive_landscape_discovery":
         return 1
     if normalized_workflow in {"competitive_landscape", "company_profile"}:
         return 2
@@ -250,6 +306,16 @@ def _search_concurrency_for_workflow(workflow: str | None) -> int:
 
 
 def _result_sort_key(item: Dict[str, Any], *, workflow: str | None = None) -> tuple[int, ...]:
+    if _is_competitive_landscape_search_mode(workflow):
+        return (
+            int(item.get("competitor_discovery_signal_score", 0)),
+            int(item.get("location_score", 0)),
+            int(item.get("temporal_boost", 0)),
+            int(item.get("query_overlap_count", 0)),
+            int(item.get("anchor_overlap_count", 0)),
+            int(item.get("rank_score", 0)),
+            int(item.get("score", 0)),
+        )
     if _uses_ranking_only_relevance(workflow):
         return (
             int(item.get("location_score", 0)),
@@ -351,6 +417,20 @@ def _domain_quality_score(domain: str, source_type: str, combined: str) -> int:
     return score
 
 
+def _competitor_discovery_signal_score(title: str, snippet: str, url: str) -> int:
+    combined = f"{title} {snippet} {unquote(url)}".lower()
+    score = 0
+    for marker, weight in COMPETITOR_DISCOVERY_SIGNAL_WEIGHTS.items():
+        if marker in combined:
+            score += int(weight)
+    return min(score, 12)
+
+
+def _looks_like_low_value_competitive_page(title: str, snippet: str, url: str) -> bool:
+    combined = f"{title} {snippet} {unquote(url)}".lower()
+    return any(marker in combined for marker in LOW_VALUE_COMPETITIVE_PAGE_MARKERS)
+
+
 def _score_query_relevance(
     *,
     query: str,
@@ -406,7 +486,14 @@ def _score_query_relevance(
     }
 
 
-def _score_result(result: Dict[str, Any], authority_boosts: Dict[str, int], freshness: str, query: str) -> Dict[str, Any]:
+def _score_result(
+    result: Dict[str, Any],
+    authority_boosts: Dict[str, int],
+    freshness: str,
+    query: str,
+    *,
+    workflow: str | None = None,
+) -> Dict[str, Any]:
     url = str(result.get("url", "")).strip()
     title = str(result.get("title", "")).strip()
     snippet = str(result.get("snippet", "")).strip()
@@ -429,6 +516,11 @@ def _score_result(result: Dict[str, Any], authority_boosts: Dict[str, int], fres
     score += int(authority_boosts.get(domain, 0))
     score += domain_quality
     rank_score = score + temporal_boost + int(relevance_payload["query_relevance_score"])
+    competitor_discovery_signal = (
+        _competitor_discovery_signal_score(title, snippet, url)
+        if _is_competitive_landscape_search_mode(workflow)
+        else 0
+    )
 
     return {
         "url": url,
@@ -441,11 +533,17 @@ def _score_result(result: Dict[str, Any], authority_boosts: Dict[str, int], fres
         "temporal_boost": temporal_boost,
         "detected_years": detected_years,
         "domain_quality_score": domain_quality,
+        "competitor_discovery_signal_score": competitor_discovery_signal,
         **relevance_payload,
     }
 
 
-def _is_quality_result(result: Dict[str, Any], *, ranking_only_relevance: bool = False) -> bool:
+def _is_quality_result(
+    result: Dict[str, Any],
+    *,
+    ranking_only_relevance: bool = False,
+    workflow: str | None = None,
+) -> bool:
     url = str(result.get("url", "")).strip()
     snippet = str(result.get("snippet", "")).strip()
     domain = str(result.get("domain", "")).strip() or _extract_domain(url)
@@ -456,6 +554,7 @@ def _is_quality_result(result: Dict[str, Any], *, ranking_only_relevance: bool =
     exact_query_phrase_match = bool(result.get("exact_query_phrase_match"))
     query_relevance_score = int(result.get("query_relevance_score", 0))
     domain_quality_score = int(result.get("domain_quality_score", 0))
+    discovery_signal_score = int(result.get("competitor_discovery_signal_score", 0))
 
     if not url or len(snippet) < MIN_SNIPPET_LENGTH:
         return False
@@ -465,6 +564,23 @@ def _is_quality_result(result: Dict[str, Any], *, ranking_only_relevance: bool =
         return False
     if source_type == "low_value":
         return False
+    if _is_competitive_landscape_search_mode(workflow):
+        if _looks_like_low_value_competitive_page(title, snippet, url):
+            return False
+        if any(marker in title for marker in GENERIC_RESULT_TITLE_MARKERS) and discovery_signal_score == 0:
+            return False
+        if (
+            query_overlap_count == 0
+            and anchor_overlap_count == 0
+            and not exact_query_phrase_match
+            and discovery_signal_score == 0
+            and source_type in {"blog", "general"}
+            and domain_quality_score <= 0
+        ):
+            return False
+        if query_relevance_score <= -8 and domain_quality_score <= 0 and discovery_signal_score == 0:
+            return False
+        return True
     if ranking_only_relevance:
         return True
     if any(marker in title for marker in GENERIC_RESULT_TITLE_MARKERS):
@@ -476,6 +592,42 @@ def _is_quality_result(result: Dict[str, Any], *, ranking_only_relevance: bool =
     if query_overlap_count <= 1 and source_type in {"blog", "general"} and domain_quality_score <= 0:
         return False
     return True
+
+
+def _should_keep_result_for_workflow(result: Dict[str, Any], context: LocationContext, workflow: str | None = None) -> bool:
+    if not _is_competitive_landscape_search_mode(workflow):
+        return should_keep_search_result(result, context)
+    if context.is_global:
+        return True
+
+    has_location_match = bool(result.get("has_location_match"))
+    location_score = int(result.get("location_score", 0))
+    generic_unrelated = bool(result.get("generic_unrelated"))
+    domain_relevance = bool(result.get("domain_relevance"))
+    discovery_signal_score = int(result.get("competitor_discovery_signal_score", 0))
+    query_overlap_count = int(result.get("query_overlap_count", 0))
+    domain_quality_score = int(result.get("domain_quality_score", 0))
+
+    if generic_unrelated:
+        return False
+    if context.preference == "country_specific":
+        return (
+            has_location_match
+            or domain_relevance
+            or discovery_signal_score > 0
+            or query_overlap_count > 0
+            or domain_quality_score > 0
+            or location_score >= 1
+        )
+    return has_location_match or domain_relevance or discovery_signal_score > 0 or location_score >= 0
+
+
+def _max_results_per_query_for_workflow(workflow: str | None) -> int:
+    return 30 if _is_competitive_landscape_search_mode(workflow) else MAX_RESULTS_PER_QUERY
+
+
+def _total_url_cap_for_workflow(workflow: str | None) -> int:
+    return 260 if _is_competitive_landscape_search_mode(workflow) else TOTAL_URL_CAP
 
 
 def _deduplicate_urls(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -529,7 +681,7 @@ def _run_serpapi_search_sync(
         "engine": "google",
         "q": query,
         "api_key": api_key,
-        "num": max(1, min(max_results, MAX_RESULTS_PER_QUERY)),
+        "num": max(1, min(max_results, SERPAPI_MAX_RESULTS_PER_QUERY)),
         "hl": "en",
         "output": "json",
     }
@@ -544,7 +696,8 @@ def _run_serpapi_search_sync(
         raise RuntimeError(str(payload.get("error")))
 
     normalized_results: List[Dict[str, Any]] = []
-    for result in list(payload.get("organic_results", []))[:max_results]:
+    effective_cap = max(1, min(max_results, SERPAPI_MAX_RESULTS_PER_QUERY))
+    for result in list(payload.get("organic_results", []))[:effective_cap]:
         if not isinstance(result, dict):
             continue
         normalized_results.append(
@@ -565,15 +718,17 @@ def _filter_backend_results(
     freshness_level: str,
     resolved_location_context: LocationContext,
     workflow: str | None = None,
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Any]:
     annotated_results: List[Dict[str, Any]] = []
     ranking_only_relevance = _uses_ranking_only_relevance(workflow)
+    per_query_cap = _max_results_per_query_for_workflow(workflow)
     for result in raw_results:
         base_result = _score_result(
             _normalize_raw_result(result),
             authority_boosts,
             freshness_level,
             normalized_query,
+            workflow=workflow,
         )
         location_payload = assess_location_relevance(
             url=str(base_result.get("url", "")),
@@ -593,15 +748,33 @@ def _filter_backend_results(
     filtered_results = [
         result
         for result in annotated_results
-        if _is_quality_result(result, ranking_only_relevance=ranking_only_relevance)
+        if _is_quality_result(result, ranking_only_relevance=ranking_only_relevance, workflow=workflow)
     ]
-    filtered_results = [result for result in filtered_results if should_keep_search_result(result, resolved_location_context)]
+    quality_filtered_count = len(filtered_results)
+    location_filtered_results = [
+        result for result in filtered_results if _should_keep_result_for_workflow(result, resolved_location_context, workflow)
+    ]
+    filtered_results = [
+        result for result in filtered_results if _should_keep_result_for_workflow(result, resolved_location_context, workflow)
+    ]
     filtered_results = _deduplicate_urls(filtered_results)
     filtered_results.sort(
         key=lambda item: _result_sort_key(item, workflow=workflow),
         reverse=True,
     )
-    return filtered_results[:MAX_RESULTS_PER_QUERY]
+    capped_results = filtered_results[:per_query_cap]
+    return {
+        "results": capped_results,
+        "diagnostics": {
+            "raw_results": len(raw_results),
+            "quality_pass_results": quality_filtered_count,
+            "location_pass_results": len(location_filtered_results),
+            "deduplicated_results": len(filtered_results),
+            "returned_results": len(capped_results),
+            "filtered_results": max(0, len(raw_results) - len(capped_results)),
+            "capped_out_results": max(0, len(filtered_results) - len(capped_results)),
+        },
+    }
 
 
 def _run_ddg_search_resilient_sync(
@@ -611,6 +784,7 @@ def _run_ddg_search_resilient_sync(
     freshness_level: str,
     resolved_location_context: LocationContext,
     workflow: str | None = None,
+    max_results: int,
 ) -> List[Dict[str, Any]]:
     last_error: Exception | None = None
 
@@ -619,11 +793,11 @@ def _run_ddg_search_resilient_sync(
             try:
                 raw_results = _run_ddg_search_sync(
                     query_variant,
-                    MAX_RESULTS_PER_QUERY,
+                    max_results,
                     None,
                     backend,
                 )
-                filtered_results = _filter_backend_results(
+                filtered_payload = _filter_backend_results(
                     raw_results,
                     normalized_query=query,
                     authority_boosts=authority_boosts,
@@ -631,6 +805,7 @@ def _run_ddg_search_resilient_sync(
                     resolved_location_context=resolved_location_context,
                     workflow=workflow,
                 )
+                filtered_results = list(filtered_payload.get("results", []))
                 logger.info(
                     "[SEARCH] Backend=%s variant=%s raw=%s filtered=%s | query=%s",
                     backend,
@@ -640,7 +815,16 @@ def _run_ddg_search_resilient_sync(
                     query,
                 )
                 if filtered_results:
-                    return filtered_results
+                    filtered_payload.setdefault("diagnostics", {})
+                    filtered_payload["diagnostics"].update(
+                        {
+                            "provider": f"ddg_{backend}",
+                            "provider_requested_cap": max_results,
+                            "provider_effective_cap": max(1, min(max_results, DDG_MAX_RESULTS_PER_QUERY)),
+                            "provider_supported_cap": DDG_MAX_RESULTS_PER_QUERY,
+                        }
+                    )
+                    return filtered_payload
             except Exception as exc:
                 last_error = exc
                 logger.warning(
@@ -663,6 +847,7 @@ def _run_serpapi_search_resilient_sync(
     freshness_level: str,
     resolved_location_context: LocationContext,
     workflow: str | None = None,
+    max_results: int,
 ) -> List[Dict[str, Any]]:
     if not settings.SERPAPI_KEY.strip():
         return []
@@ -672,10 +857,10 @@ def _run_serpapi_search_resilient_sync(
         try:
             raw_results = _run_serpapi_search_sync(
                 query_variant,
-                MAX_RESULTS_PER_QUERY,
+                max_results,
                 resolved_location_context,
             )
-            filtered_results = _filter_backend_results(
+            filtered_payload = _filter_backend_results(
                 raw_results,
                 normalized_query=query,
                 authority_boosts=authority_boosts,
@@ -683,6 +868,7 @@ def _run_serpapi_search_resilient_sync(
                 resolved_location_context=resolved_location_context,
                 workflow=workflow,
             )
+            filtered_results = list(filtered_payload.get("results", []))
             logger.info(
                 "[SEARCH] Backend=serpapi variant=%s raw=%s filtered=%s | query=%s",
                 "exact" if query_variant == query else "relaxed",
@@ -691,7 +877,16 @@ def _run_serpapi_search_resilient_sync(
                 query,
             )
             if filtered_results:
-                return filtered_results
+                filtered_payload.setdefault("diagnostics", {})
+                filtered_payload["diagnostics"].update(
+                    {
+                        "provider": "serpapi",
+                        "provider_requested_cap": max_results,
+                        "provider_effective_cap": max(1, min(max_results, SERPAPI_MAX_RESULTS_PER_QUERY)),
+                        "provider_supported_cap": SERPAPI_MAX_RESULTS_PER_QUERY,
+                    }
+                )
+                return filtered_payload
         except Exception as exc:
             last_error = exc
             logger.warning(
@@ -711,14 +906,15 @@ async def get_search_results(
     freshness: str = "high",
     location_context: LocationContext | None = None,
     workflow: str | None = None,
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Any]:
     normalized_query = query.strip()
     freshness_level = _normalize_freshness(freshness)
     resolved_location_context = location_context or LocationContext()
     authority_boosts = get_domain_authority_boosts()
+    max_results = _max_results_per_query_for_workflow(workflow)
     _log(f"[SEARCH] Query: {normalized_query}")
     if settings.SERPAPI_KEY.strip():
-        serpapi_results = await call_search(
+        serpapi_payload = await call_search(
             "serpapi_search",
             lambda: asyncio.to_thread(
                 _run_serpapi_search_resilient_sync,
@@ -727,18 +923,23 @@ async def get_search_results(
                 freshness_level=freshness_level,
                 resolved_location_context=resolved_location_context,
                 workflow=workflow,
+                max_results=max_results,
             ),
-            fallback=[],
+            fallback={"results": [], "diagnostics": {}},
             timeout=SEARCH_TIMEOUT_SECONDS,
             max_retries=SEARCH_MAX_RETRIES,
             context={"query": normalized_query, "location": resolved_location_context.label},
         )
+        serpapi_results = list((serpapi_payload or {}).get("results", []))
         if serpapi_results:
             _log(f"[SEARCH] Results: {len(serpapi_results)} | provider=serpapi | query={normalized_query}")
-            return serpapi_results
+            return {
+                "results": serpapi_results,
+                "diagnostics": dict((serpapi_payload or {}).get("diagnostics", {})),
+            }
         logger.warning("[SEARCH] SerpAPI returned no usable results. Falling back to DDG backends. query=%s", normalized_query)
 
-    filtered_results = await call_search(
+    filtered_payload = await call_search(
         "ddg_search",
         lambda: asyncio.to_thread(
             _run_ddg_search_resilient_sync,
@@ -747,17 +948,25 @@ async def get_search_results(
             freshness_level=freshness_level,
             resolved_location_context=resolved_location_context,
             workflow=workflow,
+            max_results=max_results,
         ),
-        fallback=[],
+        fallback={"results": [], "diagnostics": {}},
         timeout=SEARCH_TIMEOUT_SECONDS,
         max_retries=SEARCH_MAX_RETRIES,
         context={"query": normalized_query},
     )
+    filtered_results = list((filtered_payload or {}).get("results", []))
     if not filtered_results:
         _log(f"[SEARCH] Failed: {normalized_query} | error=no results")
-        return []
+        return {
+            "results": [],
+            "diagnostics": dict((filtered_payload or {}).get("diagnostics", {})),
+        }
     _log(f"[SEARCH] Results: {len(filtered_results)} | query={normalized_query}")
-    return filtered_results
+    return {
+        "results": filtered_results,
+        "diagnostics": dict((filtered_payload or {}).get("diagnostics", {})),
+    }
 
 
 async def search_queries(
@@ -797,16 +1006,51 @@ async def search_queries(
 
     aggregated_results: List[Dict[str, Any]] = []
     query_performance: Dict[str, Dict[str, float]] = {}
+    search_diagnostics = {
+        "raw_results": 0,
+        "quality_pass_results": 0,
+        "location_pass_results": 0,
+        "deduplicated_results": 0,
+        "returned_results": 0,
+        "capped_out_results": 0,
+        "provider_requested_cap": 0,
+        "provider_effective_cap": 0,
+        "provider_supported_cap": 0,
+        "providers_used": [],
+    }
     completed = 0
     total = len(deduplicated_queries)
 
-    for query, results in zip(deduplicated_queries, results_list):
+    for query, payload in zip(deduplicated_queries, results_list):
         completed += 1
         _log(f"[PROGRESS] {completed}/{total}")
-        if isinstance(results, Exception):
+        if isinstance(payload, Exception):
             logger.exception("Search task failed for query %s", query)
             query_performance[query] = {"count": 0, "avg_score": 0.0}
             continue
+        results = list((payload or {}).get("results", []))
+        diagnostics = dict((payload or {}).get("diagnostics", {}))
+        search_diagnostics["raw_results"] += int(diagnostics.get("raw_results", 0))
+        search_diagnostics["quality_pass_results"] += int(diagnostics.get("quality_pass_results", 0))
+        search_diagnostics["location_pass_results"] += int(diagnostics.get("location_pass_results", 0))
+        search_diagnostics["deduplicated_results"] += int(diagnostics.get("deduplicated_results", 0))
+        search_diagnostics["returned_results"] += int(diagnostics.get("returned_results", 0))
+        search_diagnostics["capped_out_results"] += int(diagnostics.get("capped_out_results", 0))
+        search_diagnostics["provider_requested_cap"] = max(
+            int(search_diagnostics.get("provider_requested_cap", 0)),
+            int(diagnostics.get("provider_requested_cap", 0)),
+        )
+        search_diagnostics["provider_effective_cap"] = max(
+            int(search_diagnostics.get("provider_effective_cap", 0)),
+            int(diagnostics.get("provider_effective_cap", 0)),
+        )
+        search_diagnostics["provider_supported_cap"] = max(
+            int(search_diagnostics.get("provider_supported_cap", 0)),
+            int(diagnostics.get("provider_supported_cap", 0)),
+        )
+        provider_name = str(diagnostics.get("provider", "")).strip()
+        if provider_name and provider_name not in search_diagnostics["providers_used"]:
+            search_diagnostics["providers_used"].append(provider_name)
 
         if ranking_only_relevance:
             query_scores = [
@@ -834,12 +1078,19 @@ async def search_queries(
         key=lambda item: _result_sort_key(item, workflow=workflow),
         reverse=True,
     )
-    capped_results = deduplicated_results[:TOTAL_URL_CAP]
+    capped_results = deduplicated_results[: _total_url_cap_for_workflow(workflow)]
     _log(f"[SEARCH] Aggregated unique results: {len(capped_results)}")
 
     return {
         "queries": deduplicated_queries,
         "results": capped_results,
         "query_performance": query_performance,
+        "diagnostics": {
+            **search_diagnostics,
+            "unique_results": len(deduplicated_results),
+            "capped_results": len(capped_results),
+            "filtered_results": max(0, search_diagnostics["raw_results"] - len(capped_results)),
+            "search_mode": "competitive_landscape" if _is_competitive_landscape_search_mode(workflow) else "default",
+        },
     }
 
