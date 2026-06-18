@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import logging
+import random
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -63,13 +64,15 @@ logger = logging.getLogger(__name__)
 
 DEBUG = True
 SCRAPE_TIMEOUT_SECONDS = min(settings.EXTERNAL_TIMEOUT_SECONDS, 8)
-SCRAPE_MAX_RETRIES = min(settings.EXTERNAL_MAX_RETRIES, 1)
+SCRAPE_MAX_RETRIES = max(1, min(int(settings.SCRAPER_MAX_RETRIES), settings.EXTERNAL_MAX_RETRIES))
 MAX_CONCURRENT_REQUESTS = max(1, min(int(settings.SCRAPER_MAX_CONCURRENT_REQUESTS), 8))
 TOTAL_URL_CAP = 200
 MIN_PDF_CONTENT_LENGTH = 500
 MIN_WEB_CONTENT_LENGTH = 180
 SCRAPLING_TIMEOUT_SECONDS = 8
 CRAWL4AI_MIN_CONTENT_LENGTH = max(120, settings.CRAWL4AI_MIN_CONTENT_LENGTH)
+SCRAPE_BATCH_DELAY_SECONDS = max(0.0, float(settings.SCRAPE_BATCH_DELAY_SECONDS))
+SCRAPE_BATCH_JITTER_SECONDS = max(0.0, float(settings.SCRAPE_BATCH_JITTER_SECONDS))
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
@@ -285,6 +288,18 @@ def _is_relevant_content(title: str, content: str, topic: str, section: str) -> 
     return topic_ok and section_ok
 
 
+def _scrape_candidate_priority(result: Dict[str, Any]) -> tuple[int, ...]:
+    return (
+        int(result.get("competitor_discovery_signal_score", 0)),
+        int(result.get("location_score", 0)),
+        int(result.get("domain_quality_score", 0)),
+        int(result.get("query_relevance_score", 0)),
+        int(result.get("rank_score", 0)),
+        int(result.get("temporal_boost", 0)),
+        1 if str(result.get("source_type", "")).strip() in {"government", "report", "news"} else 0,
+    )
+
+
 def _content_signature(text: str) -> str:
     normalized = _normalize_whitespace(text[:500]).lower()
     return hashlib.sha1(normalized.encode("utf-8")).hexdigest() if normalized else ""
@@ -338,6 +353,84 @@ async def _download_pdf(url: str, client: httpx.AsyncClient) -> Tuple[str, bytes
         return extracted, raw_content, ""
     except Exception as exc:
         return "", b"", _error_message(exc)
+
+
+def _looks_like_access_challenge(text: str) -> bool:
+    normalized = _normalize_whitespace(text).lower()
+    if not normalized:
+        return False
+    markers = (
+        "captcha",
+        "enable javascript",
+        "verify you are human",
+        "access denied",
+        "too many requests",
+        "temporarily blocked",
+        "bot detection",
+        "cf-chl",
+        "cloudflare",
+    )
+    return any(marker in normalized for marker in markers)
+
+
+async def _scrape_with_httpx_payload(url: str, client: httpx.AsyncClient) -> Tuple[str, str, str]:
+    try:
+        assert_public_url(url)
+    except ValueError as exc:
+        return "", "", str(exc)
+
+    response = await call_scraper(
+        "direct_http_request",
+        lambda: client.get(
+            url,
+            timeout=SCRAPE_TIMEOUT_SECONDS,
+            follow_redirects=True,
+        ),
+        fallback=None,
+        timeout=SCRAPE_TIMEOUT_SECONDS,
+        max_retries=SCRAPE_MAX_RETRIES,
+        context={"url": url},
+    )
+    if response is None:
+        return "", "", "Direct HTTP request failed."
+
+    try:
+        response.raise_for_status()
+        if "text/html" not in str(response.headers.get("content-type", "")).lower():
+            return "", "", "Direct HTTP request returned non-HTML content."
+
+        image_url = _extract_image_url(response.text, url)
+        text = _extract_html_text(response.text)
+        normalized_text = _normalize_whitespace(text)
+        if len(normalized_text) >= MIN_WEB_CONTENT_LENGTH and not _looks_like_access_challenge(normalized_text):
+            return text, image_url, ""
+
+        fallback_body_text = _extract_body_text(response.text)
+        normalized_fallback_text = _normalize_whitespace(fallback_body_text)
+        if len(normalized_fallback_text) >= MIN_WEB_CONTENT_LENGTH and not _looks_like_access_challenge(normalized_fallback_text):
+            logger.info(
+                "Direct HTTP accepted via fallback body extraction url=%s chars=%s",
+                url,
+                len(normalized_fallback_text),
+            )
+            return fallback_body_text, image_url, ""
+
+        metadata_summary = _extract_metadata_summary(response.text)
+        normalized_metadata_summary = _normalize_whitespace(metadata_summary)
+        if len(normalized_metadata_summary) >= MIN_WEB_CONTENT_LENGTH and not _looks_like_access_challenge(normalized_metadata_summary):
+            logger.info(
+                "Direct HTTP accepted via metadata summary url=%s chars=%s",
+                url,
+                len(normalized_metadata_summary),
+            )
+            return metadata_summary, image_url, ""
+
+        if _looks_like_access_challenge(normalized_text or normalized_fallback_text or normalized_metadata_summary):
+            return "", image_url, "Direct HTTP response appears to be a bot challenge."
+
+        return "", image_url, "Direct HTTP returned insufficient content."
+    except Exception as exc:
+        return "", "", _error_message(exc)
 
 
 async def _scrape_with_scrapedo(url: str, client: httpx.AsyncClient) -> Tuple[str, str]:
@@ -601,17 +694,17 @@ async def _scrape_with_scrapling_payload(url: str) -> Tuple[str, str, str]:
 
 async def _scrape_with_existing_stack_payload(url: str, client: httpx.AsyncClient) -> CrawlResultPayload:
     started_at = time.perf_counter()
-    scrapedo_text, scrapedo_image_url, scrapedo_error = await _scrape_with_scrapedo_payload(url, client)
-    if scrapedo_text:
+    direct_text, direct_image_url, direct_error = await _scrape_with_httpx_payload(url, client)
+    if direct_text:
         return CrawlResultPayload(
             url=url,
-            markdown=scrapedo_text,
-            raw_markdown=scrapedo_text,
-            clean_markdown=scrapedo_text,
-            plain_text=scrapedo_text,
-            crawler_used="legacy_scraper",
+            markdown=direct_text,
+            raw_markdown=direct_text,
+            clean_markdown=direct_text,
+            plain_text=direct_text,
+            crawler_used="httpx_direct",
             crawl_duration_ms=int((time.perf_counter() - started_at) * 1000),
-            image_url=scrapedo_image_url,
+            image_url=direct_image_url,
             error="",
         ).ensure_metrics()
 
@@ -625,11 +718,35 @@ async def _scrape_with_existing_stack_payload(url: str, client: httpx.AsyncClien
             plain_text=scrapling_text,
             crawler_used="scrapling",
             crawl_duration_ms=int((time.perf_counter() - started_at) * 1000),
-            image_url=scrapling_image_url or scrapedo_image_url,
+            fallback_triggered=True,
+            image_url=scrapling_image_url or direct_image_url,
             error="",
         ).ensure_metrics()
 
-    combined_errors = [message for message in (scrapedo_error, scrapling_error) if message]
+    playwright_crawler = await get_shared_playwright_fallback_crawler()
+    playwright_result = await playwright_crawler.crawl(url)
+    if playwright_result.is_success:
+        playwright_result.fallback_triggered = True
+        if not playwright_result.image_url:
+            playwright_result.image_url = direct_image_url or scrapling_image_url
+        return playwright_result.ensure_metrics()
+
+    scrapedo_text, scrapedo_image_url, scrapedo_error = await _scrape_with_scrapedo_payload(url, client)
+    if scrapedo_text:
+        return CrawlResultPayload(
+            url=url,
+            markdown=scrapedo_text,
+            raw_markdown=scrapedo_text,
+            clean_markdown=scrapedo_text,
+            plain_text=scrapedo_text,
+            crawler_used="scrapedo",
+            crawl_duration_ms=int((time.perf_counter() - started_at) * 1000),
+            fallback_triggered=True,
+            image_url=scrapedo_image_url or direct_image_url or scrapling_image_url,
+            error="",
+        ).ensure_metrics()
+
+    combined_errors = [message for message in (direct_error, scrapling_error, playwright_result.error, scrapedo_error) if message]
     return CrawlResultPayload(
         url=url,
         crawler_used="legacy_scraper",
@@ -802,6 +919,9 @@ async def scrape_url(
     _log(f"[SCRAPER] Start: {url}")
     async with semaphore:
         try:
+            wave_index = max(0, (index - 1) % max(1, MAX_CONCURRENT_REQUESTS))
+            if wave_index:
+                await asyncio.sleep((0.08 * wave_index) + random.uniform(0.0, 0.08))
             if _is_probable_pdf_url(url):
                 extracted_text, raw_content, pdf_error = await _download_pdf(url, client)
                 if not extracted_text:
@@ -1208,6 +1328,7 @@ async def scrape_all(
             continue
         seen_urls.add(url)
         deduplicated_results.append(result)
+    deduplicated_results.sort(key=_scrape_candidate_priority, reverse=True)
 
     batch_payload = await _scrape_batch(
         deduplicated_results,
@@ -1286,6 +1407,7 @@ async def collect_research_artifacts(
             continue
         seen_urls.add(url)
         deduplicated_candidates.append(result)
+    deduplicated_candidates.sort(key=_scrape_candidate_priority, reverse=True)
 
     _log(f"[SCRAPER] Queue size: {len(deduplicated_candidates)}")
 
@@ -1356,6 +1478,10 @@ async def collect_research_artifacts(
                 target_usable_text_count,
             )
             break
+        if batch_start + effective_batch_size < len(deduplicated_candidates):
+            batch_delay = SCRAPE_BATCH_DELAY_SECONDS + random.uniform(0.0, SCRAPE_BATCH_JITTER_SECONDS)
+            if batch_delay > 0:
+                await asyncio.sleep(batch_delay)
 
     seen_signatures = set()
     deduplicated_artifacts: List[Dict[str, Any]] = []

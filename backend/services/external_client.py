@@ -5,6 +5,7 @@ import concurrent.futures
 import inspect
 import logging
 import math
+import random
 import re
 import time
 from typing import Any, Awaitable, Callable, Dict, TypeVar
@@ -54,6 +55,7 @@ def _clear_last_failure(provider: str, operation: str) -> None:
 
 
 def _retry_delay_seconds(retry_index: int, error: Exception | None = None) -> int:
+    jitter_seconds = max(0.0, float(settings.RETRY_JITTER_SECONDS))
     if error is not None:
         match = _RATE_LIMIT_WAIT_PATTERN.search(str(error))
         if match:
@@ -62,13 +64,16 @@ def _retry_delay_seconds(retry_index: int, error: Exception | None = None) -> in
             except (TypeError, ValueError):
                 hinted_delay = 0.0
             if hinted_delay > 0:
-                return max(1, min(int(math.ceil(hinted_delay + 0.5)), 12))
+                base_delay = max(1.0, min(hinted_delay + 0.5, 12.0))
+                return base_delay + random.uniform(0.0, jitter_seconds)
 
         lowered_error = str(error).lower()
         if "rate_limit" in lowered_error or "too many requests" in lowered_error or "429" in lowered_error:
-            return min(2 ** (retry_index + 1), 12)
+            base_delay = float(min(2 ** (retry_index + 1), 12))
+            return base_delay + random.uniform(0.0, jitter_seconds)
 
-    return min(2**retry_index, 4)
+    base_delay = float(min(2**retry_index, 4))
+    return base_delay + random.uniform(0.0, jitter_seconds)
 
 
 def _sanitize_value(value: Any) -> Any:

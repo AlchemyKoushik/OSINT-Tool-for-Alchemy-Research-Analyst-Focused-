@@ -993,7 +993,10 @@ async def search_queries(
     async def _bounded_search(query: str, query_index: int) -> List[Dict[str, Any]]:
         async with semaphore:
             if effective_concurrency < MAX_CONCURRENT_REQUESTS:
-                await asyncio.sleep(min(0.15 * query_index, 0.6) + random.uniform(0.0, 0.1))
+                await asyncio.sleep(
+                    min(float(settings.SEARCH_STAGGER_DELAY_SECONDS) * query_index, 0.8)
+                    + random.uniform(0.0, max(0.0, float(settings.SEARCH_STAGGER_JITTER_SECONDS)))
+                )
             return await get_search_results(
                 query,
                 freshness=freshness,

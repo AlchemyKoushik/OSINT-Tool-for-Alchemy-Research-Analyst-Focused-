@@ -17,10 +17,10 @@ from services.storage_service import upload_to_r2
 logger = logging.getLogger(__name__)
 
 DEBUG = True
-MAX_PIPELINE_SCRAPE_RESULTS = 200
-SCRAPE_BATCH_SIZE = 25
-TARGET_USABLE_TEXT_COUNT = 200
-SCRAPE_TIME_BUDGET_SECONDS = 900
+MAX_PIPELINE_SCRAPE_RESULTS = max(20, min(int(settings.MAX_PIPELINE_SCRAPE_RESULTS), 200))
+SCRAPE_BATCH_SIZE = max(4, min(int(settings.SCRAPE_BATCH_SIZE), 25))
+TARGET_USABLE_TEXT_COUNT = max(10, min(int(settings.TARGET_USABLE_TEXT_COUNT), MAX_PIPELINE_SCRAPE_RESULTS))
+SCRAPE_TIME_BUDGET_SECONDS = max(60, int(settings.SCRAPE_TIME_BUDGET_SECONDS))
 
 
 def _log(message: str) -> None:
