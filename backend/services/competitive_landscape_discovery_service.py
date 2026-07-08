@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Sequence
 
@@ -17,6 +18,12 @@ from models.response_models import (
     ExampleSearchQueryResponse,
 )
 from services.content_processor import prepare_processed_content
+from services.competitive_landscape_runtime import (
+    log_cl_health,
+    log_cl_perf,
+    resolve_cl_discovery_concurrency,
+    run_with_cl_provider_limit,
+)
 from services.external_client import call_openai
 from services.location_service import LocationContext
 from services.openai_service import can_use_openai, ensure_min_output_tokens
@@ -38,6 +45,23 @@ DISCOVERY_MIN_SOURCE_CHARS = 120
 TIER_1_DOMAIN_MARKERS = (".gov", ".sec", "investor", "regulator", "exchange", "official")
 TIER_2_DOMAIN_MARKERS = ("reuters", "bloomberg", "spglobal", "argus", "woodmac", "mckinsey", "bnef")
 TIER_3_TITLE_MARKERS = ("blog", "top 10", "list of", "overview", "market size")
+GENERIC_TOPIC_STOP_WORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "that",
+    "this",
+    "market",
+    "industry",
+    "global",
+    "united",
+    "states",
+    "state",
+    "country",
+    "region",
+}
 
 
 def _normalize_text(value: Any) -> str:
@@ -50,6 +74,61 @@ def _location_label(context: LocationContext) -> str:
     if context.preference == "country_specific":
         return str(context.value or "Country").strip()
     return "Global"
+
+
+def _topic_keywords(topic: str) -> List[str]:
+    keywords: List[str] = []
+    seen = set()
+    for token in re.findall(r"[a-z0-9]+", _normalize_text(topic).lower()):
+        if len(token) < 4 or token in GENERIC_TOPIC_STOP_WORDS or token.isdigit():
+            continue
+        if token in seen:
+            continue
+        seen.add(token)
+        keywords.append(token)
+    return keywords[:6]
+
+
+def _looks_like_distribution_market(topic: str) -> bool:
+    normalized_topic = _normalize_text(topic).lower()
+    return any(
+        marker in normalized_topic
+        for marker in (
+            "distribution",
+            "distributor",
+            "wholesale",
+            "foodservice",
+            "logistics",
+            "cold chain",
+            "grocery",
+            "supply chain",
+        )
+    )
+
+
+def _market_signal_guidance(topic: str) -> str:
+    if _looks_like_distribution_market(topic):
+        return (
+            "distribution footprint, warehouse network, fleet scale, foodservice or retail customer reach, "
+            "regional or national coverage, private-label portfolio, acquisition history, and repeated inclusion in "
+            "food distribution or wholesale rankings"
+        )
+    return (
+        "operating footprint, owned or managed assets, product or service portfolio, customer base, commercial scale, "
+        "revenue exposure, acquisitions, market share, ranking presence, and repeated inclusion in industry coverage"
+    )
+
+
+def _company_validation_focus(topic: str) -> str:
+    if _looks_like_distribution_market(topic):
+        return (
+            "distribution network, warehouses, fleet, foodservice customers, grocery or institutional channels, "
+            "product assortment, acquisitions, and regional or national operating footprint"
+        )
+    return (
+        "operations, owned or managed assets, product or service footprint, customer base, commercial contracts, "
+        "acquisitions, portfolio scale, and direct market participation"
+    )
 
 
 def _source_tier_for_source(source: Dict[str, Any]) -> str:
@@ -97,6 +176,7 @@ def _build_market_discovery_prompt(
     location_context: LocationContext,
     max_candidates: int,
 ) -> str:
+    signal_guidance = _market_signal_guidance(topic)
     return (
         "You are the Competitive Landscape Discovery Agent.\n\n"
         "Task:\n"
@@ -104,24 +184,23 @@ def _build_market_discovery_prompt(
         "- Do not infer the company list from supplied search results because none are provided at this stage.\n"
         "- Identify the primary competitive participants in the requested market and geography.\n\n"
         "Market selection criteria:\n"
-        "- Prefer companies supported by signals such as market share, customer footprint, operating presence, geographic footprint, product coverage, distribution scale, deal activity, hiring or expansion signals, and repeated inclusion in industry reports.\n"
-        "- Focus on direct market participants, operators, brands, service providers, platform companies, manufacturers, distributors, or strategically significant players in the requested market and geography.\n"
-        "- Prefer broad market coverage: include regional companies, private firms, niche specialists, challenger brands, emerging companies, and fast-growing startups when they are genuine market participants.\n"
-        "- Treat association rosters, conference participant lists, vendor ecosystems, market directories, and industry reports as valid competitor-discovery signals when they point to real market participants.\n"
+        f"- Prefer companies supported by market-appropriate signals such as {signal_guidance}.\n"
+        "- Focus on direct market participants, operators, owners, distributors, producers, or strategically significant players in the requested market and geography.\n"
         "- Exclude consultants, generic software vendors, financial-only actors, and adjacent ecosystem participants unless they directly own, operate, develop, or control assets in the market.\n"
+        "- Exclude product brands, legacy acquired labels, and one-off subsidiaries unless the evidence would clearly support them as current standalone competitors in this market.\n"
         "- Use three tiers only: Major Player, Mid-Sized Player, Emerging Player.\n"
         "- Aim for a balanced company universe instead of only market leaders.\n"
         "- Confidence is an integer from 0 to 100.\n"
-        "- reasons must be short evidence-style rationales such as installed capacity, asset ownership, local project portfolio, developer ranking presence, or recurring market mention.\n\n"
+        "- reasons must be short evidence-style rationales tied to the actual market, not generic filler.\n\n"
         f"Input:\n- Market: {topic}\n- Geography: {_location_label(location_context)}\n\n"
         "Return strict JSON only in this shape:\n"
         "{\n"
         '  "companies": [\n'
         "    {\n"
-        '      "company": "Example Company",\n'
+        '      "company": "Atlas Renewable Energy",\n'
         '      "tier": "Major Player",\n'
         '      "confidence": 95,\n'
-        '      "reasons": ["recurring presence in India entertainment company rankings", "visible operating footprint and recent expansion activity in India"]\n'
+        '      "reasons": ["large utility-scale solar portfolio in Chile", "recurring presence in Chile solar developer rankings"]\n'
         "    }\n"
         "  ]\n"
         "}\n\n"
@@ -150,20 +229,21 @@ def _build_company_query_user_prompt(
 ) -> str:
     geography = _location_label(location_context)
     reasons = "; ".join(candidate.reasons[:4]) or "market participation"
+    validation_focus = _company_validation_focus(topic)
     return (
         "You are generating company-specific OSINT search queries for Competitive Landscape validation.\n\n"
         "Task:\n"
         "- Create search queries that verify whether the company is a real participant in the target market and geography.\n"
-        "- Search for company profile pages, product or service footprint, operating presence, customer or partner evidence, ownership, expansion activity, and market participation.\n"
-        "- Start broad, then narrow into company-specific operating evidence and market footprint.\n"
+        f"- Search for market-appropriate proof such as {validation_focus}.\n"
+        "- Start broad, then narrow into operating proof and current market participation.\n"
         "- Avoid generic company overview queries unless needed as one fallback.\n\n"
         f"Input:\n- Market: {topic}\n- Geography: {geography}\n- Company: {candidate.company}\n- Discovery tier: {candidate.tier}\n- Discovery reasons: {reasons}\n\n"
         "Return JSON in this shape:\n"
         "{\n"
         '  "queries": [\n'
         "    {\n"
-        '      "query": "Example Company India company profile",\n'
-        '      "purpose": "verify local operating footprint",\n'
+        '      "query": "Atlas Renewable Energy Chile projects",\n'
+        '      "purpose": "verify local project footprint",\n'
         '      "priority": "high"\n'
         "    }\n"
         "  ]\n"
@@ -179,18 +259,39 @@ def _fallback_company_queries(
 ) -> List[str]:
     geography = _location_label(location_context)
     company_name = candidate.company
-    templates = [
-        '"{company}" {geo} company profile',
-        '"{company}" {geo} official website',
-        '"{company}" {geo} products services',
-        '"{company}" {geo} expansion announcement',
-        '"{company}" {geo} partnerships customers',
-        '"{company}" "{topic}" {geo} market presence',
-        '"{company}" "{topic}" {geo} press release',
-        '"{company}" "{topic}" {geo} market share',
-    ]
+    topic_keywords = " ".join(_topic_keywords(topic)[:3]) or topic
+    if _looks_like_distribution_market(topic):
+        templates = [
+            '"{company}" "{topic}" {geo}',
+            '"{company}" {geo} distribution network',
+            '"{company}" {geo} warehouse network',
+            '"{company}" {geo} foodservice distribution',
+            '"{company}" {geo} customers acquisitions',
+            '"{company}" {geo} product assortment',
+            '"{company}" {geo} fleet operations',
+            '"{company}" "{topic_keywords}" {geo} market share',
+        ]
+    else:
+        templates = [
+            '"{company}" "{topic}" {geo}',
+            '"{company}" {geo} operations',
+            '"{company}" {geo} assets facilities',
+            '"{company}" {geo} portfolio',
+            '"{company}" {geo} customers contracts',
+            '"{company}" {geo} acquisitions expansion',
+            '"{company}" "{topic_keywords}" {geo} market share',
+            '"{company}" "{topic_keywords}" {geo} industry ranking',
+        ]
     return _dedupe_queries(
-        [template.format(company=company_name, geo=geography, topic=topic) for template in templates]
+        [
+            template.format(
+                company=company_name,
+                geo=geography,
+                topic=topic,
+                topic_keywords=topic_keywords,
+            )
+            for template in templates
+        ]
     )[:8]
 
 
@@ -199,6 +300,7 @@ async def _generate_company_validation_queries(
     topic: str,
     candidate: CompetitiveLandscapeDiscoveryAgentCompany,
     location_context: LocationContext,
+    perf_state: Dict[str, Dict[str, float]] | None = None,
 ) -> List[str]:
     fallback_queries = _fallback_company_queries(
         topic=topic,
@@ -210,23 +312,28 @@ async def _generate_company_validation_queries(
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY.strip())
     try:
-        response = await call_openai(
-            "generate_cl_discovery_company_queries",
-            lambda: client.responses.parse(
-                model=DISCOVERY_QUERY_MODEL_NAME,
-                input=[{"role": "user", "content": _build_company_query_user_prompt(
-                    topic=topic,
-                    candidate=candidate,
-                    location_context=location_context,
-                )}],
-                text_format=ExampleSearchQueryResponse,
-                max_output_tokens=ensure_min_output_tokens(900),
-                temperature=0.2,
+        response = await run_with_cl_provider_limit(
+            "openai",
+            f"discovery_query_generation:{candidate.company}",
+            lambda: call_openai(
+                "generate_cl_discovery_company_queries",
+                lambda: client.responses.parse(
+                    model=DISCOVERY_QUERY_MODEL_NAME,
+                    input=[{"role": "user", "content": _build_company_query_user_prompt(
+                        topic=topic,
+                        candidate=candidate,
+                        location_context=location_context,
+                    )}],
+                    text_format=ExampleSearchQueryResponse,
+                    max_output_tokens=ensure_min_output_tokens(900),
+                    temperature=0.2,
+                ),
+                fallback=None,
+                timeout=DISCOVERY_QUERY_TIMEOUT_SECONDS,
+                max_retries=DISCOVERY_QUERY_MAX_RETRIES,
+                context={"model": DISCOVERY_QUERY_MODEL_NAME, "company": candidate.company},
             ),
-            fallback=None,
-            timeout=DISCOVERY_QUERY_TIMEOUT_SECONDS,
-            max_retries=DISCOVERY_QUERY_MAX_RETRIES,
-            context={"model": DISCOVERY_QUERY_MODEL_NAME, "company": candidate.company},
+            perf_state=perf_state,
         )
         if response is None:
             return fallback_queries
@@ -283,6 +390,7 @@ async def discover_competitive_landscape_candidates(
     topic: str,
     location_context: LocationContext,
     max_candidates: int = DISCOVERY_MAX_CANDIDATES,
+    perf_state: Dict[str, Dict[str, float]] | None = None,
 ) -> CompetitiveLandscapeDiscoveryAgentOutput:
     api_key = settings.OPENAI_API_KEY.strip()
     if not api_key or not can_use_openai():
@@ -290,23 +398,28 @@ async def discover_competitive_landscape_candidates(
 
     client = AsyncOpenAI(api_key=api_key)
     try:
-        response = await call_openai(
-            "competitive_landscape_market_discovery",
-            lambda: client.responses.parse(
-                model=DISCOVERY_MODEL_NAME,
-                input=[{"role": "user", "content": _build_market_discovery_prompt(
-                    topic=topic,
-                    location_context=location_context,
-                    max_candidates=max_candidates,
-                )}],
-                text_format=CompetitiveLandscapeDiscoveryAgentOutput,
-                max_output_tokens=ensure_min_output_tokens(2200),
-                temperature=0.1,
+        response = await run_with_cl_provider_limit(
+            "openai",
+            "market_discovery",
+            lambda: call_openai(
+                "competitive_landscape_market_discovery",
+                lambda: client.responses.parse(
+                    model=DISCOVERY_MODEL_NAME,
+                    input=[{"role": "user", "content": _build_market_discovery_prompt(
+                        topic=topic,
+                        location_context=location_context,
+                        max_candidates=max_candidates,
+                    )}],
+                    text_format=CompetitiveLandscapeDiscoveryAgentOutput,
+                    max_output_tokens=ensure_min_output_tokens(2200),
+                    temperature=0.1,
+                ),
+                fallback=None,
+                timeout=DISCOVERY_TIMEOUT_SECONDS,
+                max_retries=DISCOVERY_MAX_RETRIES,
+                context={"model": DISCOVERY_MODEL_NAME, "topic": topic, "location": _location_label(location_context)},
             ),
-            fallback=None,
-            timeout=DISCOVERY_TIMEOUT_SECONDS,
-            max_retries=DISCOVERY_MAX_RETRIES,
-            context={"model": DISCOVERY_MODEL_NAME, "topic": topic, "location": _location_label(location_context)},
+            perf_state=perf_state,
         )
         if response is None:
             raise RuntimeError("Competitive landscape discovery agent returned no response.")
@@ -325,84 +438,107 @@ async def build_competitive_landscape_v2_discovery_bundle(
     session_id: str,
     max_candidates: int = DISCOVERY_MAX_CANDIDATES,
 ) -> Dict[str, Any]:
+    total_start = time.perf_counter()
+    provider_perf: Dict[str, Dict[str, float]] = {}
+    discovery_start = time.perf_counter()
     discovery_output = await discover_competitive_landscape_candidates(
         topic=topic,
         location_context=location_context,
         max_candidates=max_candidates,
+        perf_state=provider_perf,
     )
+    log_cl_perf(
+        "Discovery Agent",
+        time.perf_counter() - discovery_start,
+        candidates=len(discovery_output.companies),
+    )
+    log_cl_health("Discovery System Snapshot", candidates=len(discovery_output.companies))
 
     major_players: List[CompetitiveLandscapeDiscoveryCompany] = []
     emerging_players: List[CompetitiveLandscapeDiscoveryCompany] = []
     all_evidence_blocks: List[Dict[str, Any]] = []
     query_diagnostics: List[Dict[str, Any]] = []
-    discovery_search_diagnostics: Dict[str, Any] = {
-        "path": "competitive_landscape_discovery",
-        "urls_discovered": 0,
-        "urls_filtered": 0,
-        "urls_scraped": 0,
-        "urls_failed": 0,
-        "urls_sent_to_ai": 0,
-        "provider_requested_cap": 0,
-        "provider_effective_cap": 0,
-        "provider_supported_cap": 0,
-        "providers_used": [],
-    }
-    global_source_id = 1
+    discovery_concurrency = resolve_cl_discovery_concurrency()
+    semaphore = asyncio.Semaphore(discovery_concurrency)
 
-    for candidate_index, candidate in enumerate(discovery_output.companies, start=1):
-        queries = await _generate_company_validation_queries(
-            topic=topic,
-            candidate=candidate,
-            location_context=location_context,
-        )
-        search_payload = await search_queries(
-            f"{topic} {candidate.company}",
-            list(queries),
-            freshness="high",
-            location_context=location_context,
-            workflow="competitive_landscape_discovery",
-        )
-        search_results = list(search_payload.get("results", []))[:DISCOVERY_MAX_SEARCH_RESULTS]
-        search_diagnostics = dict(search_payload.get("diagnostics", {}))
-        discovery_search_diagnostics["urls_discovered"] += int(search_diagnostics.get("raw_results", 0))
-        discovery_search_diagnostics["urls_filtered"] += int(search_diagnostics.get("filtered_results", 0))
-        discovery_search_diagnostics["provider_requested_cap"] = max(
-            int(discovery_search_diagnostics.get("provider_requested_cap", 0)),
-            int(search_diagnostics.get("provider_requested_cap", 0)),
-        )
-        discovery_search_diagnostics["provider_effective_cap"] = max(
-            int(discovery_search_diagnostics.get("provider_effective_cap", 0)),
-            int(search_diagnostics.get("provider_effective_cap", 0)),
-        )
-        discovery_search_diagnostics["provider_supported_cap"] = max(
-            int(discovery_search_diagnostics.get("provider_supported_cap", 0)),
-            int(search_diagnostics.get("provider_supported_cap", 0)),
-        )
-        for provider_name in list(search_diagnostics.get("providers_used", []) or []):
-            if provider_name not in discovery_search_diagnostics["providers_used"]:
-                discovery_search_diagnostics["providers_used"].append(provider_name)
-        stored_sources: List[Dict[str, Any]] = []
-        evidence_blocks: List[Dict[str, Any]] = []
-        source_ids: List[int] = []
-        if search_results:
-            artifact_bundle = await collect_research_artifacts(
-                topic=f"{topic} {candidate.company}",
-                section="company_profile",
-                session_id=f"{session_id}_cl_discovery_{candidate_index}",
+    async def _process_candidate(
+        candidate_index: int,
+        candidate: CompetitiveLandscapeDiscoveryAgentCompany,
+    ) -> Dict[str, Any]:
+        candidate_start = time.perf_counter()
+        async with semaphore:
+            queries = await _generate_company_validation_queries(
+                topic=topic,
+                candidate=candidate,
                 location_context=location_context,
-                search_results=search_results,
+                perf_state=provider_perf,
             )
-            artifact_counts = dict(artifact_bundle.get("counts", {}))
-            discovery_search_diagnostics["urls_scraped"] += int(artifact_counts.get("success_count", 0))
-            discovery_search_diagnostics["urls_failed"] += int(artifact_counts.get("failed_count", 0))
-            stored_sources = await asyncio.to_thread(load_saved_sources, list(artifact_bundle.get("artifacts", [])))
-            evidence_blocks, source_ids = _build_company_evidence_blocks(
-                stored_sources,
-                source_id_start=global_source_id,
+            search_payload = await run_with_cl_provider_limit(
+                "search",
+                f"candidate_search:{candidate.company}",
+                lambda: search_queries(
+                    f"{topic} {candidate.company}",
+                    list(queries),
+                    freshness="high",
+                    location_context=location_context,
+                    workflow="company_research",
+                ),
+                perf_state=provider_perf,
             )
-            global_source_id += len(source_ids)
-            all_evidence_blocks.extend(evidence_blocks)
-            discovery_search_diagnostics["urls_sent_to_ai"] += len(evidence_blocks)
+            search_results = list(search_payload.get("results", []))[:DISCOVERY_MAX_SEARCH_RESULTS]
+            stored_sources: List[Dict[str, Any]] = []
+            if search_results:
+                artifact_bundle = await run_with_cl_provider_limit(
+                    "scraper",
+                    f"candidate_scrape:{candidate.company}",
+                    lambda: collect_research_artifacts(
+                        topic=f"{topic} {candidate.company}",
+                        section="company_profile",
+                        session_id=f"{session_id}_cl_discovery_{candidate_index}",
+                        location_context=location_context,
+                        search_results=search_results,
+                    ),
+                    perf_state=provider_perf,
+                )
+                stored_sources = await asyncio.to_thread(load_saved_sources, list(artifact_bundle.get("artifacts", [])))
+
+            elapsed_seconds = time.perf_counter() - candidate_start
+            log_cl_perf(
+                "Discovery Candidate",
+                elapsed_seconds,
+                company=candidate.company,
+                tier=candidate.tier,
+                queries=len(queries),
+                search_results=len(search_results),
+                stored_sources=len(stored_sources),
+                evidence_blocks=min(len(stored_sources), DISCOVERY_MAX_SOURCES_PER_COMPANY),
+            )
+            return {
+                "candidate_index": candidate_index,
+                "candidate": candidate,
+                "queries": list(queries),
+                "search_results": len(search_results),
+                "stored_sources": list(stored_sources),
+                "elapsed_seconds": elapsed_seconds,
+            }
+
+    candidate_tasks = [
+        asyncio.create_task(_process_candidate(candidate_index, candidate))
+        for candidate_index, candidate in enumerate(discovery_output.companies, start=1)
+    ]
+    completed_candidates: List[Dict[str, Any]] = []
+    for task in asyncio.as_completed(candidate_tasks):
+        completed_candidates.append(await task)
+
+    global_source_id = 1
+    for result in sorted(completed_candidates, key=lambda item: int(item["candidate_index"])):
+        candidate = result["candidate"]
+        evidence_blocks, source_ids = _build_company_evidence_blocks(
+            result["stored_sources"],
+            source_id_start=global_source_id,
+        ) if result["stored_sources"] else ([], [])
+        global_source_id += len(source_ids)
+        all_evidence_blocks.extend(evidence_blocks)
 
         query_diagnostics.append(
             {
@@ -410,11 +546,11 @@ async def build_competitive_landscape_v2_discovery_bundle(
                 "tier": candidate.tier,
                 "confidence": int(candidate.confidence),
                 "reasons": list(candidate.reasons),
-                "queries": list(queries),
-                "search_diagnostics": search_diagnostics,
-                "search_results": len(search_results),
-                "stored_sources": len(stored_sources),
+                "queries": list(result["queries"]),
+                "search_results": int(result["search_results"]),
+                "stored_sources": len(result["stored_sources"]),
                 "evidence_blocks": len(evidence_blocks),
+                "elapsed_seconds": round(float(result["elapsed_seconds"]), 2),
             }
         )
 
@@ -428,6 +564,20 @@ async def build_competitive_landscape_v2_discovery_bundle(
         else:
             emerging_players.append(discovered_company)
 
+    for provider_name, stats in sorted(provider_perf.items()):
+        log_cl_perf(
+            f"Discovery {provider_name.capitalize()} Summary",
+            float(stats.get("run_seconds", 0.0)),
+            calls=int(stats.get("calls", 0.0)),
+            wait_seconds=round(float(stats.get("wait_seconds", 0.0)), 2),
+        )
+    log_cl_perf(
+        "Discovery",
+        time.perf_counter() - total_start,
+        candidates=len(discovery_output.companies),
+        concurrency=discovery_concurrency,
+    )
+
     return {
         "discovery_output": CompetitiveLandscapeDiscoveryOutput(
             major_players=major_players,
@@ -436,5 +586,4 @@ async def build_competitive_landscape_v2_discovery_bundle(
         "evidence_blocks": all_evidence_blocks,
         "agent_output": discovery_output,
         "query_diagnostics": query_diagnostics,
-        "search_diagnostics": discovery_search_diagnostics,
     }

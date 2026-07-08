@@ -23,33 +23,23 @@ MIN_QUERY_COUNT = 10
 MAX_QUERY_COUNT = 10
 BASE_DATA_TERMS = ("statistics", "report", "forecast", "data")
 COMPETITIVE_LANDSCAPE_TERMS = (
-    "association members",
-    "challenger brands",
-    "company announcements",
-    "company profiles",
-    "company website",
-    "conference participants",
-    "competitors",
-    "emerging companies",
-    "event participants",
-    "fast-growing companies",
-    "industry directory",
-    "local companies",
+    "market share",
     "key players",
     "leading companies",
-    "major players",
-    "market directory",
-    "market share",
-    "member companies",
-    "niche specialists",
-    "private companies",
-    "emerging players",
-    "regional companies",
-    "challenger companies",
-    "vendor ecosystem",
-    "trade association",
+    "competitors",
+    "company profiles",
     "ranking",
-    "startup companies",
+    "major players",
+    "emerging players",
+    "local companies",
+    "regional companies",
+    "independent developers",
+    "niche specialists",
+    "challenger companies",
+    "fast-growing companies",
+    "solar developers",
+    "renewable project developers",
+    "epc companies",
 )
 CURRENT_QUERY_YEAR = datetime.utcnow().year
 RECENT_QUERY_YEARS = tuple(str(CURRENT_QUERY_YEAR - offset) for offset in range(0, 2))
@@ -113,34 +103,28 @@ SECTION_QUERY_FOCUSES = {
         "expansion",
     ),
     "competitive_landscape": (
-        "association members",
-        "challenger brands",
-        "company announcements",
-        "company profiles",
-        "company website",
-        "conference participants",
-        "competitors",
-        "emerging companies",
-        "event participants",
-        "fast-growing companies",
-        "industry directory",
         "key players",
-        "leading companies",
-        "local companies",
-        "major players",
-        "private companies",
-        "market directory",
         "market share",
-        "member companies",
-        "niche specialists",
-        "regional companies",
-        "regional players",
-        "startup companies",
-        "trade association",
-        "vendor ecosystem",
-        "challenger companies",
-        "emerging players",
+        "leading companies",
+        "competitors",
+        "company profiles",
         "ranking",
+        "regional players",
+        "challenger brands",
+        "ecosystem",
+        "niche companies",
+        "major players",
+        "top companies",
+        "emerging players",
+        "local companies",
+        "regional companies",
+        "independent developers",
+        "niche specialists",
+        "challenger companies",
+        "fast-growing companies",
+        "solar developers",
+        "renewable project developers",
+        "epc companies",
     ),
 }
 SECTION_QUERY_SUFFIXES = (
@@ -304,15 +288,15 @@ def build_fallback_queries(
         geography = geo or "global"
         candidate_queries = [
             f"{normalized_topic} {geography} key players leading companies",
-            f"{normalized_topic} {geography} emerging companies startup companies",
-            f"{normalized_topic} {geography} regional companies private companies",
-            f"{normalized_topic} {geography} challenger brands niche specialists",
-            f"{normalized_topic} {geography} association members member companies",
-            f"{normalized_topic} {geography} conference participants event participants",
-            f"{normalized_topic} {geography} market directory industry directory",
-            f"{normalized_topic} {geography} vendor ecosystem company website",
-            f"{normalized_topic} {geography} local companies company announcements",
-            f"{normalized_topic} {geography} trade association company profiles",
+            f"{normalized_topic} {geography} emerging players local companies",
+            f"{normalized_topic} {geography} regional companies challenger companies",
+            f"{normalized_topic} {geography} independent developers niche specialists",
+            f"{normalized_topic} {geography} fast-growing companies solar developers",
+            f"{normalized_topic} {geography} renewable project developers epc companies",
+            f"{normalized_topic} {geography} utility solar developers pipeline",
+            f"{normalized_topic} {geography} epc companies solar developers",
+            f"{normalized_topic} {geography} renewable project developers local companies",
+            f"{normalized_topic} {geography} utility scale solar competitors ecosystem",
         ]
         validated_queries: List[str] = []
         for query in candidate_queries:
@@ -402,9 +386,8 @@ def _build_query_user_prompt(
         '- Prefer geography-aware and data-focused wording.\n'
         '- Avoid vague phrases like "analysis of" and "overview of".\n'
         '- Avoid generic forecast headlines and vague academic wording.\n'
-        '- For Competitive Landscape, broaden candidate discovery before classification: include emerging players, local companies, regional companies, niche specialists, challenger companies, fast-growing companies, private companies, and startups.\n'
-        '- For Competitive Landscape, also cover private companies, startups, association members, event participants, market directories, and vendor ecosystems.\n'
-        '- For Competitive Landscape, do not rely only on market share reports, top company rankings, leading company lists, or generic company profiles.\n'
+        '- For Competitive Landscape, broaden candidate discovery before classification: include emerging players, local companies, regional companies, independent developers, niche specialists, challenger companies, fast-growing companies, solar developers, renewable project developers, and EPC companies.\n'
+        '- For Competitive Landscape, do not rely only on market share reports, top company rankings, or leading company lists.\n'
         '- For Competitive Landscape, include several company-universe queries that surface broader candidate pools before leader-focused queries.\n'
         f'- Use varied phrasing across the {MAX_QUERY_COUNT} queries; do not repeat the same frame.\n'
         f'- Keep each query to {16 if section == "competitive_landscape" else 15} words or fewer.'

@@ -22,6 +22,7 @@ from models.response_models import (
     Output,
 )
 from services.example_validation_service import evidence_has_strong_example_signals, validate_examples
+from services.competitive_landscape_runtime import run_with_cl_provider_limit
 from services.external_client import call_openai, call_openai_sync, get_last_external_call_failure
 from services.prompt_builder import get_example_extraction_prompt, get_section_title
 from services.ranking_service import rank_and_limit_insights
@@ -141,7 +142,6 @@ CL_ENTERTAINMENT_OPERATOR_TERMS = (
     "film studio",
 )
 CL_RELEVANCE_MAX_OUTPUT_TOKENS = 2200
-CL_RELEVANCE_BATCH_SIZE = 4
 SENTENCE_BOUNDARY_PATTERN = re.compile(r"(?<=[.!?])\s+")
 TITLE_DESCRIPTION_PREFIX_WORDS = 5
 CURRENT_YEAR = datetime.now().year
@@ -302,15 +302,20 @@ def get_openai_status_message() -> str:
     return str(_OPENAI_RUNTIME_STATE.get("message", "OpenAI runtime status unavailable."))
 
 
+def mark_openai_unavailable(message: str) -> None:
+    normalized_message = str(message or "").strip() or "OpenAI runtime unavailable."
+    _set_runtime_state(connection_tested=True, connection_ok=False, message=normalized_message)
+
+
 def _log_openai_error(error: Exception, prefix: str = "OpenAI ERROR") -> None:
     error_message = str(error)
     logger.error("%s: %s", prefix, error_message)
 
     lowered_message = error_message.lower()
     if "insufficient_quota" in lowered_message:
-        _set_runtime_state(connection_tested=True, connection_ok=False, message=error_message)
+        mark_openai_unavailable(error_message)
     elif "api key" in lowered_message or "authentication" in lowered_message:
-        _set_runtime_state(connection_tested=True, connection_ok=False, message=error_message)
+        mark_openai_unavailable(error_message)
 
 
 def test_openai_connection() -> bool:
@@ -624,44 +629,37 @@ async def _classify_competitive_landscape_relevance(
     if not companies:
         return {}
 
-    decisions_by_name: Dict[str, CompetitiveLandscapeRelevanceDecision] = {}
-    company_list = list(companies)
-    total_batches = max(1, (len(company_list) + CL_RELEVANCE_BATCH_SIZE - 1) // CL_RELEVANCE_BATCH_SIZE)
-
-    for batch_index, start in enumerate(range(0, len(company_list), CL_RELEVANCE_BATCH_SIZE), start=1):
-        company_batch = company_list[start:start + CL_RELEVANCE_BATCH_SIZE]
-        prompt = _build_competitive_landscape_relevance_prompt(
-            topic=topic,
-            companies=company_batch,
-            evidence_by_source_id=evidence_by_source_id,
-        )
-        logger.info(
-            "Competitive landscape relevance classification batch=%s/%s companies=%s",
-            batch_index,
-            total_batches,
-            [company.company_name for company in company_batch],
-        )
-        parsed = await _request_structured_completion(
+    prompt = _build_competitive_landscape_relevance_prompt(
+        topic=topic,
+        companies=companies,
+        evidence_by_source_id=evidence_by_source_id,
+    )
+    parsed = await run_with_cl_provider_limit(
+        "openai",
+        "structured_cl_relevance_classification",
+        lambda: _request_structured_completion(
             client,
-            operation=f"structured_cl_relevance_classification_batch_{batch_index}",
+            operation="structured_cl_relevance_classification",
             input_payload=[{"role": "user", "content": prompt}],
             response_model=CompetitiveLandscapeRelevanceResponse,
             max_output_tokens=CL_RELEVANCE_MAX_OUTPUT_TOKENS,
-        )
+        ),
+    )
 
-        for decision in list(parsed.decisions or []):
-            company_name = _normalize_text(decision.company_name)
-            if not company_name:
-                continue
-            normalized_decision = CompetitiveLandscapeRelevanceDecision(
-                company_name=company_name,
-                classification=_normalize_text(decision.classification),
-                primary_business_fit=bool(decision.primary_business_fit),
-                industry_centrality=bool(decision.industry_centrality),
-                operator_vs_supplier=bool(decision.operator_vs_supplier),
-                reason=_normalize_text(decision.reason),
-            )
-            decisions_by_name[company_name.lower()] = normalized_decision
+    decisions_by_name: Dict[str, CompetitiveLandscapeRelevanceDecision] = {}
+    for decision in list(parsed.decisions or []):
+        company_name = _normalize_text(decision.company_name)
+        if not company_name:
+            continue
+        normalized_decision = CompetitiveLandscapeRelevanceDecision(
+            company_name=company_name,
+            classification=_normalize_text(decision.classification),
+            primary_business_fit=bool(decision.primary_business_fit),
+            industry_centrality=bool(decision.industry_centrality),
+            operator_vs_supplier=bool(decision.operator_vs_supplier),
+            reason=_normalize_text(decision.reason),
+        )
+        decisions_by_name[company_name.lower()] = normalized_decision
     return decisions_by_name
 
 

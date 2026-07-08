@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Sequence
 
@@ -16,10 +17,21 @@ from models.response_models import (
     ExtractedExample,
 )
 from services.content_processor import prepare_processed_content
+from services.competitive_landscape_runtime import (
+    log_cl_health,
+    log_cl_perf,
+    resolve_cl_enrichment_concurrency,
+    run_with_cl_provider_limit,
+)
 from services.example_validation_service import attach_examples_to_insights
-from services.external_client import call_openai
+from services.external_client import call_openai, get_last_external_call_failure
 from services.location_service import LocationContext
-from services.openai_service import can_use_openai, ensure_min_output_tokens, extract_validated_examples_from_evidence
+from services.openai_service import (
+    can_use_openai,
+    ensure_min_output_tokens,
+    extract_validated_examples_from_evidence,
+    mark_openai_unavailable,
+)
 from services.prompt_builder import (
     build_company_profile_extraction_payload,
     build_example_search_query_system_prompt,
@@ -37,7 +49,6 @@ MAX_EXAMPLE_RESEARCH_QUERIES = 8
 MAX_EXAMPLE_RESULTS = 24
 MAX_TRENDS_WITH_EXAMPLE_RESEARCH = settings.MAX_TRENDS_WITH_EXAMPLE_RESEARCH
 MAX_EXAMPLES_PER_TREND = 5
-MAX_CONCURRENT_TREND_RESEARCH = 2
 EXAMPLE_QUERY_MODEL_NAME = settings.OPENAI_QUERY_MODEL or settings.OPENAI_SUPPORT_MODEL or "gpt-4.1-mini"
 EXAMPLE_QUERY_TIMEOUT_SECONDS = 30
 EXAMPLE_QUERY_MAX_RETRIES = 1
@@ -79,6 +90,28 @@ LOW_VALUE_SOURCE_TITLE_MARKERS = (
     "vendors in",
     "company directory",
     "lead generation",
+    "latest news",
+    "latest news & videos",
+    "share price",
+    "stock price",
+    "topic",
+)
+GENERIC_COMPANY_LISTING_TITLE_MARKERS = (
+    "top ",
+    "top-",
+    "key players",
+    "market leaders",
+    "market share",
+    "company list",
+    "companies",
+    "competitors",
+    "competitive landscape",
+)
+GENERIC_COMPANY_LISTING_URL_MARKERS = (
+    "/companies",
+    "/competitors",
+    "/competitive-landscape",
+    "key-players",
 )
 PREFERRED_SOURCE_TYPE_MARKERS = (
     "company",
@@ -334,6 +367,22 @@ def _normalize_text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "").strip())
 
 
+def _competitive_landscape_cache_key(
+    *,
+    topic: str,
+    heading: str,
+    location_context: LocationContext,
+) -> str:
+    return "|".join(
+        [
+            _normalize_text(topic).lower(),
+            _normalize_text(heading).lower(),
+            _normalize_text(location_context.preference).lower(),
+            _normalize_text(location_context.value).lower(),
+        ]
+    )
+
+
 def _tokenize(value: str) -> List[str]:
     return [
         token
@@ -516,9 +565,64 @@ def _is_company_specific_source(company_name: str, source: Dict[str, Any]) -> bo
 def _is_low_value_company_source(source: Dict[str, Any]) -> bool:
     domain = _normalize_text(source.get("domain") or source.get("url")).lower()
     title = _normalize_text(source.get("title")).lower()
-    return any(marker in domain for marker in LOW_VALUE_SOURCE_DOMAIN_MARKERS) or any(
-        marker in title for marker in LOW_VALUE_SOURCE_TITLE_MARKERS
+    url = _normalize_text(source.get("url")).lower()
+    return (
+        any(marker in domain for marker in LOW_VALUE_SOURCE_DOMAIN_MARKERS)
+        or any(marker in title for marker in LOW_VALUE_SOURCE_TITLE_MARKERS)
+        or "/topic/" in url
+        or "/stocksupdate/" in url
+        or "latest-news" in url
     )
+
+
+def _is_placeholder_company_body(value: str) -> bool:
+    normalized = _normalize_text(value).lower()
+    return normalized.startswith("evidence-driven profile pending research for ")
+
+
+def _looks_like_low_quality_company_sentence(sentence: str) -> bool:
+    normalized = _normalize_text(sentence)
+    lowered = normalized.lower()
+    if not normalized:
+        return True
+    if "|" in normalized:
+        return True
+    if " am ist" in lowered or " pm ist" in lowered:
+        return True
+    if lowered.count("latest news") > 0:
+        return True
+    if "registered office" in lowered or "nic code" in lowered or re.search(r"\bcin\b", lowered):
+        return True
+    if re.search(r"\b\d{6}\b", lowered):
+        return True
+    if len(re.findall(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b", lowered)) >= 2:
+        return True
+    if len(re.findall(r"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b", lowered)) >= 2:
+        return True
+    if len(re.findall(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?\b", lowered)) >= 2:
+        return True
+    return False
+
+
+def _should_disable_openai_for_failure(operation: str) -> bool:
+    failure = get_last_external_call_failure("openai", operation)
+    error_message = str(failure.get("error_message", "")).strip().lower()
+    if "insufficient_quota" not in error_message:
+        return False
+    mark_openai_unavailable(error_message)
+    logger.warning("Competitive landscape OpenAI disabled for current run after %s quota failure.", operation)
+    return True
+
+
+def _is_generic_company_listing_source(company_name: str, source: Dict[str, Any]) -> bool:
+    company_key = _normalize_text(company_name).lower()
+    title = _normalize_text(source.get("title")).lower()
+    url = _normalize_text(source.get("url")).lower()
+    if company_key and company_key in title:
+        return False
+    has_listing_title_marker = any(marker in title for marker in GENERIC_COMPANY_LISTING_TITLE_MARKERS)
+    has_listing_url_marker = any(marker in url for marker in GENERIC_COMPANY_LISTING_URL_MARKERS)
+    return has_listing_title_marker or has_listing_url_marker
 
 
 def _company_profile_source_quality_score(source: Dict[str, Any], company_name: str) -> int:
@@ -721,6 +825,7 @@ async def _generate_example_search_queries(
     trend_heading: str,
     trend_body: str,
     location_context: LocationContext,
+    perf_state: Dict[str, Dict[str, float]] | None = None,
 ) -> List[str]:
     fallback_queries = _build_fallback_queries(
         topic=topic,
@@ -743,29 +848,37 @@ async def _generate_example_search_queries(
     )
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     try:
-        response = await call_openai(
-            "generate_example_search_queries",
-            lambda: client.responses.parse(
-                model=EXAMPLE_QUERY_MODEL_NAME,
-                input=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                text_format=ExampleSearchQueryResponse,
-                max_output_tokens=ensure_min_output_tokens(1000),
-                temperature=0.2,
+        response = await run_with_cl_provider_limit(
+            "openai",
+            f"example_query_generation:{trend_heading}",
+            lambda: call_openai(
+                "generate_example_search_queries",
+                lambda: client.responses.parse(
+                    model=EXAMPLE_QUERY_MODEL_NAME,
+                    input=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    text_format=ExampleSearchQueryResponse,
+                    max_output_tokens=ensure_min_output_tokens(1000),
+                    temperature=0.2,
+                ),
+                fallback=None,
+                timeout=EXAMPLE_QUERY_TIMEOUT_SECONDS,
+                max_retries=EXAMPLE_QUERY_MAX_RETRIES,
+                context={"model": EXAMPLE_QUERY_MODEL_NAME, "trend_heading": trend_heading},
             ),
-            fallback=None,
-            timeout=EXAMPLE_QUERY_TIMEOUT_SECONDS,
-            max_retries=EXAMPLE_QUERY_MAX_RETRIES,
-            context={"model": EXAMPLE_QUERY_MODEL_NAME, "trend_heading": trend_heading},
+            perf_state=perf_state,
         )
         if response is None:
+            _should_disable_openai_for_failure("generate_example_search_queries")
             return fallback_queries
         parsed = _extract_parsed_query_output(response)
         llm_queries = _dedupe_queries([entry.query for entry in parsed.queries])
         return (llm_queries or fallback_queries)[:MAX_EXAMPLE_RESEARCH_QUERIES]
     except Exception as exc:
+        if "insufficient_quota" in str(exc).lower():
+            mark_openai_unavailable(str(exc))
         logger.warning("Example query generation failed heading=%s error=%s", trend_heading, exc)
         return fallback_queries
     finally:
@@ -798,6 +911,15 @@ def _extract_company_focus_sentences(company_name: str, evidence_blocks: Sequenc
     normalized_sentences: List[str] = []
     seen_sentences = set()
     for block in evidence_blocks:
+        block_context = {
+            "title": block.get("title"),
+            "url": block.get("url"),
+            "snippet": block.get("snippet"),
+            "content": block.get("excerpt") or block.get("full_text_excerpt"),
+            "domain": block.get("domain"),
+        }
+        if _is_low_value_company_source(block_context) or _is_generic_company_listing_source(company_name, block_context):
+            continue
         excerpt = _normalize_text(block.get("excerpt") or block.get("full_text_excerpt") or block.get("snippet"))
         if not excerpt:
             continue
@@ -808,6 +930,8 @@ def _extract_company_focus_sentences(company_name: str, evidence_blocks: Sequenc
             if company_key and company_key not in normalized_sentence.lower():
                 continue
             if _contains_stale_forecast_language(normalized_sentence):
+                continue
+            if _looks_like_low_quality_company_sentence(normalized_sentence):
                 continue
             sentence_key = normalized_sentence.lower()
             if sentence_key in seen_sentences:
@@ -853,6 +977,8 @@ def _is_actionable_company_fact(fact: str) -> bool:
     normalized = _clean_company_profile_sentence(fact)
     normalized_lower = normalized.lower()
     if not normalized:
+        return False
+    if _looks_like_low_quality_company_sentence(normalized):
         return False
     if _count_fact_sentences(normalized) > 1:
         return False
@@ -913,8 +1039,62 @@ def _build_company_profile_fallback_fact_candidates(
                 return candidates
     return candidates
 
+def _topic_keywords_for_market_relevance(topic: str) -> List[str]:
+    stop_words = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "market",
+        "industry",
+        "global",
+        "united",
+        "states",
+        "state",
+        "country",
+        "region",
+    }
+    keywords: List[str] = []
+    seen = set()
+    for token in re.findall(r"[a-z0-9]+", _normalize_text(topic).lower()):
+        if len(token) < 4 or token in stop_words or token.isdigit():
+            continue
+        if token in seen:
+            continue
+        seen.add(token)
+        keywords.append(token)
+    return keywords[:6]
 
-def _filter_company_profile_facts(facts: Sequence[str], *, business_overview: str = "") -> List[str]:
+
+def _evidence_block_matches_topic(block: Dict[str, Any], topic_keywords: Sequence[str]) -> bool:
+    if not topic_keywords:
+        return True
+    block_text = " ".join(
+        _normalize_text(block.get(field))
+        for field in ("title", "snippet", "excerpt", "full_text_excerpt", "content", "url")
+    ).lower()
+    block_tokens = set(re.findall(r"[a-z0-9]+", block_text))
+    for keyword in topic_keywords:
+        if keyword in block_text:
+            return True
+        keyword_prefix = keyword[:6]
+        for token in block_tokens:
+            if len(token) < 5:
+                continue
+            if token.startswith(keyword_prefix) or keyword.startswith(token[:6]):
+                return True
+    return False
+
+
+def _filter_company_profile_facts(
+    facts: Sequence[str],
+    *,
+    business_overview: str = "",
+    evidence_blocks: Sequence[Dict[str, Any]] | None = None,
+    company_name: str = "",
+    source_ids: Sequence[int] | None = None,
+) -> List[str]:
     filtered: List[str] = []
     seen = set()
     for fact in facts:
@@ -928,6 +1108,22 @@ def _filter_company_profile_facts(facts: Sequence[str], *, business_overview: st
             continue
         if _fact_repeats_overview(cleaned_fact, business_overview):
             continue
+        if evidence_blocks:
+            if not _has_evidence_support(
+                cleaned_fact,
+                evidence_blocks=evidence_blocks,
+                company_name=company_name,
+                source_ids=list(source_ids or []),
+                minimum_overlap=3,
+            ):
+                continue
+            if not _has_salient_fact_support(
+                cleaned_fact,
+                evidence_blocks=evidence_blocks,
+                company_name=company_name,
+                source_ids=list(source_ids or []),
+            ):
+                continue
         seen.add(fact_key)
         filtered.append(cleaned_fact.rstrip(".") + ".")
     return filtered[:5]
@@ -958,6 +1154,46 @@ def _evidence_blocks_for_source_ids(
     return filtered_blocks
 
 
+def _has_salient_fact_support(
+    fact: str,
+    *,
+    evidence_blocks: Sequence[Dict[str, Any]],
+    company_name: str,
+    source_ids: Sequence[int] | None = None,
+) -> bool:
+    relevant_blocks = _evidence_blocks_for_source_ids(evidence_blocks, list(source_ids or []))
+    if not relevant_blocks:
+        return False
+    combined_evidence = " ".join(
+        _normalize_text(block.get("excerpt") or block.get("full_text_excerpt") or block.get("snippet"))
+        for block in relevant_blocks
+    ).lower()
+    if not combined_evidence:
+        return False
+    company_tokens = set(_tokenize(company_name))
+    salient_tokens = [
+        token
+        for token in _tokenize(fact)
+        if token not in company_tokens
+        and not re.fullmatch(r"20\d{2}", token)
+        and len(token) >= 5
+    ]
+    if not salient_tokens:
+        return True
+    evidence_tokens = set(re.findall(r"[a-z0-9][a-z0-9&/%-]{2,}", combined_evidence))
+    matched_tokens = set()
+    for token in salient_tokens:
+        token_prefix = token[:6]
+        if token in combined_evidence or any(
+            evidence_token.startswith(token_prefix) or token.startswith(evidence_token[:6])
+            for evidence_token in evidence_tokens
+            if len(evidence_token) >= 5
+        ):
+            matched_tokens.add(token)
+    required_matches = 1 if len(set(salient_tokens)) == 1 else 2
+    return len(matched_tokens) >= required_matches
+
+
 def _has_evidence_support(
     text: str,
     *,
@@ -965,6 +1201,7 @@ def _has_evidence_support(
     company_name: str,
     source_ids: Sequence[int] | None = None,
     minimum_overlap: int = 2,
+    require_company_specific_source: bool = False,
 ) -> bool:
     normalized_text = _normalize_text(text)
     if not normalized_text:
@@ -997,6 +1234,23 @@ def _has_evidence_support(
             if _is_company_specific_source(company_name, block_context):
                 block_hits += 1
         if block_hits == 0:
+            return False
+    if require_company_specific_source:
+        supporting_company_specific_block = False
+        for block in relevant_blocks:
+            block_context = {
+                "title": block.get("title"),
+                "url": block.get("url"),
+                "snippet": block.get("snippet"),
+                "content": block.get("excerpt") or block.get("full_text_excerpt"),
+            }
+            if not _is_company_specific_source(company_name, block_context):
+                continue
+            if _is_generic_company_listing_source(company_name, block_context):
+                continue
+            supporting_company_specific_block = True
+            break
+        if not supporting_company_specific_block:
             return False
     overlap = len({token for token in candidate_tokens if token in combined_evidence})
     required_overlap = min(max(1, minimum_overlap), max(1, len(set(candidate_tokens))))
@@ -1038,6 +1292,7 @@ def _filter_recent_developments(
             company_name=company_name or _normalize_text(example.company),
             source_ids=list(example.source_ids or []),
             minimum_overlap=2,
+            require_company_specific_source=True,
         ):
             continue
         dedupe_key = (
@@ -1158,10 +1413,13 @@ def _sanitize_company_profile_positioning(
 
 def _company_profile_has_market_relevance(
     *,
+    topic: str,
     company_name: str,
     evidence_blocks: Sequence[Dict[str, Any]],
 ) -> bool:
+    topic_keywords = _topic_keywords_for_market_relevance(topic)
     company_specific_recent_sources = 0
+    market_relevant_company_sources = 0
     for block in evidence_blocks:
         excerpt = _normalize_text(block.get("excerpt") or block.get("full_text_excerpt"))
         if not excerpt:
@@ -1176,14 +1434,25 @@ def _company_profile_has_market_relevance(
         if not _is_recent_profile_date(block.get("date") or block.get("published_date") or excerpt):
             continue
         company_specific_recent_sources += 1
-    return company_specific_recent_sources >= 1
+        if _evidence_block_matches_topic(block, topic_keywords):
+            market_relevant_company_sources += 1
+    if company_specific_recent_sources < 1:
+        return False
+    return market_relevant_company_sources >= 1 if topic_keywords else True
 
 
 def _has_retained_company_content(item: Dict[str, Any]) -> bool:
     body = _normalize_text(item.get("body"))
+    if _is_placeholder_company_body(body):
+        body = ""
     facts = [fact for fact in list(item.get("key_company_facts", []) or []) if _normalize_text(fact)]
-    sources = list(item.get("sources", []) or [])
-    return bool(body or facts or sources)
+    positioning = _normalize_text(item.get("competitive_positioning"))
+    examples = [example for example in list(item.get("examples", []) or []) if _normalize_text(example.get("text") if isinstance(example, dict) else "")]
+    if body and not _looks_like_low_quality_company_sentence(body):
+        return True
+    if facts or positioning or examples:
+        return True
+    return False
 
 
 def _build_enriched_evidence_blocks(
@@ -1292,6 +1561,7 @@ async def _extract_company_profile_from_evidence(
     existing_overview: str,
     location_context: LocationContext,
     evidence_blocks: Sequence[Dict[str, Any]],
+    perf_state: Dict[str, Dict[str, float]] | None = None,
 ) -> CompetitiveLandscapeProfileResponse:
     if not settings.OPENAI_API_KEY or not can_use_openai():
         return CompetitiveLandscapeProfileResponse()
@@ -1305,27 +1575,35 @@ async def _extract_company_profile_from_evidence(
     )
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     try:
-        response = await call_openai(
-            "extract_company_profile",
-            lambda: client.responses.parse(
-                model=COMPANY_PROFILE_MODEL_NAME,
-                input=[
-                    {"role": "system", "content": "You are an OSINT analyst building evidence-backed company profiles."},
-                    {"role": "user", "content": payload},
-                ],
-                text_format=CompetitiveLandscapeProfileResponse,
-                max_output_tokens=ensure_min_output_tokens(1800),
-                temperature=0.1,
+        response = await run_with_cl_provider_limit(
+            "openai",
+            f"company_profile:{company_name}",
+            lambda: call_openai(
+                "extract_company_profile",
+                lambda: client.responses.parse(
+                    model=COMPANY_PROFILE_MODEL_NAME,
+                    input=[
+                        {"role": "system", "content": "You are an OSINT analyst building evidence-backed company profiles."},
+                        {"role": "user", "content": payload},
+                    ],
+                    text_format=CompetitiveLandscapeProfileResponse,
+                    max_output_tokens=ensure_min_output_tokens(1800),
+                    temperature=0.1,
+                ),
+                fallback=None,
+                timeout=COMPANY_PROFILE_TIMEOUT_SECONDS,
+                max_retries=COMPANY_PROFILE_MAX_RETRIES,
+                context={"model": COMPANY_PROFILE_MODEL_NAME, "company_name": company_name},
             ),
-            fallback=None,
-            timeout=COMPANY_PROFILE_TIMEOUT_SECONDS,
-            max_retries=COMPANY_PROFILE_MAX_RETRIES,
-            context={"model": COMPANY_PROFILE_MODEL_NAME, "company_name": company_name},
+            perf_state=perf_state,
         )
         if response is None:
+            _should_disable_openai_for_failure("extract_company_profile")
             return CompetitiveLandscapeProfileResponse()
         return _extract_parsed_company_profile_output(response)
     except Exception as exc:
+        if "insufficient_quota" in str(exc).lower():
+            mark_openai_unavailable(str(exc))
         logger.warning("Company profile extraction failed company=%s error=%s", company_name, exc)
         return CompetitiveLandscapeProfileResponse()
     finally:
@@ -1338,6 +1616,7 @@ async def _extract_recent_company_developments_from_evidence(
     company_name: str,
     location_context: LocationContext,
     evidence_blocks: Sequence[Dict[str, Any]],
+    perf_state: Dict[str, Dict[str, float]] | None = None,
 ) -> ExampleExtractionResponse:
     if not settings.OPENAI_API_KEY or not can_use_openai():
         return ExampleExtractionResponse()
@@ -1350,27 +1629,35 @@ async def _extract_recent_company_developments_from_evidence(
     )
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     try:
-        response = await call_openai(
-            "extract_recent_company_developments",
-            lambda: client.responses.parse(
-                model=COMPANY_PROFILE_MODEL_NAME,
-                input=[
-                    {"role": "system", "content": "You are an OSINT analyst identifying investor-grade recent company developments from evidence only."},
-                    {"role": "user", "content": payload},
-                ],
-                text_format=ExampleExtractionResponse,
-                max_output_tokens=ensure_min_output_tokens(1800),
-                temperature=0.1,
+        response = await run_with_cl_provider_limit(
+            "openai",
+            f"company_developments:{company_name}",
+            lambda: call_openai(
+                "extract_recent_company_developments",
+                lambda: client.responses.parse(
+                    model=COMPANY_PROFILE_MODEL_NAME,
+                    input=[
+                        {"role": "system", "content": "You are an OSINT analyst identifying investor-grade recent company developments from evidence only."},
+                        {"role": "user", "content": payload},
+                    ],
+                    text_format=ExampleExtractionResponse,
+                    max_output_tokens=ensure_min_output_tokens(1800),
+                    temperature=0.1,
+                ),
+                fallback=None,
+                timeout=COMPANY_PROFILE_TIMEOUT_SECONDS,
+                max_retries=COMPANY_PROFILE_MAX_RETRIES,
+                context={"model": COMPANY_PROFILE_MODEL_NAME, "company_name": company_name},
             ),
-            fallback=None,
-            timeout=COMPANY_PROFILE_TIMEOUT_SECONDS,
-            max_retries=COMPANY_PROFILE_MAX_RETRIES,
-            context={"model": COMPANY_PROFILE_MODEL_NAME, "company_name": company_name},
+            perf_state=perf_state,
         )
         if response is None:
+            _should_disable_openai_for_failure("extract_recent_company_developments")
             return ExampleExtractionResponse()
         return _extract_parsed_example_output(response)
     except Exception as exc:
+        if "insufficient_quota" in str(exc).lower():
+            mark_openai_unavailable(str(exc))
         logger.warning("Recent company developments extraction failed company=%s error=%s", company_name, exc)
         return ExampleExtractionResponse()
     finally:
@@ -1387,26 +1674,37 @@ async def _collect_company_research_evidence(
     session_id: str,
     item_index: int,
     queries: Sequence[str],
+    perf_state: Dict[str, Dict[str, float]] | None = None,
 ) -> Dict[str, Any]:
     logger.info('Competitive landscape company enrichment search company="%s" queries=%s', heading, list(queries))
-    search_payload = await search_queries(
-        f"{topic} {heading}",
-        list(queries),
-        freshness="high",
-        location_context=location_context,
-        workflow=section,
+    search_payload = await run_with_cl_provider_limit(
+        "search",
+        f"company_search:{heading}",
+        lambda: search_queries(
+            f"{topic} {heading}",
+            list(queries),
+            freshness="high",
+            location_context=location_context,
+            workflow=section,
+        ),
+        perf_state=perf_state,
     )
     search_results = list(search_payload.get("results", []))[:MAX_EXAMPLE_RESULTS]
     if not search_results:
         logger.info('Competitive landscape company enrichment search company="%s" reason="%s"', heading, "no_search_results")
         return {"search_results": 0, "stored_sources": [], "evidence_blocks": []}
 
-    artifact_bundle = await collect_research_artifacts(
-        topic=f"{topic} {heading}",
-        section="company_profile",
-        session_id=f"{session_id}_trend_examples_{item_index}_profile",
-        location_context=location_context,
-        search_results=search_results,
+    artifact_bundle = await run_with_cl_provider_limit(
+        "scraper",
+        f"company_scrape:{heading}",
+        lambda: collect_research_artifacts(
+            topic=f"{topic} {heading}",
+            section="company_profile",
+            session_id=f"{session_id}_trend_examples_{item_index}_profile",
+            location_context=location_context,
+            search_results=search_results,
+        ),
+        perf_state=perf_state,
     )
     stored_sources = await asyncio.to_thread(load_saved_sources, list(artifact_bundle.get("artifacts", [])))
     if not stored_sources:
@@ -1567,6 +1865,110 @@ async def _run_example_pass(
     }
 
 
+def _build_competitive_landscape_item_from_cached_research(
+    *,
+    normalized_item: Dict[str, Any],
+    heading: str,
+    evidence_bundle: Dict[str, Any],
+    profile: CompetitiveLandscapeProfileResponse | None,
+    recent_developments_response: ExampleExtractionResponse | None,
+) -> Dict[str, Any]:
+    evidence_blocks = list(evidence_bundle.get("evidence_blocks", []))
+    stored_sources = list(evidence_bundle.get("stored_sources", []))
+    attached_item = dict(normalized_item)
+    profile_payload = profile.profile if isinstance(profile, CompetitiveLandscapeProfileResponse) else None
+
+    fallback_overview = _build_company_profile_fallback_overview(
+        company_name=heading,
+        evidence_blocks=evidence_blocks,
+    )
+    sanitized_overview = _sanitize_company_profile_overview(
+        company_name=heading,
+        overview=getattr(profile_payload, "business_overview", ""),
+        evidence_blocks=evidence_blocks,
+        source_ids=list(getattr(profile_payload, "source_ids", []) or []),
+    )
+    if sanitized_overview:
+        attached_item["body"] = sanitized_overview
+    elif fallback_overview:
+        attached_item["body"] = fallback_overview
+    else:
+        attached_item["body"] = ""
+
+    attached_item["key_company_facts"] = _filter_company_profile_facts(
+        list(getattr(profile_payload, "key_company_facts", []) or []),
+        business_overview=attached_item["body"],
+        evidence_blocks=evidence_blocks,
+        company_name=heading,
+        source_ids=list(getattr(profile_payload, "source_ids", []) or []),
+    )
+    if not attached_item["key_company_facts"]:
+        attached_item["key_company_facts"] = _build_company_profile_fallback_facts(
+            company_name=heading,
+            evidence_blocks=evidence_blocks,
+            business_overview=attached_item["body"],
+        )
+
+    filtered_developments = _filter_recent_developments(
+        list(getattr(recent_developments_response, "examples", []) or []),
+        company_name=heading,
+        evidence_blocks=evidence_blocks,
+    )
+    if not filtered_developments:
+        filtered_developments = _build_company_profile_fallback_developments(
+            company_name=heading,
+            evidence_blocks=evidence_blocks,
+        )
+    positioning_text = _sanitize_company_profile_positioning(
+        company_name=heading,
+        positioning=getattr(profile_payload, "competitive_positioning", ""),
+        evidence_blocks=evidence_blocks,
+        source_ids=list(getattr(profile_payload, "source_ids", []) or []),
+    )
+    attached_item["competitive_positioning"] = positioning_text
+    attached_item["examples"] = [
+        {
+            "text": example.text,
+            "company": example.company,
+            "event": example.event,
+            "event_date": example.event_date,
+            "published_date": example.published_date,
+            "location": example.location,
+            "example_type": example.example_type,
+            "why_it_matters": example.trend_fit_reason,
+            "source_quality": example.source_quality,
+            "confidence": example.confidence,
+            "validation_score": example.validation_score,
+            "fallback_used": bool(example.fallback_used),
+            "year": example.year,
+        }
+        for example in filtered_developments[:MAX_EXAMPLES_PER_TREND]
+    ]
+    profile_source_ids = list(getattr(profile_payload, "source_ids", []) or [])
+    if not profile_source_ids:
+        for example in filtered_developments:
+            for source_id in list(example.source_ids or []):
+                if source_id not in profile_source_ids:
+                    profile_source_ids.append(source_id)
+    attached_item["source_ids"] = profile_source_ids[:10]
+    if not _has_retained_company_content(attached_item):
+        return _build_skip_item(normalized_item, reason="no_supported_company_content")
+    attached_with_sources = attach_sources_to_items([attached_item], evidence_blocks, max_sources_per_item=6)
+    attached_item = attached_with_sources[0] if attached_with_sources else attached_item
+    attached_item["fallback_used"] = any(bool(example.get("fallback_used", False)) for example in attached_item.get("examples", []))
+    attached_item["example_coverage_status"] = _coverage_status(attached_item.get("examples", []))
+    logger.info(
+        'Competitive landscape enrichment status company="%s" search_results=%s sources=%s facts=%s developments=%s positioning=%s',
+        heading,
+        int(evidence_bundle.get("search_results", 0)),
+        len(stored_sources),
+        len(attached_item.get("key_company_facts", [])),
+        len(attached_item.get("examples", [])),
+        bool(attached_item.get("competitive_positioning")),
+    )
+    return attached_item
+
+
 async def _research_examples_for_item(
     *,
     item: Dict[str, Any],
@@ -1575,6 +1977,9 @@ async def _research_examples_for_item(
     section: str,
     location_context: LocationContext,
     session_id: str,
+    cl_cache: Dict[str, Dict[str, Any]] | None = None,
+    perf_state: Dict[str, Dict[str, float]] | None = None,
+    research_mode: str = "full",
 ) -> Dict[str, Any]:
     normalized_item = dict(item)
     heading = _normalize_text(normalized_item.get("heading"))
@@ -1588,32 +1993,47 @@ async def _research_examples_for_item(
         )
         return _build_skip_item(normalized_item, reason="missing_heading_or_body")
 
-    queries = await _generate_example_search_queries(
-        topic=topic,
-        section=section,
-        trend_heading=heading,
-        trend_body=body,
-        location_context=location_context,
-    )
-    logger.info("Trend example research heading=%s generated_queries=%s", heading, queries)
     if section == "competitive_landscape":
-        logger.info('Competitive landscape enrichment entering company="%s" segment="%s"', heading, _normalize_text(normalized_item.get("segment")))
-        evidence_bundle = await _collect_company_research_evidence(
+        cache_key = _competitive_landscape_cache_key(
             topic=topic,
-            section=section,
             heading=heading,
-            body=body,
             location_context=location_context,
-            session_id=session_id,
-            item_index=item_index,
-            queries=queries,
         )
+        cache_entry = cl_cache.setdefault(cache_key, {}) if cl_cache is not None else {}
+        logger.info('Competitive landscape enrichment entering company="%s" segment="%s"', heading, _normalize_text(normalized_item.get("segment")))
+        queries = list(cache_entry.get("queries", []))
+        if not queries and research_mode == "full":
+            queries = await _generate_example_search_queries(
+                topic=topic,
+                section=section,
+                trend_heading=heading,
+                trend_body=body,
+                location_context=location_context,
+                perf_state=perf_state,
+            )
+            cache_entry["queries"] = list(queries)
+        logger.info("Trend example research heading=%s generated_queries=%s mode=%s", heading, queries, research_mode)
+
+        evidence_bundle = dict(cache_entry.get("evidence_bundle", {}))
+        if not evidence_bundle and research_mode == "full":
+            evidence_bundle = await _collect_company_research_evidence(
+                topic=topic,
+                section=section,
+                heading=heading,
+                body=body,
+                location_context=location_context,
+                session_id=session_id,
+                item_index=item_index,
+                queries=queries,
+                perf_state=perf_state,
+            )
+            cache_entry["evidence_bundle"] = evidence_bundle
         evidence_blocks = list(evidence_bundle.get("evidence_blocks", []))
-        stored_sources = list(evidence_bundle.get("stored_sources", []))
         if not evidence_blocks:
             logger.info('Competitive landscape enrichment skipped company="%s" reason="%s"', heading, "no_company_evidence")
             return _build_skip_item(normalized_item, reason="no_company_evidence")
         if not _company_profile_has_market_relevance(
+            topic=topic,
             company_name=heading,
             evidence_blocks=evidence_blocks,
         ):
@@ -1624,115 +2044,61 @@ async def _research_examples_for_item(
             )
             return _build_skip_item(normalized_item, reason="insufficient_market_relevance_evidence")
 
-        profile_response = await _extract_company_profile_from_evidence(
-            topic=topic,
-            company_name=heading,
-            existing_overview=body,
-            location_context=location_context,
-            evidence_blocks=evidence_blocks,
-        )
-        profile = profile_response.profile
-
-        attached_item = dict(normalized_item)
-        fallback_overview = _build_company_profile_fallback_overview(
-            company_name=heading,
-            evidence_blocks=evidence_blocks,
-        )
-        sanitized_overview = _sanitize_company_profile_overview(
-            company_name=heading,
-            overview=profile.business_overview,
-            evidence_blocks=evidence_blocks,
-            source_ids=list(profile.source_ids or []),
-        )
-        if sanitized_overview:
-            attached_item["body"] = sanitized_overview
-        elif fallback_overview:
-            attached_item["body"] = fallback_overview
-        else:
-            attached_item["body"] = ""
-        attached_item["key_company_facts"] = _filter_company_profile_facts(
-            list(profile.key_company_facts or []),
-            business_overview=attached_item["body"],
-        )
-        if not attached_item["key_company_facts"]:
-            attached_item["key_company_facts"] = _build_company_profile_fallback_facts(
-                company_name=heading,
-                evidence_blocks=evidence_blocks,
-                business_overview=attached_item["body"],
-            )
-        try:
-            recent_developments_response = await _extract_recent_company_developments_from_evidence(
+        profile_response = cache_entry.get("profile_response")
+        if profile_response is None:
+            profile_response = await _extract_company_profile_from_evidence(
                 topic=topic,
                 company_name=heading,
+                existing_overview=body,
                 location_context=location_context,
                 evidence_blocks=evidence_blocks,
+                perf_state=perf_state,
             )
-            filtered_developments = _filter_recent_developments(
-                list(recent_developments_response.examples or []),
-                company_name=heading,
-                evidence_blocks=evidence_blocks,
-            )
-        except Exception as exc:
-            logger.warning(
-                'Competitive landscape recent developments fallback company="%s" error=%s',
-                heading,
-                exc,
-            )
-            filtered_developments = []
-        positioning_text = _sanitize_company_profile_positioning(
-            company_name=heading,
-            positioning=profile.competitive_positioning,
-            evidence_blocks=evidence_blocks,
-            source_ids=list(profile.source_ids or []),
+            cache_entry["profile_response"] = profile_response
+
+        recent_developments_response = cache_entry.get("recent_developments_response")
+        if recent_developments_response is None:
+            try:
+                recent_developments_response = await _extract_recent_company_developments_from_evidence(
+                    topic=topic,
+                    company_name=heading,
+                    location_context=location_context,
+                    evidence_blocks=evidence_blocks,
+                    perf_state=perf_state,
+                )
+            except Exception as exc:
+                logger.warning(
+                    'Competitive landscape recent developments fallback company="%s" error=%s',
+                    heading,
+                    exc,
+                )
+                recent_developments_response = ExampleExtractionResponse()
+            cache_entry["recent_developments_response"] = recent_developments_response
+
+        attached_item = _build_competitive_landscape_item_from_cached_research(
+            normalized_item=normalized_item,
+            heading=heading,
+            evidence_bundle=evidence_bundle,
+            profile=profile_response,
+            recent_developments_response=recent_developments_response,
         )
-        attached_item["competitive_positioning"] = positioning_text
-        attached_item["examples"] = [
-            {
-                "text": example.text,
-                "company": example.company,
-                "event": example.event,
-                "event_date": example.event_date,
-                "published_date": example.published_date,
-                "location": example.location,
-                "example_type": example.example_type,
-                "why_it_matters": example.trend_fit_reason,
-                "source_quality": example.source_quality,
-                "confidence": example.confidence,
-                "validation_score": example.validation_score,
-                "fallback_used": bool(example.fallback_used),
-                "year": example.year,
-            }
-            for example in filtered_developments[:MAX_EXAMPLES_PER_TREND]
-        ]
-        profile_source_ids = list(profile.source_ids or [])
-        if not profile_source_ids:
-            for example in filtered_developments:
-                for source_id in list(example.source_ids or []):
-                    if source_id not in profile_source_ids:
-                        profile_source_ids.append(source_id)
-        attached_item["source_ids"] = profile_source_ids[:10]
-        if not _has_retained_company_content(attached_item):
+        if attached_item.get("_example_skip_reason") == "no_supported_company_content":
             logger.info(
                 'Competitive landscape enrichment skipped company="%s" reason="%s"',
                 heading,
                 "no_supported_company_content",
             )
-            return _build_skip_item(normalized_item, reason="no_supported_company_content")
-        attached_with_sources = attach_sources_to_items([attached_item], evidence_blocks, max_sources_per_item=6)
-        attached_item = attached_with_sources[0] if attached_with_sources else attached_item
-        attached_item["fallback_used"] = False
-        attached_item["example_coverage_status"] = _coverage_status(attached_item.get("examples", []))
-        logger.info(
-            'Competitive landscape enrichment status index=%s company="%s" search_results=%s sources=%s facts=%s developments=%s positioning=%s',
-            item_index,
-            heading,
-            int(evidence_bundle.get("search_results", 0)),
-            len(stored_sources),
-            len(attached_item.get("key_company_facts", [])),
-            len(attached_item.get("examples", [])),
-            bool(attached_item.get("competitive_positioning")),
-        )
         return attached_item
+
+    queries = await _generate_example_search_queries(
+        topic=topic,
+        section=section,
+        trend_heading=heading,
+        trend_body=body,
+        location_context=location_context,
+        perf_state=perf_state,
+    )
+    logger.info("Trend example research heading=%s generated_queries=%s", heading, queries)
 
     primary_pass = await _run_example_pass(
         topic=topic,
@@ -1832,6 +2198,7 @@ async def enrich_items_with_researched_examples(
     session_id: str,
     progress_callback: Callable[[int, int, Dict[str, Any]], None] | None = None,
 ) -> List[Dict[str, Any]]:
+    enrichment_start = time.perf_counter()
     all_items = [dict(item) for item in list(items)]
     if not all_items:
         return []
@@ -1848,8 +2215,19 @@ async def enrich_items_with_researched_examples(
 
     selected_primary = _select_primary_items(all_items, section=section)
     selected_indexes = {index for index, _ in selected_primary}
-
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_TREND_RESEARCH)
+    provider_perf: Dict[str, Dict[str, float]] = {}
+    cl_cache: Dict[str, Dict[str, Any]] = {}
+    backfill_elapsed_seconds = 0.0
+    resolved_concurrency = (
+        resolve_cl_enrichment_concurrency() if section == "competitive_landscape" else max(1, int(settings.CL_ENRICHMENT_CONCURRENCY or 2))
+    )
+    semaphore = asyncio.Semaphore(resolved_concurrency)
+    if section == "competitive_landscape":
+        log_cl_health(
+            "Enrichment System Snapshot",
+            items=len(all_items),
+            concurrency=resolved_concurrency,
+        )
 
     async def _bounded(item: Dict[str, Any], item_index: int) -> Dict[str, Any]:
         async with semaphore:
@@ -1861,14 +2239,33 @@ async def enrich_items_with_researched_examples(
                     section=section,
                     location_context=location_context,
                     session_id=session_id,
+                    cl_cache=cl_cache,
+                    perf_state=provider_perf,
                 )
             except Exception as exc:
                 heading = _normalize_text(item.get("heading"))
                 logger.exception("Trend example research failed heading=%s error=%s", heading, exc)
                 return _build_skip_item(dict(item), reason="research_error")
 
-    async def _run_with_index(item_index: int, item: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
-        return item_index, await _bounded(item, item_index)
+    async def _run_with_index(item_index: int, item: Dict[str, Any], research_mode: str = "full") -> tuple[int, Dict[str, Any]]:
+        if research_mode == "full":
+            return item_index, await _bounded(item, item_index)
+        try:
+            return item_index, await _research_examples_for_item(
+                item=item,
+                item_index=item_index,
+                topic=topic,
+                section=section,
+                location_context=location_context,
+                session_id=session_id,
+                cl_cache=cl_cache,
+                perf_state=provider_perf,
+                research_mode=research_mode,
+            )
+        except Exception as exc:
+            heading = _normalize_text(item.get("heading"))
+            logger.exception("Trend example research failed heading=%s mode=%s error=%s", heading, research_mode, exc)
+            return item_index, _build_skip_item(dict(item), reason="research_error")
 
     results_by_index: Dict[int, Dict[str, Any]] = {}
     completed_primary = 0
@@ -1894,29 +2291,55 @@ async def enrich_items_with_researched_examples(
         results_by_index[item_index] = _build_skip_item(item, reason="cap_limit")
 
     if settings.BACKFILL_ALL_MISSING_TREND_EXAMPLES:
-        backfill_targets: List[tuple[int, Dict[str, Any]]] = []
+        backfill_targets: List[tuple[int, Dict[str, Any], str]] = []
         for item_index, item in enumerate(all_items, start=1):
             current_item = results_by_index.get(item_index, _build_skip_item(item, reason="not_processed"))
             if current_item.get("examples"):
                 continue
-            backfill_targets.append((item_index, dict(current_item)))
+            backfill_mode = "full"
+            if section == "competitive_landscape":
+                cache_key = _competitive_landscape_cache_key(
+                    topic=topic,
+                    heading=_normalize_text(current_item.get("heading")),
+                    location_context=location_context,
+                )
+                cache_entry = cl_cache.get(cache_key, {})
+                if cache_entry.get("evidence_bundle") or _has_retained_company_content(current_item):
+                    backfill_mode = "examples_only"
+                elif str(current_item.get("_example_skip_reason", "")).strip() != "research_error":
+                    continue
+            backfill_targets.append((item_index, dict(current_item), backfill_mode))
 
-        for item_index, item in backfill_targets:
+        for item_index, item, backfill_mode in backfill_targets:
             logger.info(
-                'Trend example research backfill index=%s heading="%s" reason="%s"',
+                'Trend example research backfill index=%s heading="%s" reason="%s" mode="%s"',
                 item_index,
                 _normalize_text(item.get("heading")),
                 "missing_examples",
+                backfill_mode,
             )
         total_backfill = len(backfill_targets)
         completed_backfill = 0
-        backfill_tasks = [asyncio.create_task(_run_with_index(item_index, item)) for item_index, item in backfill_targets]
+        backfill_start = time.perf_counter()
+        backfill_tasks = [
+            asyncio.create_task(_run_with_index(item_index, item, research_mode=backfill_mode))
+            for item_index, item, backfill_mode in backfill_targets
+        ]
         for task in asyncio.as_completed(backfill_tasks):
             item_index, result = await task
             results_by_index[item_index] = result
             completed_backfill += 1
             if progress_callback is not None:
                 progress_callback(total_primary + completed_backfill, total_primary + total_backfill, result)
+        backfill_elapsed_seconds = time.perf_counter() - backfill_start
+        if section == "competitive_landscape":
+            log_cl_perf(
+                "Backfill",
+                backfill_elapsed_seconds,
+                targets=total_backfill,
+                artifact_reuse=sum(1 for _, _, mode in backfill_targets if mode == "examples_only"),
+                full_retries=sum(1 for _, _, mode in backfill_targets if mode == "full"),
+            )
 
     enriched_items: List[Dict[str, Any]] = []
     removed_items: List[tuple[str, str]] = []
@@ -1929,8 +2352,19 @@ async def enrich_items_with_researched_examples(
         )
         result["fallback_used"] = bool(result.get("fallback_used", False))
         if section == "competitive_landscape":
+            body_text = _normalize_text(result.get("body"))
+            facts = [fact for fact in list(result.get("key_company_facts", []) or []) if _normalize_text(fact)]
+            positioning = _normalize_text(result.get("competitive_positioning"))
             if _looks_like_invalid_company_heading(result.get("heading", "")):
                 removed_items.append((_normalize_text(result.get("heading")), "invalid_company_heading"))
+                continue
+            if removal_reason in {"no_company_evidence", "insufficient_market_relevance_evidence", "research_error"} and (
+                _is_placeholder_company_body(body_text) or (not facts and not positioning)
+            ):
+                removed_items.append((_normalize_text(result.get("heading")), removal_reason))
+                continue
+            if body_text and _looks_like_low_quality_company_sentence(body_text) and not facts and not positioning:
+                removed_items.append((_normalize_text(result.get("heading")), "low_quality_company_body"))
                 continue
             if not _has_retained_company_content(result):
                 removed_items.append((_normalize_text(result.get("heading")), removal_reason or "no_retained_company_content"))
@@ -1953,5 +2387,22 @@ async def enrich_items_with_researched_examples(
         )
         for company_name, reason in removed_items:
             logger.info('Competitive landscape company removed company="%s" reason="%s"', company_name or "<unknown>", reason)
+
+    if section == "competitive_landscape":
+        for provider_name, stats in sorted(provider_perf.items()):
+            log_cl_perf(
+                f"Enrichment {provider_name.capitalize()} Summary",
+                float(stats.get("run_seconds", 0.0)),
+                calls=int(stats.get("calls", 0.0)),
+                wait_seconds=round(float(stats.get("wait_seconds", 0.0)), 2),
+            )
+        log_cl_perf(
+            "Enrichment",
+            time.perf_counter() - enrichment_start,
+            companies=len(all_items),
+            concurrency=resolved_concurrency,
+            cache_entries=len(cl_cache),
+            backfill_seconds=round(backfill_elapsed_seconds, 2),
+        )
 
     return enriched_items

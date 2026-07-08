@@ -137,10 +137,14 @@ def _render_examples_sources_disclosure(examples: Sequence[Dict[str, Any]], sour
             "</section>"
         )
 
+    summary_suffix = ""
+    if example_count or source_count:
+        summary_suffix = f' <span class="summary-separator">|</span> Examples ({example_count})'
+
     return (
         "<details class=\"disclosure\">"
         f"<summary>Sources ({source_count})"
-        f"{f' <span class=\"summary-separator\">|</span> Examples ({example_count})' if example_count or source_count else ''}"
+        f"{summary_suffix}"
         "</summary>"
         f"<div class=\"disclosure__body\">{examples_html}{sources_html}</div>"
         "</details>"
@@ -163,12 +167,19 @@ def _render_competitive_landscape_item(item: Dict[str, Any], index: int) -> str:
     positioning_text = _format_multiline_html(item.get("competitive_positioning"))
     facts_html = _render_fact_list(item.get("key_company_facts", []) or [])
     developments_html = _render_examples(examples).replace("<h4>Examples</h4>", "<h4>Recent Strategic Developments</h4>")
+    market_role_html = f'<div class="memo-item__badge">{market_role}</div>' if market_role else ""
+    facts_section_html = f'<section class="item-subsection"><h4>Key Company Facts</h4>{facts_html}</section>' if facts_html else ""
+    positioning_section_html = (
+        f'<section class="item-subsection"><h4>Competitive Positioning / Implication</h4><p class="memo-item__body">{positioning_text}</p></section>'
+        if positioning_text
+        else ""
+    )
     return (
         "<article class=\"memo-item memo-item--competitive\">"
         "<div class=\"memo-item__header\">"
         f"<span class=\"memo-item__index\">{index}</span>"
         "<div>"
-        f"{f'<div class=\"memo-item__badge\">{market_role}</div>' if market_role else ''}"
+        f"{market_role_html}"
         f"<h3>{heading}</h3>"
         "</div>"
         "</div>"
@@ -176,9 +187,9 @@ def _render_competitive_landscape_item(item: Dict[str, Any], index: int) -> str:
         "<h4>Business Overview</h4>"
         f"<p class=\"memo-item__body\">{body}</p>"
         "</section>"
-        f"{f'<section class=\"item-subsection\"><h4>Key Company Facts</h4>{facts_html}</section>' if facts_html else ''}"
+        f"{facts_section_html}"
         f"{developments_html}"
-        f"{f'<section class=\"item-subsection\"><h4>Competitive Positioning / Implication</h4><p class=\"memo-item__body\">{positioning_text}</p></section>' if positioning_text else ''}"
+        f"{positioning_section_html}"
         f"{_render_sources_disclosure(sources)}"
         "</article>"
     )
@@ -189,10 +200,11 @@ def _render_competitive_landscape_group(title: str, items: Sequence[Dict[str, An
     items_html = "".join(
         _render_competitive_landscape_item(item, index) for index, item in enumerate(normalized_items, start=1)
     )
+    group_body_html = items_html or '<div class="memo-empty-state">No strong company profiles found.</div>'
     return (
         "<section class=\"competitive-group\">"
         f"<div class=\"competitive-group__header\"><h2>{html.escape(title)}</h2><span>{len(normalized_items)}</span></div>"
-        f"<div class=\"memo-items\">{items_html or '<div class=\"memo-empty-state\">No strong company profiles found.</div>'}</div>"
+        f"<div class=\"memo-items\">{group_body_html}</div>"
         "</section>"
     )
 

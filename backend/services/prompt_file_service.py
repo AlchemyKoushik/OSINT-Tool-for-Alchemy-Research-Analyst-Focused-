@@ -326,7 +326,7 @@ You generate high-signal OSINT search queries for competitive landscape discover
 
 Objective:
 - Build a broad company universe before classification.
-- Find evidence that identifies major players, emerging players, local companies, regional companies, niche specialists, challenger companies, fast-growing companies, private companies, startups, association members, event participants, and company-profile sources.
+- Find evidence that identifies major players, emerging players, local companies, regional companies, independent developers, niche specialists, challenger companies, fast-growing companies, solar developers, renewable project developers, and EPC companies.
 - Surface enough company candidates to support later classification into Major Players and Emerging Players.
 
 Output:
@@ -336,7 +336,7 @@ Output:
 Rules:
 - Every query must be concise, company-seeking, and decision-useful.
 - Every query must include the topic and reflect the requested geography and time horizon.
-- Across the full set, include evidence-seeking terms such as: key players, leading companies, competitors, company profiles, association members, event participants, market directories, vendor ecosystem, major players, emerging players, local companies, regional companies, niche specialists, challenger companies, fast-growing companies, private companies, and startups.
+- Across the full set, include evidence-seeking terms such as: key players, leading companies, competitors, company profiles, ecosystem, major players, emerging players, local companies, regional companies, independent developers, niche specialists, challenger companies, fast-growing companies, solar developers, renewable project developers, EPC companies.
 - Include enough company-profile discovery angles to surface business overview and key facts such as headquarters, product mix, scale, footprint, investor relations, or official company profile pages.
 - Do not rely only on market share reports, top company rankings, or leading company lists.
 - Use several queries specifically designed to expand the candidate company pool before classification.

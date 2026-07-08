@@ -1,10 +1,12 @@
 import json
+import sqlite3
 import time
 import uuid
+from pathlib import Path
 from threading import RLock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from config.settings import settings
+from config.settings import BACKEND_DIR, settings
 from core.logging import get_logger
 from services.redis_service import run_redis_operation
 
@@ -14,9 +16,39 @@ JOB_KEY_PREFIX = "osint:research:job:"
 JOB_STATS_KEY = "osint:research:job-stats"
 JOB_QUEUE_KEY = settings.JOB_QUEUE_NAME
 
-_FALLBACK_JOBS: Dict[str, Dict[str, Any]] = {}
-_FALLBACK_QUEUE: List[str] = []
 _FALLBACK_LOCK = RLock()
+_FALLBACK_DB_PATH = Path(BACKEND_DIR) / "data" / "job_fallback.sqlite3"
+
+
+def _ensure_fallback_db() -> None:
+    _FALLBACK_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(_FALLBACK_DB_PATH) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id TEXT PRIMARY KEY,
+                payload TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS queue (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id TEXT NOT NULL,
+                queued_at REAL NOT NULL
+            )
+            """
+        )
+        connection.commit()
+
+
+def _fallback_connection() -> sqlite3.Connection:
+    _ensure_fallback_db()
+    connection = sqlite3.connect(_FALLBACK_DB_PATH, timeout=30, isolation_level=None)
+    connection.row_factory = sqlite3.Row
+    return connection
 
 
 def _job_key(job_id: str) -> str:
@@ -57,7 +89,14 @@ def _fallback_stats() -> Dict[str, int]:
         "completed": 0,
         "failed": 0,
     }
-    for job in _FALLBACK_JOBS.values():
+    with _FALLBACK_LOCK:
+        with _fallback_connection() as connection:
+            rows = connection.execute("SELECT payload FROM jobs").fetchall()
+    for row in rows:
+        try:
+            job = json.loads(str(row["payload"]))
+        except json.JSONDecodeError:
+            continue
         status = str(job.get("status", "")).strip()
         if status in stats:
             stats[status] += 1
@@ -76,7 +115,11 @@ def _write_job_record(record: Dict[str, Any]) -> Dict[str, Any]:
 
 def _fallback_set_job(record: Dict[str, Any]) -> bool:
     with _FALLBACK_LOCK:
-        _FALLBACK_JOBS[str(record["job_id"])] = dict(record)
+        with _fallback_connection() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO jobs (job_id, payload, updated_at) VALUES (?, ?, ?)",
+                (str(record["job_id"]), json.dumps(record), time.time()),
+            )
     return True
 
 
@@ -87,19 +130,30 @@ def _get_job_record(job_id: str) -> Dict[str, Any]:
         fallback=lambda: _fallback_get_job(job_id),
     )
     if not raw:
-        return {}
+        return _fallback_get_job(job_id)
     if isinstance(raw, dict):
         return dict(raw)
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        return {}
+        return _fallback_get_job(job_id)
     return parsed if isinstance(parsed, dict) else {}
 
 
 def _fallback_get_job(job_id: str) -> Dict[str, Any]:
     with _FALLBACK_LOCK:
-        return dict(_FALLBACK_JOBS.get(job_id, {}))
+        with _fallback_connection() as connection:
+            row = connection.execute(
+                "SELECT payload FROM jobs WHERE job_id = ?",
+                (str(job_id),),
+            ).fetchone()
+    if row is None:
+        return {}
+    try:
+        payload = json.loads(str(row["payload"]))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _update_stats(previous_status: str, next_status: str) -> None:
@@ -123,6 +177,7 @@ def _update_stats(previous_status: str, next_status: str) -> None:
 
 def create_research_job(payload: Dict[str, Any], session_id: str) -> Dict[str, Any]:
     record = _build_job_record(payload, session_id=session_id)
+    _fallback_set_job(record)
     _write_job_record(record)
     _update_stats("", "queued")
     run_redis_operation(
@@ -136,8 +191,12 @@ def create_research_job(payload: Dict[str, Any], session_id: str) -> Dict[str, A
 
 def _fallback_enqueue(job_id: str) -> int:
     with _FALLBACK_LOCK:
-        _FALLBACK_QUEUE.append(job_id)
-        return len(_FALLBACK_QUEUE)
+        with _fallback_connection() as connection:
+            cursor = connection.execute(
+                "INSERT INTO queue (job_id, queued_at) VALUES (?, ?)",
+                (str(job_id), time.time()),
+            )
+            return int(cursor.lastrowid or 0)
 
 
 def update_research_job(job_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
@@ -148,6 +207,7 @@ def update_research_job(job_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
     previous_status = str(record.get("status", "")).strip()
     record.update(updates)
     record["updated_at"] = _utc_timestamp()
+    _fallback_set_job(record)
     _write_job_record(record)
     _update_stats(previous_status, str(record.get("status", "")).strip())
     return record
@@ -231,7 +291,10 @@ def reserve_next_job(timeout_seconds: int | None = None) -> Dict[str, Any]:
         fallback=lambda: _fallback_dequeue(),
     )
     if not raw:
-        return {}
+        fallback_job_id = _fallback_dequeue()
+        if not fallback_job_id:
+            return {}
+        return _get_job_record(str(fallback_job_id))
 
     if isinstance(raw, (list, tuple)) and len(raw) == 2:
         job_id = str(raw[1])
@@ -242,9 +305,24 @@ def reserve_next_job(timeout_seconds: int | None = None) -> Dict[str, Any]:
 
 def _fallback_dequeue() -> Optional[str]:
     with _FALLBACK_LOCK:
-        if not _FALLBACK_QUEUE:
-            return None
-        return _FALLBACK_QUEUE.pop(0)
+        with _fallback_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT seq, job_id FROM queue ORDER BY seq ASC LIMIT 1"
+            ).fetchone()
+            if row is None:
+                connection.execute("COMMIT")
+                return None
+            connection.execute("DELETE FROM queue WHERE seq = ?", (int(row["seq"]),))
+            connection.execute("COMMIT")
+            return str(row["job_id"])
+
+
+def _fallback_queue_length() -> int:
+    with _FALLBACK_LOCK:
+        with _fallback_connection() as connection:
+            row = connection.execute("SELECT COUNT(*) AS count FROM queue").fetchone()
+    return int(row["count"]) if row is not None else 0
 
 
 def get_job_metrics() -> Dict[str, Any]:
@@ -261,7 +339,7 @@ def get_job_metrics() -> Dict[str, Any]:
         _fetch,
         fallback=lambda: {
             "stats": _fallback_stats(),
-            "queue_length": len(_FALLBACK_QUEUE),
+            "queue_length": _fallback_queue_length(),
         },
     )
     stats = payload.get("stats", {}) if isinstance(payload, dict) else {}

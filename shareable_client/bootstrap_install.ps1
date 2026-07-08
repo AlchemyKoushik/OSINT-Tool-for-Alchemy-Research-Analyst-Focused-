@@ -1,0 +1,54 @@
+param(
+    [Parameter(Mandatory = $true)][string]$BundleUrl,
+    [string]$EnvUrl = "",
+    [string]$EnvBearerToken = "",
+    [string]$ExpectedSha256 = ""
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function Get-TempPath {
+    $root = Join-Path $env:TEMP ("alchemy-bootstrap-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $root | Out-Null
+    return $root
+}
+
+function Get-FileSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+$tempRoot = Get-TempPath
+$zipPath = Join-Path $tempRoot "bundle.zip"
+$extractRoot = Join-Path $tempRoot "bundle"
+
+Write-Host ""
+Write-Host "Downloading Alchemy installer bundle..."
+Invoke-WebRequest -Uri $BundleUrl -OutFile $zipPath
+
+if ($ExpectedSha256) {
+    $actualHash = Get-FileSha256 -Path $zipPath
+    if ($actualHash -ne $ExpectedSha256.ToLowerInvariant()) {
+        throw "Bundle hash mismatch. Expected $ExpectedSha256 but got $actualHash."
+    }
+}
+
+Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
+
+if ($EnvUrl) {
+    $headers = @{}
+    if ($EnvBearerToken) {
+        $headers["Authorization"] = "Bearer $EnvBearerToken"
+    }
+    $envContent = Invoke-WebRequest -Uri $EnvUrl -Headers $headers -UseBasicParsing
+    $envTarget = Join-Path $extractRoot "payload\app\backend\.env"
+    Set-Content -LiteralPath $envTarget -Value $envContent.Content -Encoding UTF8
+}
+
+$installerPath = Join-Path $extractRoot "install_client.ps1"
+if (-not (Test-Path -LiteralPath $installerPath)) {
+    throw "Installer script not found in extracted bundle."
+}
+
+& powershell -NoProfile -ExecutionPolicy Bypass -File $installerPath

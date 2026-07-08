@@ -133,49 +133,8 @@ def _clean_source_text(text: str) -> str:
     return "\n".join(kept_lines).strip()
 
 
-def _clean_source_text_relaxed(text: str) -> str:
-    cleaned = _clean_html_artifacts(text)
-    if not cleaned:
-        return ""
-
-    relaxed_lines: List[str] = []
-    for raw_line in cleaned.splitlines():
-        line = _clean_line(raw_line)
-        if not line:
-            continue
-        if _contains_url(line):
-            continue
-        if _contains_garbage_marker(line) and _word_count(line) <= HEADING_WORD_THRESHOLD:
-            continue
-        relaxed_lines.append(line)
-
-    flattened = " ".join(relaxed_lines).strip()
-    kept_sentences: List[str] = []
-
-    for raw_sentence in SENTENCE_SPLIT_PATTERN.split(flattened):
-        sentence = _clean_line(raw_sentence)
-        if not sentence:
-            continue
-        if _contains_url(sentence):
-            continue
-        if _contains_garbage_marker(sentence):
-            continue
-        if _word_count(sentence) < MIN_WORDS_PER_SENTENCE:
-            continue
-        kept_sentences.append(sentence)
-
-    return " ".join(kept_sentences).strip()
-
-
 def clean_evidence_text(text: str) -> str:
-    cleaned = _clean_source_text(text)
-    if len(cleaned) >= MIN_CONTENT_LENGTH:
-        return cleaned
-
-    relaxed = _clean_source_text_relaxed(text)
-    if len(relaxed) > len(cleaned):
-        return relaxed
-    return cleaned
+    return _clean_source_text(text)
 
 
 def _is_low_quality_content(text: str) -> bool:

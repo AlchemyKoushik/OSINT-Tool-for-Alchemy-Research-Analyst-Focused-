@@ -17,10 +17,10 @@ from services.storage_service import upload_to_r2
 logger = logging.getLogger(__name__)
 
 DEBUG = True
-MAX_PIPELINE_SCRAPE_RESULTS = max(20, min(int(settings.MAX_PIPELINE_SCRAPE_RESULTS), 200))
-SCRAPE_BATCH_SIZE = max(4, min(int(settings.SCRAPE_BATCH_SIZE), 25))
-TARGET_USABLE_TEXT_COUNT = max(10, min(int(settings.TARGET_USABLE_TEXT_COUNT), MAX_PIPELINE_SCRAPE_RESULTS))
-SCRAPE_TIME_BUDGET_SECONDS = max(60, int(settings.SCRAPE_TIME_BUDGET_SECONDS))
+MAX_PIPELINE_SCRAPE_RESULTS = 200
+SCRAPE_BATCH_SIZE = 25
+TARGET_USABLE_TEXT_COUNT = 200
+SCRAPE_TIME_BUDGET_SECONDS = 900
 
 
 def _log(message: str) -> None:
@@ -49,7 +49,6 @@ async def execute_pipeline(
     queries: List[str] = []
     search_results: List[Dict[str, Any]] = []
     query_performance: Dict[str, Any] = {}
-    search_diagnostics: Dict[str, Any] = {}
     stage_errors: Dict[str, str] = {}
     artifact_bundle: Dict[str, Any] = {
         "artifact_dir": "",
@@ -119,7 +118,6 @@ async def execute_pipeline(
         queries = list(search_payload.get("queries", queries))
         search_results = list(search_payload.get("results", []))
         query_performance = dict(search_payload.get("query_performance", {}))
-        search_diagnostics = dict(search_payload.get("diagnostics", {}))
     except Exception as exc:
         logger.exception("Pipeline search failed for topic %s section %s", topic, section)
         _log(f"[PIPELINE] Search failed | error={exc}")
@@ -316,7 +314,6 @@ async def execute_pipeline(
         "queries": queries,
         "search_results": search_results,
         "query_performance": query_performance,
-        "search_diagnostics": search_diagnostics,
         "artifact_bundle": artifact_bundle,
         "processed_payload": processed_payload,
         "stage_errors": stage_errors,

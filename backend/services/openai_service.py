@@ -11,6 +11,7 @@ from services.openai.client import (
     can_use_openai,
     ensure_min_output_tokens,
     get_openai_status_message,
+    mark_openai_unavailable,
     openai_key_loaded,
     test_openai_connection,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "generate_section_analysis",
     "get_last_structured_completion_diagnostics",
     "get_openai_status_message",
+    "mark_openai_unavailable",
     "openai_key_loaded",
     "test_openai_connection",
 ]

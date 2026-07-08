@@ -724,18 +724,13 @@ class ResearchItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("heading")
+    @field_validator("heading", "body")
     @classmethod
-    def validate_heading(cls, value: str) -> str:
+    def validate_text_fields(cls, value: str) -> str:
         normalized = str(value).strip()
         if not normalized:
             raise ValueError("Response item fields must not be empty.")
         return normalized
-
-    @field_validator("body")
-    @classmethod
-    def validate_body(cls, value: str) -> str:
-        return str(value or "").strip()
 
     @field_validator("segment")
     @classmethod
@@ -849,8 +844,6 @@ class AnalyzeResponse(BaseModel):
                 raise ValueError("Competitive Landscape responses must include major_players or emerging_players.")
         elif not self.items:
             raise ValueError("Trends and Drivers responses must include items.")
-        elif any(not str(item.body or "").strip() for item in self.items):
-            raise ValueError("Trends and Drivers response item body fields must not be empty.")
         return self
 
 

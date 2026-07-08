@@ -12,13 +12,14 @@ from workers.job_manager import mark_job_completed, mark_job_failed, mark_job_ru
 logger = get_logger(__name__)
 
 
-def _is_non_retriable_job_error(error: Exception) -> bool:
-    message = str(error).strip().lower()
-    return (
-        message.startswith("response validation failed:")
-        or "missing required environment variables" in message
-        or "validation error for analyzerequest" in message
-    )
+def _is_non_retriable_job_error(exc: Exception) -> bool:
+    current: BaseException | None = exc
+    while current is not None:
+        message = str(current).strip()
+        if "Response validation failed" in message:
+            return True
+        current = current.__cause__
+    return False
 
 
 async def run_research_job(job_record: Dict[str, Any], worker_id: str) -> None:

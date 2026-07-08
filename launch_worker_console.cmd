@@ -25,7 +25,13 @@ echo [INFO] Starting dedicated worker loop...
 echo.
 
 set "APP_ROLE=worker"
-"%PYTHON_EXE%" -m workers.worker
+set "PYTHONUNBUFFERED=1"
+if not defined LOG_LEVEL set "LOG_LEVEL=INFO"
+echo [INFO] APP_ROLE=%APP_ROLE%
+echo [INFO] LOG_LEVEL=%LOG_LEVEL%
+echo [INFO] PYTHONUNBUFFERED=%PYTHONUNBUFFERED%
+echo.
+"%PYTHON_EXE%" -u -m workers.worker
 
 if errorlevel 1 (
     echo.

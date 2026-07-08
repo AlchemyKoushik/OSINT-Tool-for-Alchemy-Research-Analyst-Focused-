@@ -32,11 +32,12 @@ from services.memory_service import (
     update_domain_authority,
 )
 from services.competitive_landscape_discovery_service import build_competitive_landscape_v2_discovery_bundle
+from services.competitive_landscape_runtime import log_cl_perf
 from services.openai_service import generate_section_analysis, get_last_structured_completion_diagnostics
 from services.pipeline_orchestrator import execute_pipeline
 from services.html_export_service import build_html_export
 from services.prompt_builder import build_metadata_payload, get_prompt
-from services.redis_service import check_rate_limit, delete_session, get_session, ping_redis, update_session
+from services.redis_service import check_rate_limit, delete_session, get_session, update_session
 from services.ranking_service import rank_and_limit_insights
 from services.session_service import create_session_id
 from services.source_attribution_service import attach_sources_to_items
@@ -76,18 +77,6 @@ async def _read_json_payload(request: Request, *, max_bytes: int | None = None) 
     if not isinstance(payload, dict):
         raise ValueError("JSON payload must be an object.")
     return payload
-
-
-def _ensure_background_job_queue_available() -> None:
-    if ping_redis():
-        return
-    raise HTTPException(
-        status_code=503,
-        detail=(
-            "Research jobs are temporarily unavailable because Redis is not reachable. "
-            "Check /api/health/detailed and restore Redis before launching another run."
-        ),
-    )
 
 
 def _build_rate_limit_identity(request: Request, session_id: str | None) -> str:
@@ -333,6 +322,46 @@ def _sync_competitive_landscape_groups(payload: Dict[str, Any]) -> Dict[str, Any
     payload["major_players"] = major_players
     payload["emerging_players"] = emerging_players
     payload["items"] = [*major_players, *emerging_players]
+    return payload
+
+
+def _build_competitive_landscape_body_fallback(item: Dict[str, Any]) -> str:
+    body = str(item.get("body", "")).strip()
+    if body:
+        return body
+
+    facts = [str(fact).strip() for fact in list(item.get("key_company_facts", []) or []) if str(fact).strip()]
+    if facts:
+        return " ".join(facts[:2]).strip()
+
+    positioning = str(item.get("competitive_positioning", "")).strip()
+    if positioning:
+        return positioning
+
+    for example in list(item.get("examples", []) or []):
+        example_text = str((example or {}).get("text", "")).strip() if isinstance(example, dict) else ""
+        if example_text:
+            return example_text
+
+    return ""
+
+
+def _repair_competitive_landscape_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    repaired_items: List[Dict[str, Any]] = []
+    removed_companies: List[str] = []
+
+    for raw_item in list(payload.get("items", []) or []):
+        item = dict(raw_item)
+        item["body"] = _build_competitive_landscape_body_fallback(item)
+        if not str(item.get("body", "")).strip():
+            removed_companies.append(str(item.get("heading", "")).strip() or "<unknown>")
+            continue
+        repaired_items.append(item)
+
+    payload["items"] = repaired_items
+    payload = _sync_competitive_landscape_groups(payload)
+    if removed_companies:
+        logger.warning("[RUN] CL payload removed companies with empty body after repair: %s", removed_companies)
     return payload
 
 
@@ -772,6 +801,8 @@ async def run_analysis_request(
             }
         pipeline_elapsed_ms = _elapsed_ms(pipeline_start)
         logger.info("[RUN] Pipeline execution completed | session_id=%s | ms=%s", session_id, pipeline_elapsed_ms)
+        if section == "competitive_landscape":
+            log_cl_perf("Broad Market Retrieval", pipeline_elapsed_ms / 1000.0, queries=len(pipeline_payload.get("queries", [])))
         execution_time.update({key: int(value) for key, value in dict(pipeline_payload.get("execution_time", {})).items()})
         execution_time["pipeline_ms"] = pipeline_elapsed_ms
         execution_time["search_ms"] = int(execution_time.get("search_ms", 0))
@@ -781,7 +812,6 @@ async def run_analysis_request(
         execution_time["ranking_ms"] = 0
 
         search_results = list(pipeline_payload.get("search_results", []))
-        search_diagnostics = dict(pipeline_payload.get("search_diagnostics", {}))
         queries = [str(query) for query in pipeline_payload.get("queries", [])]
         query_performance = dict(pipeline_payload.get("query_performance", {}))
         stage_errors = dict(pipeline_payload.get("stage_errors", {}))
@@ -935,11 +965,13 @@ async def run_analysis_request(
             )
             if section == "competitive_landscape" and competitive_landscape_mode == "v2":
                 try:
+                    cl_discovery_start = time.perf_counter()
                     cl_discovery_bundle = await build_competitive_landscape_v2_discovery_bundle(
                         topic=topic,
                         location_context=location_context,
                         session_id=session_id,
                     )
+                    log_cl_perf("Company Discovery", time.perf_counter() - cl_discovery_start)
                     override_evidence_blocks = list(cl_discovery_bundle.get("evidence_blocks", []) or [])
                     if override_evidence_blocks:
                         evidence_blocks = override_evidence_blocks
@@ -983,7 +1015,6 @@ async def run_analysis_request(
             cl_runtime_exception = str(exc).strip()
             if section == "competitive_landscape":
                 stage_errors["competitive_landscape_validation"] = cl_runtime_exception or exc.__class__.__name__
-                raise RuntimeError(f"Competitive landscape validation failed: {cl_runtime_exception or exc.__class__.__name__}") from exc
             analysis_json = build_fallback_section_analysis(
                 topic=topic,
                 processed_text=processed_text,
@@ -991,12 +1022,12 @@ async def run_analysis_request(
             )
         execution_time["openai_ms"] = _elapsed_ms(openai_start)
         logger.info("[RUN] Structured analysis completed | session_id=%s | ms=%s", session_id, execution_time["openai_ms"])
+        if section == "competitive_landscape":
+            log_cl_perf("OpenAI Analysis", execution_time["openai_ms"] / 1000.0)
         discovered_cl_counts: Dict[str, int] = {}
         validated_cl_counts: Dict[str, int] = {}
         enriched_cl_counts: Dict[str, int] = {}
         cl_validation_diagnostics: Dict[str, Any] = {}
-        cl_recall_diagnostics: Dict[str, Any] = {}
-        cl_diagnostics_path = "pipeline_search"
         analysis_json = normalize_analyze_response_payload(analysis_json, fallback_section=section)
         if section == "competitive_landscape":
             cl_validation_diagnostics = dict(analysis_json.pop("_competitive_landscape_validation", {}) or {})
@@ -1066,6 +1097,7 @@ async def run_analysis_request(
                 metadata={"enrichment_completed": completed, "enrichment_total": total},
             )
 
+        enrichment_start = time.perf_counter()
         analysis_json["items"] = await enrich_items_with_researched_examples(
             items=list(analysis_json.get("items", [])),
             topic=topic,
@@ -1075,38 +1107,12 @@ async def run_analysis_request(
             progress_callback=_enrichment_progress,
         )
         if section == "competitive_landscape":
+            log_cl_perf("Company Enrichment", time.perf_counter() - enrichment_start, companies=len(analysis_json.get("items", [])))
+        if section == "competitive_landscape":
             analysis_json = _sync_competitive_landscape_groups(analysis_json)
+            analysis_json = _repair_competitive_landscape_payload(analysis_json)
             enriched_cl_counts = _competitive_landscape_counts(analysis_json)
             enriched_cl_names = _competitive_landscape_company_names(analysis_json)
-            active_search_diagnostics = dict(search_diagnostics)
-            active_artifact_counts = dict(artifact_counts)
-            if cl_discovery_bundle and evidence_blocks == list(cl_discovery_bundle.get("evidence_blocks", []) or []):
-                active_search_diagnostics = dict(cl_discovery_bundle.get("search_diagnostics", {}))
-                active_artifact_counts = {
-                    "success_count": int(active_search_diagnostics.get("urls_scraped", 0)),
-                    "failed_count": int(active_search_diagnostics.get("urls_failed", 0)),
-                }
-                cl_diagnostics_path = str(active_search_diagnostics.get("path", "competitive_landscape_discovery"))
-            cl_recall_diagnostics = {
-                "path": cl_diagnostics_path,
-                "urls_found": int(
-                    active_search_diagnostics.get(
-                        "urls_discovered",
-                        active_search_diagnostics.get("raw_results", 0),
-                    )
-                ),
-                "urls_filtered": int(active_search_diagnostics.get("filtered_results", active_search_diagnostics.get("urls_filtered", 0))),
-                "urls_scraped": int(active_artifact_counts.get("success_count", 0)),
-                "urls_failed": int(active_artifact_counts.get("failed_count", 0)),
-                "urls_sent_to_ai": int(active_search_diagnostics.get("urls_sent_to_ai", len(evidence_blocks))),
-                "companies_detected": enriched_cl_counts.get("major_players", 0) + enriched_cl_counts.get("emerging_players", 0),
-                "major_players": enriched_cl_counts.get("major_players", 0),
-                "emerging_players": enriched_cl_counts.get("emerging_players", 0),
-                "provider_requested_cap": int(active_search_diagnostics.get("provider_requested_cap", 0)),
-                "provider_effective_cap": int(active_search_diagnostics.get("provider_effective_cap", 0)),
-                "provider_supported_cap": int(active_search_diagnostics.get("provider_supported_cap", 0)),
-                "providers_used": list(active_search_diagnostics.get("providers_used", []) or []),
-            }
             logger.info(
                 "[RUN] CL diagnostics enriched_major_players=%s enriched_emerging_players=%s final_major_players=%s final_emerging_players=%s major_names=%s emerging_names=%s session_id=%s",
                 validated_cl_counts["major_players"],
@@ -1117,7 +1123,6 @@ async def run_analysis_request(
                 enriched_cl_names["emerging_players"],
                 session_id,
             )
-            logger.info("[RUN] CL recall diagnostics %s", json.dumps(cl_recall_diagnostics, sort_keys=True))
         logger.info("[RUN] Item enrichment completed | session_id=%s | items=%s", session_id, len(analysis_json.get("items", [])))
         if not analysis_json["items"]:
             analysis_json["title"] = "No strong insights found"
@@ -1138,6 +1143,8 @@ async def run_analysis_request(
             raise RuntimeError(f"Response validation failed: {exc}") from exc
         execution_time["validation_ms"] = _elapsed_ms(validation_start)
         execution_time["total_ms"] = _elapsed_ms(total_start)
+        if section == "competitive_landscape":
+            log_cl_perf("Total Runtime", execution_time["total_ms"] / 1000.0)
 
         response_payload: Dict[str, Any] = validated_response.model_dump()
         logger.info(
@@ -1291,7 +1298,6 @@ async def run_analysis_request(
                         for company in discovery_agent_companies
                     ],
                     "discovery_agent_query_diagnostics": list(cl_discovery_bundle.get("query_diagnostics", [])),
-                    "search_recall_diagnostics": cl_recall_diagnostics,
                 }
 
         _emit_progress(
@@ -1333,7 +1339,6 @@ async def analyze_topic(request: Request) -> Dict[str, Any]:
     session_id = request_model.session_id or create_session_id()
     request_model.session_id = session_id
     _enforce_rate_limit(request, "analyze", session_id)
-    _ensure_background_job_queue_available()
 
     update_session(
         session_id,
