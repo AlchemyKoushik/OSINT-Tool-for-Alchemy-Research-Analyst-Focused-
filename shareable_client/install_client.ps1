@@ -1,5 +1,10 @@
 param(
-    [string]$ResolvedPythonPath = ""
+    [string]$ResolvedPythonPath = "",
+    [string]$OriginalUserName = "",
+    [string]$OriginalUserProfile = "",
+    [string]$OriginalLocalAppData = "",
+    [string]$OriginalOneDriveCommercial = "",
+    [string]$OriginalOneDriveConsumer = ""
 )
 
 Set-StrictMode -Version Latest
@@ -37,6 +42,18 @@ function Ensure-ElevatedInstaller {
         $argumentList += @("-ResolvedPythonPath", $ResolvedPythonPath)
     }
 
+    foreach ($pair in @(
+        @("-OriginalUserName", $OriginalUserName),
+        @("-OriginalUserProfile", $OriginalUserProfile),
+        @("-OriginalLocalAppData", $OriginalLocalAppData),
+        @("-OriginalOneDriveCommercial", $OriginalOneDriveCommercial),
+        @("-OriginalOneDriveConsumer", $OriginalOneDriveConsumer)
+    )) {
+        if ($pair[1]) {
+            $argumentList += $pair
+        }
+    }
+
     try {
         $null = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $argumentList -PassThru
     } catch {
@@ -61,6 +78,22 @@ function New-DesktopShortcut {
     $shortcut.Save()
 }
 
+function Reset-BrokenVirtualEnvironment {
+    param([Parameter(Mandatory = $true)][string]$VenvPath)
+
+    $venvPython = Join-Path $VenvPath "Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $VenvPath)) {
+        return
+    }
+
+    if (Test-Path -LiteralPath $venvPython) {
+        return
+    }
+
+    Write-InstallerStage "Removing incomplete virtual environment from a previous install attempt..."
+    Remove-Item -LiteralPath $VenvPath -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $payloadAppRoot = Join-Path $scriptRoot "payload\app"
 $payloadSupportRoot = Join-Path $scriptRoot "payload\support"
@@ -73,10 +106,16 @@ if (-not (Test-Path -LiteralPath $payloadSupportRoot)) {
     throw "Missing payload support folder: $payloadSupportRoot"
 }
 
-$installRoot = Join-Path $env:LOCALAPPDATA "AlchemyIndustryResearchTool"
+$userContext = Get-InstallerUserContext `
+    -OriginalUserName $OriginalUserName `
+    -OriginalUserProfile $OriginalUserProfile `
+    -OriginalLocalAppData $OriginalLocalAppData `
+    -OriginalOneDriveCommercial $OriginalOneDriveCommercial `
+    -OriginalOneDriveConsumer $OriginalOneDriveConsumer
+
+$installRoot = Join-Path $userContext.LocalAppData "AlchemyIndustryResearchTool"
 $appRoot = Join-Path $installRoot "app"
 $runRoot = Join-Path $installRoot "run"
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Alchemy Industry Research Tool.lnk"
 
 Ensure-ElevatedInstaller
 
@@ -91,6 +130,7 @@ if ($ResolvedPythonPath) {
 }
 
 New-Item -ItemType Directory -Force -Path $installRoot, $runRoot | Out-Null
+Set-InstallerLogPath -Path (Join-Path $runRoot "install.last.log")
 
 Write-InstallerStage "Installing Alchemy Industry Research Tool..."
 Write-Host "Install path: $installRoot"
@@ -101,6 +141,7 @@ Invoke-RobocopyCopy -Source $payloadAppRoot -Destination $appRoot
 attrib +h $installRoot | Out-Null
 
 $venvPath = Join-Path $installRoot ".venv"
+Reset-BrokenVirtualEnvironment -VenvPath $venvPath
 if (-not (Test-Path -LiteralPath $venvPath)) {
     Write-InstallerStage "Creating local virtual environment..."
     & $pythonInfo.Path -m venv $venvPath
@@ -140,10 +181,18 @@ if ($LASTEXITCODE -ne 0) {
     throw "Playwright Chromium installation failed."
 }
 
-New-DesktopShortcut -ShortcutPath $desktopShortcut -TargetPath (Join-Path $installRoot "Alchemy Industry Research Tool.bat") -WorkingDirectory $installRoot
+foreach ($desktopPath in $userContext.DesktopCandidates) {
+    if (-not (Test-Path -LiteralPath $desktopPath)) {
+        continue
+    }
+
+    $desktopShortcut = Join-Path $desktopPath "Alchemy Industry Research Tool.lnk"
+    New-DesktopShortcut -ShortcutPath $desktopShortcut -TargetPath (Join-Path $installRoot "Alchemy Industry Research Tool.bat") -WorkingDirectory $installRoot
+    Write-Host "Desktop launcher created:"
+    Write-Host "  $desktopShortcut"
+    break
+}
 
 Write-InstallerStage "Installation complete."
-Write-Host "Desktop launcher created:"
-Write-Host "  $desktopShortcut"
 Write-Host ""
 Write-Host "If backend\.env is not present in the hidden install, the Start option will fail until secrets are provided."

@@ -22,6 +22,32 @@ function Quote-ForSingleQuotedPowerShell {
     return "'" + $Value.Replace("'", "''") + "'"
 }
 
+function Remove-StaleInstallerTempRoots {
+    param([int]$MaxAgeHours = 12)
+
+    $tempRoot = [System.IO.Path]::GetTempPath()
+    $cutoff = (Get-Date).AddHours(-1 * $MaxAgeHours)
+    $prefixes = @(
+        "alchemy-release-install-",
+        "alchemy-bootstrap-",
+        "alchemy-python-installer-"
+    )
+
+    foreach ($prefix in $prefixes) {
+        foreach ($entry in (Get-ChildItem -LiteralPath $tempRoot -Directory -ErrorAction SilentlyContinue)) {
+            if (-not $entry.Name.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+
+            if ($entry.LastWriteTime -gt $cutoff) {
+                continue
+            }
+
+            Remove-Item -LiteralPath $entry.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -90,7 +116,12 @@ function Invoke-ReleaseBootstrap {
             "-NoProfile",
             "-ExecutionPolicy", "Bypass",
             "-File", $bootstrapPath,
-            "-BundleUrl", $BundleUrl
+            "-BundleUrl", $BundleUrl,
+            "-OriginalUserName", $OriginalUserName,
+            "-OriginalUserProfile", $OriginalUserProfile,
+            "-OriginalLocalAppData", $OriginalLocalAppData,
+            "-OriginalOneDriveCommercial", $OriginalOneDriveCommercial,
+            "-OriginalOneDriveConsumer", $OriginalOneDriveConsumer
         )
 
         if ($EnvUrl) {
@@ -129,6 +160,11 @@ function Start-ElevatedHostedInstaller {
 `$EnvUrl = $(Quote-ForSingleQuotedPowerShell $EnvUrl)
 `$EnvBearerToken = $(Quote-ForSingleQuotedPowerShell $EnvBearerToken)
 `$ExpectedSha256 = $(Quote-ForSingleQuotedPowerShell $ExpectedSha256)
+`$OriginalUserName = $(Quote-ForSingleQuotedPowerShell $OriginalUserName)
+`$OriginalUserProfile = $(Quote-ForSingleQuotedPowerShell $OriginalUserProfile)
+`$OriginalLocalAppData = $(Quote-ForSingleQuotedPowerShell $OriginalLocalAppData)
+`$OriginalOneDriveCommercial = $(Quote-ForSingleQuotedPowerShell $OriginalOneDriveCommercial)
+`$OriginalOneDriveConsumer = $(Quote-ForSingleQuotedPowerShell $OriginalOneDriveConsumer)
 
 $scriptSource
 "@
@@ -153,6 +189,24 @@ $scriptSource
 }
 
 try {
+    Remove-StaleInstallerTempRoots
+
+    if (-not (Get-Variable -Name OriginalUserName -ErrorAction SilentlyContinue)) {
+        $OriginalUserName = $env:USERNAME
+    }
+    if (-not (Get-Variable -Name OriginalUserProfile -ErrorAction SilentlyContinue)) {
+        $OriginalUserProfile = $env:USERPROFILE
+    }
+    if (-not (Get-Variable -Name OriginalLocalAppData -ErrorAction SilentlyContinue)) {
+        $OriginalLocalAppData = [Environment]::GetFolderPath("LocalApplicationData")
+    }
+    if (-not (Get-Variable -Name OriginalOneDriveCommercial -ErrorAction SilentlyContinue)) {
+        $OriginalOneDriveCommercial = $env:OneDriveCommercial
+    }
+    if (-not (Get-Variable -Name OriginalOneDriveConsumer -ErrorAction SilentlyContinue)) {
+        $OriginalOneDriveConsumer = $env:OneDriveConsumer
+    }
+
     if (-not (Test-IsAdministrator)) {
         Start-ElevatedHostedInstaller
         return

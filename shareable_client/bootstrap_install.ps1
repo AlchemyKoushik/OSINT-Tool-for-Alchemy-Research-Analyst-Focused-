@@ -2,23 +2,100 @@ param(
     [Parameter(Mandatory = $true)][string]$BundleUrl,
     [string]$EnvUrl = "",
     [string]$EnvBearerToken = "",
-    [string]$ExpectedSha256 = ""
+    [string]$ExpectedSha256 = "",
+    [string]$OriginalUserName = "",
+    [string]$OriginalUserProfile = "",
+    [string]$OriginalLocalAppData = "",
+    [string]$OriginalOneDriveCommercial = "",
+    [string]$OriginalOneDriveConsumer = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$script:PythonProbeCode = @'
+import json
+import platform
+import struct
+import sys
+
+print(json.dumps({
+    "major": sys.version_info[0],
+    "minor": sys.version_info[1],
+    "micro": sys.version_info[2],
+    "bits": struct.calcsize("P") * 8,
+    "executable": sys.executable,
+    "implementation": platform.python_implementation(),
+}))
+'@
+
+$script:PythonVersionPolicyDescription = "Python 3.11-3.13 x64"
+$script:Python311FallbackVersion = "3.11.9"
+$script:Python311FallbackUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+$script:Python311FallbackSha256 = ""
+$script:InstallerLogPath = $null
+
+function Set-InstallerLogPath {
+    param([string]$Path)
+
+    $script:InstallerLogPath = $Path
+    if ($Path) {
+        $logDirectory = Split-Path -Parent $Path
+        if ($logDirectory) {
+            New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
+        }
+    }
+}
+
+function Write-InstallerLog {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    if (-not $script:InstallerLogPath) {
+        return
+    }
+
+    $line = "{0} {1}" -f (Get-Date -Format o), $Message
+    Add-Content -LiteralPath $script:InstallerLogPath -Value $line -Encoding UTF8
+}
 
 function Write-InstallerStage {
     param([Parameter(Mandatory = $true)][string]$Message)
 
     Write-Host ""
     Write-Host $Message
+    Write-InstallerLog -Message $Message
 }
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Remove-StaleInstallerTempRoots {
+    param([int]$MaxAgeHours = 12)
+
+    $tempRoot = [System.IO.Path]::GetTempPath()
+    $cutoff = (Get-Date).AddHours(-1 * $MaxAgeHours)
+    $prefixes = @(
+        "alchemy-release-install-",
+        "alchemy-bootstrap-",
+        "alchemy-python-installer-"
+    )
+
+    foreach ($prefix in $prefixes) {
+        foreach ($entry in (Get-ChildItem -LiteralPath $tempRoot -Directory -ErrorAction SilentlyContinue)) {
+            if (-not $entry.Name.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+
+            if ($entry.LastWriteTime -gt $cutoff) {
+                continue
+            }
+
+            Remove-Item -LiteralPath $entry.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Test-SupportedPythonVersion {
@@ -30,52 +107,203 @@ function Test-SupportedPythonVersion {
     return $Major -eq 3 -and $Minor -ge 11 -and $Minor -le 13
 }
 
+function Get-ProcessArgumentText {
+    param([string[]]$Arguments = @())
+
+    $encoded = foreach ($argument in $Arguments) {
+        if ($null -eq $argument) {
+            '""'
+            continue
+        }
+
+        $text = [string]$argument
+        if ($text -notmatch '[\s"]') {
+            $text
+            continue
+        }
+
+        '"' + (($text -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+    }
+
+    return ($encoded -join ' ')
+}
+
+function Invoke-ExternalProcessCapture {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments = @(),
+        [int]$TimeoutSeconds = 15
+    )
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $FilePath
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+
+    $argumentText = Get-ProcessArgumentText -Arguments $Arguments
+    if ($startInfo.PSObject.Properties.Name -contains "ArgumentList" -and $startInfo.ArgumentList) {
+        foreach ($argument in $Arguments) {
+            [void]$startInfo.ArgumentList.Add([string]$argument)
+        }
+    } else {
+        $startInfo.Arguments = $argumentText
+    }
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+
+    try {
+        $started = $process.Start()
+    } catch {
+        return [PSCustomObject]@{
+            Started         = $false
+            TimedOut        = $false
+            ExitCode        = $null
+            StdOut          = ""
+            StdErr          = ""
+            FilePath        = $FilePath
+            Arguments       = @($Arguments)
+            ArgumentText    = $argumentText
+            UseShellExecute = $startInfo.UseShellExecute
+            StartException  = $_.Exception.Message
+        }
+    }
+
+    if (-not $started) {
+        return [PSCustomObject]@{
+            Started         = $false
+            TimedOut        = $false
+            ExitCode        = $null
+            StdOut          = ""
+            StdErr          = ""
+            FilePath        = $FilePath
+            Arguments       = @($Arguments)
+            ArgumentText    = $argumentText
+            UseShellExecute = $startInfo.UseShellExecute
+            StartException  = "Process failed to start."
+        }
+    }
+
+    $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
+    if ($timedOut) {
+        try {
+            $process.Kill()
+        } catch {
+        }
+    } else {
+        $process.WaitForExit()
+    }
+
+    $stdOut = $process.StandardOutput.ReadToEnd()
+    $stdErr = $process.StandardError.ReadToEnd()
+
+    return [PSCustomObject]@{
+        Started         = $true
+        TimedOut        = $timedOut
+        ExitCode        = $(if ($timedOut) { $null } else { $process.ExitCode })
+        StdOut          = $stdOut
+        StdErr          = $stdErr
+        FilePath        = $FilePath
+        Arguments       = @($Arguments)
+        ArgumentText    = $argumentText
+        UseShellExecute = $startInfo.UseShellExecute
+        StartException  = ""
+    }
+}
+
+function Test-WindowsAppsAliasPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $expanded = [System.IO.Path]::GetFullPath($Path)
+    return $expanded -like "*\Microsoft\WindowsApps\*"
+}
+
 function Get-PythonProbe {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
         [string[]]$Arguments = @()
     )
 
-    $probeCode = @'
-import json
-import struct
-import sys
+    $probeArguments = @($Arguments + @("-c", $script:PythonProbeCode))
+    $result = Invoke-ExternalProcessCapture -FilePath $FilePath -Arguments $probeArguments
+    $stdoutText = [string]$result.StdOut
+    $stderrText = [string]$result.StdErr
 
-print(json.dumps({
-    "major": sys.version_info[0],
-    "minor": sys.version_info[1],
-    "micro": sys.version_info[2],
-    "bits": struct.calcsize("P") * 8,
-    "executable": sys.executable,
-}))
-'@
+    if (-not $result.Started) {
+        return [PSCustomObject]@{
+            Success = $false
+            Reason  = "Process failed to start: $($result.StartException)"
+            Detail  = $result
+        }
+    }
+
+    if ($result.TimedOut) {
+        return [PSCustomObject]@{
+            Success = $false
+            Reason  = "Process timed out after 15 seconds."
+            Detail  = $result
+        }
+    }
+
+    if ($result.ExitCode -ne 0) {
+        $message = "Process exited with code $($result.ExitCode)."
+        if ($stderrText.Trim()) {
+            $message += " stderr: $($stderrText.Trim())"
+        }
+        return [PSCustomObject]@{
+            Success = $false
+            Reason  = $message
+            Detail  = $result
+        }
+    }
+
+    if (-not $stdoutText.Trim()) {
+        $message = "Process returned empty stdout."
+        if ($stderrText.Trim()) {
+            $message += " stderr: $($stderrText.Trim())"
+        }
+        return [PSCustomObject]@{
+            Success = $false
+            Reason  = $message
+            Detail  = $result
+        }
+    }
 
     try {
-        $rawOutput = & $FilePath @($Arguments + @("-c", $probeCode)) 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return $null
-        }
-
-        $text = ($rawOutput | Out-String).Trim()
-        if (-not $text) {
-            return $null
-        }
-
-        $probe = $text | ConvertFrom-Json
-        $resolvedPath = [string]$probe.executable
-        if (-not $resolvedPath) {
-            return $null
-        }
-
+        $probe = $stdoutText | ConvertFrom-Json -ErrorAction Stop
+    } catch {
         return [PSCustomObject]@{
-            ExecutablePath = $resolvedPath
+            Success = $false
+            Reason  = "Probe output was not valid JSON."
+            Detail  = $result
+        }
+    }
+
+    $propertyNames = @($probe.PSObject.Properties.Name)
+    foreach ($requiredProperty in @("major", "minor", "micro", "bits", "executable")) {
+        if ($propertyNames -notcontains $requiredProperty) {
+            return [PSCustomObject]@{
+                Success = $false
+                Reason  = "Probe JSON did not include '$requiredProperty'."
+                Detail  = $result
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success = $true
+        Reason  = "Probe succeeded."
+        Detail  = $result
+        Probe   = [PSCustomObject]@{
+            ExecutablePath = [string]$probe.executable
             Major          = [int]$probe.major
             Minor          = [int]$probe.minor
             Micro          = [int]$probe.micro
             Bits           = [int]$probe.bits
+            Implementation = [string]$probe.implementation
         }
-    } catch {
-        return $null
     }
 }
 
@@ -91,32 +319,64 @@ function Test-PythonCandidateDetailed {
         $FilePath
     }
 
+    if (-not $FilePath) {
+        return [PSCustomObject]@{
+            Accepted = $false
+            Candidate = $candidateLabel
+            Reason = "Candidate path was empty."
+        }
+    }
+
+    if (Test-WindowsAppsAliasPath -Path $FilePath) {
+        return [PSCustomObject]@{
+            Accepted = $false
+            Candidate = $candidateLabel
+            Reason = "Rejected Microsoft Store WindowsApps alias path."
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $FilePath)) {
+        return [PSCustomObject]@{
+            Accepted = $false
+            Candidate = $candidateLabel
+            Reason = "File does not exist."
+        }
+    }
+
+    $fileInfo = Get-Item -LiteralPath $FilePath -ErrorAction SilentlyContinue
+    if (-not $fileInfo -or $fileInfo.PSIsContainer) {
+        return [PSCustomObject]@{
+            Accepted = $false
+            Candidate = $candidateLabel
+            Reason = "Candidate is not a real file."
+        }
+    }
+
     $probe = Get-PythonProbe -FilePath $FilePath -Arguments $Arguments
-    if (-not $probe) {
+    if (-not $probe.Success) {
         return [PSCustomObject]@{
-            Accepted = $false
-            Candidate = $candidateLabel
-            Reason = "Could not execute a real Python interpreter."
+            Accepted       = $false
+            Candidate      = $candidateLabel
+            Reason         = $probe.Reason
+            FileLength     = $fileInfo.Length
+            InvocationPath = $FilePath
+            ArgumentText   = $probe.Detail.ArgumentText
+            ExitCode       = $probe.Detail.ExitCode
+            StdOut         = $probe.Detail.StdOut
+            StdErr         = $probe.Detail.StdErr
         }
     }
 
-    if (-not (Test-SupportedPythonVersion -Major $probe.Major -Minor $probe.Minor)) {
+    $resolvedPath = [string]$probe.Probe.ExecutablePath
+    if (-not $resolvedPath) {
         return [PSCustomObject]@{
             Accepted = $false
             Candidate = $candidateLabel
-            Reason = "Unsupported Python version $($probe.Major).$($probe.Minor).$($probe.Micro)."
+            Reason = "Probe returned an empty executable path."
         }
     }
 
-    if ($probe.Bits -ne 64) {
-        return [PSCustomObject]@{
-            Accepted = $false
-            Candidate = $candidateLabel
-            Reason = "Interpreter is $($probe.Bits)-bit."
-        }
-    }
-
-    $resolvedPath = [System.IO.Path]::GetFullPath($probe.ExecutablePath)
+    $resolvedPath = [System.IO.Path]::GetFullPath($resolvedPath)
     if (-not (Test-Path -LiteralPath $resolvedPath)) {
         return [PSCustomObject]@{
             Accepted = $false
@@ -125,17 +385,47 @@ function Test-PythonCandidateDetailed {
         }
     }
 
+    if (Test-WindowsAppsAliasPath -Path $resolvedPath) {
+        return [PSCustomObject]@{
+            Accepted = $false
+            Candidate = $candidateLabel
+            Reason = "Probe resolved to a Microsoft Store WindowsApps alias."
+        }
+    }
+
+    if (-not (Test-SupportedPythonVersion -Major $probe.Probe.Major -Minor $probe.Probe.Minor)) {
+        return [PSCustomObject]@{
+            Accepted = $false
+            Candidate = $candidateLabel
+            Reason = "Unsupported Python version $($probe.Probe.Major).$($probe.Probe.Minor).$($probe.Probe.Micro). $script:PythonVersionPolicyDescription is supported."
+        }
+    }
+
+    if ($probe.Probe.Bits -ne 64) {
+        return [PSCustomObject]@{
+            Accepted = $false
+            Candidate = $candidateLabel
+            Reason = "Interpreter is $($probe.Probe.Bits)-bit. 64-bit Python is required."
+        }
+    }
+
     return [PSCustomObject]@{
-        Accepted    = $true
-        Candidate   = $candidateLabel
-        Reason      = "Accepted."
-        Path        = $resolvedPath
-        Version     = "{0}.{1}.{2}" -f $probe.Major, $probe.Minor, $probe.Micro
-        Major       = $probe.Major
-        Minor       = $probe.Minor
-        Micro       = $probe.Micro
-        Bits        = $probe.Bits
-        DisplayName = "$resolvedPath ($($probe.Major).$($probe.Minor).$($probe.Micro), $($probe.Bits)-bit)"
+        Accepted       = $true
+        Candidate      = $candidateLabel
+        Reason         = "Accepted."
+        Path           = $resolvedPath
+        Version        = "{0}.{1}.{2}" -f $probe.Probe.Major, $probe.Probe.Minor, $probe.Probe.Micro
+        Major          = $probe.Probe.Major
+        Minor          = $probe.Probe.Minor
+        Micro          = $probe.Probe.Micro
+        Bits           = $probe.Probe.Bits
+        DisplayName    = "$resolvedPath ($($probe.Probe.Major).$($probe.Probe.Minor).$($probe.Probe.Micro), $($probe.Probe.Bits)-bit)"
+        FileLength     = $fileInfo.Length
+        InvocationPath = $FilePath
+        ArgumentText   = $probe.Detail.ArgumentText
+        ExitCode       = $probe.Detail.ExitCode
+        StdOut         = $probe.Detail.StdOut
+        StdErr         = $probe.Detail.StdErr
     }
 }
 
@@ -156,27 +446,27 @@ function Test-PythonCandidate {
 function Add-PythonCandidate {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Candidates,
-        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$FilePath,
         [string[]]$Arguments = @()
     )
 
-    if ([string]::IsNullOrWhiteSpace($FilePath)) {
+    if (-not $FilePath) {
         return
     }
 
     $Candidates.Add([PSCustomObject]@{
-        FilePath  = $FilePath
-        Arguments = $Arguments
+        FilePath  = [string]$FilePath
+        Arguments = @($Arguments)
     })
 }
 
 function Add-PythonPathCandidates {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Candidates,
-        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$BasePath
+        [AllowEmptyString()][string]$BasePath
     )
 
-    if ([string]::IsNullOrWhiteSpace($BasePath)) {
+    if (-not $BasePath) {
         return
     }
 
@@ -185,29 +475,52 @@ function Add-PythonPathCandidates {
 }
 
 function Get-PythonCommandCandidates {
-    return @(
-        [PSCustomObject]@{ FilePath = "py"; Arguments = @("-3.11") },
-        [PSCustomObject]@{ FilePath = "py"; Arguments = @("-3") },
-        [PSCustomObject]@{ FilePath = "python"; Arguments = @() },
-        [PSCustomObject]@{ FilePath = "python.exe"; Arguments = @() },
-        [PSCustomObject]@{ FilePath = "python3"; Arguments = @() },
-        [PSCustomObject]@{ FilePath = "python3.exe"; Arguments = @() }
-    )
+    $candidates = New-Object System.Collections.Generic.List[object]
+
+    Add-PythonCandidate -Candidates $candidates -FilePath "py.exe" -Arguments @("-3.11")
+    Add-PythonCandidate -Candidates $candidates -FilePath "py.exe" -Arguments @("-3")
+    Add-PythonCandidate -Candidates $candidates -FilePath "python.exe"
+    Add-PythonCandidate -Candidates $candidates -FilePath "python3.exe"
+    Add-PythonCandidate -Candidates $candidates -FilePath "python"
+    Add-PythonCandidate -Candidates $candidates -FilePath "python3"
+
+    foreach ($commandName in @("py.exe", "py", "python.exe", "python", "python3.exe", "python3")) {
+        $command = Get-Command $commandName -ErrorAction SilentlyContinue
+        if ($command -and $command.Source) {
+            Add-PythonCandidate -Candidates $candidates -FilePath $command.Source
+        }
+    }
+
+    return $candidates
 }
 
 function Get-PythonLauncherPaths {
-    $paths = @()
+    $paths = New-Object System.Collections.Generic.List[string]
 
-    try {
-        $launcherOutput = & py -0p 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            foreach ($line in $launcherOutput) {
-                if ($line -match '([A-Za-z]:\\[^"]*python\.exe)') {
-                    $paths += $matches[1]
-                }
-            }
+    $pyCommand = Get-Command py.exe -ErrorAction SilentlyContinue
+    if (-not $pyCommand) {
+        $pyCommand = Get-Command py -ErrorAction SilentlyContinue
+    }
+
+    if (-not $pyCommand) {
+        return $paths
+    }
+
+    $launcherProbe = Invoke-ExternalProcessCapture -FilePath $pyCommand.Source -Arguments @("-0p")
+    if (-not $launcherProbe.Started -or $launcherProbe.TimedOut -or $launcherProbe.ExitCode -ne 0) {
+        return $paths
+    }
+
+    foreach ($line in (($launcherProbe.StdOut -split "`r?`n") | ForEach-Object { $_.Trim() })) {
+        if (-not $line) {
+            continue
         }
-    } catch {
+
+        $segments = $line -split "\s+", 2
+        $candidatePath = if ($segments.Count -gt 1) { $segments[1].Trim() } else { $segments[0] }
+        if ($candidatePath) {
+            $paths.Add($candidatePath)
+        }
     }
 
     return $paths
@@ -221,56 +534,102 @@ function Get-RegistryStringValue {
 
     try {
         $value = Get-ItemPropertyValue -LiteralPath $Path -Name $Name -ErrorAction Stop
-        if ($value -is [string] -and -not [string]::IsNullOrWhiteSpace($value)) {
-            return $value
+        if ($null -eq $value) {
+            return $null
         }
-    } catch {
-    }
 
-    return $null
+        $text = [string]$value
+        if ([string]::IsNullOrWhiteSpace($text)) {
+            return $null
+        }
+
+        return $text.Trim()
+    } catch {
+        return $null
+    }
 }
 
 function Get-RegistryDefaultStringValue {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    try {
-        $item = Get-Item -LiteralPath $Path -ErrorAction Stop
-        if ($item -is [Microsoft.Win32.RegistryKey]) {
-            $value = $item.GetValue("", $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-            if ($value -is [string] -and -not [string]::IsNullOrWhiteSpace($value)) {
-                return $value
+    return Get-RegistryStringValue -Path $Path -Name "(default)"
+}
+
+function Get-PythonRegistryCandidates {
+    param([string[]]$RegistryRoots = @(
+        "HKLM:\SOFTWARE\Python\PythonCore",
+        "HKLM:\SOFTWARE\WOW6432Node\Python\PythonCore",
+        "HKCU:\SOFTWARE\Python\PythonCore"
+    ))
+
+    $candidates = New-Object System.Collections.Generic.List[object]
+
+    foreach ($registryRoot in $RegistryRoots) {
+        foreach ($key in (Get-ChildItem -Path $registryRoot -ErrorAction SilentlyContinue)) {
+            $versionInstallPath = Get-RegistryStringValue -Path $key.PSPath -Name "InstallPath"
+            if ($versionInstallPath) {
+                Add-PythonPathCandidates -Candidates $candidates -BasePath $versionInstallPath
+            }
+
+            $installPathSubkey = Join-Path $key.PSPath "InstallPath"
+            if (-not (Test-Path -LiteralPath $installPathSubkey)) {
+                continue
+            }
+
+            $subkeyInstallPath = Get-RegistryDefaultStringValue -Path $installPathSubkey
+            if ($subkeyInstallPath) {
+                Add-PythonPathCandidates -Candidates $candidates -BasePath $subkeyInstallPath
+            }
+
+            $executablePath = Get-RegistryStringValue -Path $installPathSubkey -Name "ExecutablePath"
+            if ($executablePath) {
+                Add-PythonCandidate -Candidates $candidates -FilePath $executablePath
             }
         }
-    } catch {
     }
 
-    return $null
+    return $candidates
+}
+
+function Get-DeterministicPython311Candidates {
+    param([string]$LocalAppData = [Environment]::GetFolderPath("LocalApplicationData"))
+
+    $candidates = New-Object System.Collections.Generic.List[object]
+
+    foreach ($basePath in @(
+        (Join-Path $env:ProgramFiles "Python311"),
+        $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python311" })
+    )) {
+        if ($basePath) {
+            Add-PythonPathCandidates -Candidates $candidates -BasePath $basePath
+        }
+    }
+
+    return $candidates
 }
 
 function Get-KnownPythonInstallPaths {
+    param([string]$LocalAppData = [Environment]::GetFolderPath("LocalApplicationData"))
+
     $candidates = New-Object System.Collections.Generic.List[object]
-    $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
-    $directCandidateRoots = @(
+
+    foreach ($pathRoot in @(
         (Join-Path $env:ProgramFiles "Python311"),
         (Join-Path $env:ProgramFiles "Python312"),
         (Join-Path $env:ProgramFiles "Python313"),
-        (Join-Path $localAppData "Programs\Python\Python311"),
-        (Join-Path $localAppData "Programs\Python\Python312"),
-        (Join-Path $localAppData "Programs\Python\Python313")
-    )
-
-    foreach ($pathRoot in $directCandidateRoots) {
+        $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python311" }),
+        $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python312" }),
+        $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python313" })
+    )) {
         if ($pathRoot) {
             Add-PythonPathCandidates -Candidates $candidates -BasePath $pathRoot
         }
     }
 
-    $globRoots = @(
+    foreach ($pattern in @(
         (Join-Path $env:ProgramFiles "Python*"),
-        (Join-Path $localAppData "Programs\Python\Python*")
-    )
-
-    foreach ($pattern in $globRoots) {
+        $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python*" })
+    )) {
         if (-not $pattern) {
             continue
         }
@@ -280,32 +639,8 @@ function Get-KnownPythonInstallPaths {
         }
     }
 
-    $registryRoots = @(
-        "HKLM:\SOFTWARE\Python\PythonCore",
-        "HKLM:\SOFTWARE\WOW6432Node\Python\PythonCore",
-        "HKCU:\SOFTWARE\Python\PythonCore"
-    )
-
-    foreach ($registryRoot in $registryRoots) {
-        foreach ($key in (Get-ChildItem -Path $registryRoot -ErrorAction SilentlyContinue)) {
-            $versionInstallPath = Get-RegistryStringValue -Path $key.PSPath -Name "InstallPath"
-            if ($versionInstallPath) {
-                Add-PythonPathCandidates -Candidates $candidates -BasePath $versionInstallPath
-            }
-
-            $installPathSubkey = Join-Path $key.PSPath "InstallPath"
-            if (Test-Path -LiteralPath $installPathSubkey) {
-                $subkeyInstallPath = Get-RegistryDefaultStringValue -Path $installPathSubkey
-                if ($subkeyInstallPath) {
-                    Add-PythonPathCandidates -Candidates $candidates -BasePath $subkeyInstallPath
-                }
-
-                $executablePath = Get-RegistryStringValue -Path $installPathSubkey -Name "ExecutablePath"
-                if ($executablePath) {
-                    Add-PythonCandidate -Candidates $candidates -FilePath $executablePath
-                }
-            }
-        }
+    foreach ($candidate in (Get-PythonRegistryCandidates)) {
+        $candidates.Add($candidate)
     }
 
     foreach ($path in (Get-PythonLauncherPaths)) {
@@ -318,13 +653,26 @@ function Get-KnownPythonInstallPaths {
 function Write-PythonDiscoveryDiagnostics {
     param(
         [Parameter(Mandatory = $true)][string]$Context,
-        [Parameter(Mandatory = $true)][object[]]$Attempts
+        [Parameter(Mandatory = $true)][object[]]$Attempts,
+        [string]$OriginalUserName = "",
+        [string]$OriginalUserProfile = "",
+        [string]$OriginalLocalAppData = ""
     )
 
     Write-Host ""
     Write-Host "$Context diagnostics:"
-    Write-Host "  User: $env:USERNAME"
-    Write-Host "  LocalAppData: $([Environment]::GetFolderPath('LocalApplicationData'))"
+    Write-Host "  Current user: $env:USERNAME"
+    Write-Host "  Current userprofile: $env:USERPROFILE"
+    Write-Host "  Current LocalAppData: $([Environment]::GetFolderPath('LocalApplicationData'))"
+    if ($OriginalUserName) {
+        Write-Host "  Original user: $OriginalUserName"
+    }
+    if ($OriginalUserProfile) {
+        Write-Host "  Original userprofile: $OriginalUserProfile"
+    }
+    if ($OriginalLocalAppData) {
+        Write-Host "  Original LocalAppData: $OriginalLocalAppData"
+    }
 
     $pyCommand = Get-Command py.exe -ErrorAction SilentlyContinue
     if (-not $pyCommand) {
@@ -352,26 +700,25 @@ function Select-BestPythonCandidate {
         Select-Object -First 1
 }
 
-function Resolve-PythonInterpreter {
+function Resolve-PythonInterpreterFromCandidateList {
     param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Candidates,
         [switch]$EmitDiagnostics,
-        [string]$DiagnosticContext = "Python discovery"
+        [string]$DiagnosticContext = "Python discovery",
+        [string]$OriginalUserName = "",
+        [string]$OriginalUserProfile = "",
+        [string]$OriginalLocalAppData = ""
     )
 
     $verifiedCandidates = New-Object System.Collections.Generic.List[object]
     $attempts = New-Object System.Collections.Generic.List[object]
-    $allCandidates = New-Object System.Collections.Generic.List[object]
-
-    foreach ($candidate in (Get-PythonCommandCandidates)) {
-        $allCandidates.Add($candidate)
-    }
-
-    foreach ($candidate in (Get-KnownPythonInstallPaths)) {
-        $allCandidates.Add($candidate)
-    }
-
     $seen = @{}
-    foreach ($candidate in $allCandidates) {
+
+    foreach ($candidate in $Candidates) {
+        if (-not $candidate) {
+            continue
+        }
+
         $arguments = @($candidate.Arguments)
         $key = "$($candidate.FilePath)|$($arguments -join ' ')"
         if ($seen.ContainsKey($key)) {
@@ -387,7 +734,12 @@ function Resolve-PythonInterpreter {
     }
 
     if ($EmitDiagnostics) {
-        Write-PythonDiscoveryDiagnostics -Context $DiagnosticContext -Attempts $attempts
+        Write-PythonDiscoveryDiagnostics `
+            -Context $DiagnosticContext `
+            -Attempts $attempts `
+            -OriginalUserName $OriginalUserName `
+            -OriginalUserProfile $OriginalUserProfile `
+            -OriginalLocalAppData $OriginalLocalAppData
     }
 
     $uniqueCandidates = $verifiedCandidates |
@@ -401,10 +753,63 @@ function Resolve-PythonInterpreter {
     return Select-BestPythonCandidate -Candidates $uniqueCandidates
 }
 
-function Resolve-PythonInterpreterAfterInstall {
-    param([switch]$EmitDiagnostics)
+function Resolve-PythonInterpreter {
+    param(
+        [switch]$EmitDiagnostics,
+        [string]$DiagnosticContext = "Python discovery",
+        [string]$OriginalUserName = "",
+        [string]$OriginalUserProfile = "",
+        [string]$OriginalLocalAppData = ""
+    )
 
-    return Resolve-PythonInterpreter -EmitDiagnostics:$EmitDiagnostics -DiagnosticContext "Post-install Python discovery"
+    $allCandidates = New-Object System.Collections.Generic.List[object]
+
+    foreach ($candidate in (Get-PythonCommandCandidates)) {
+        $allCandidates.Add($candidate)
+    }
+
+    foreach ($candidate in (Get-KnownPythonInstallPaths -LocalAppData $OriginalLocalAppData)) {
+        $allCandidates.Add($candidate)
+    }
+
+    return Resolve-PythonInterpreterFromCandidateList `
+        -Candidates $allCandidates `
+        -EmitDiagnostics:$EmitDiagnostics `
+        -DiagnosticContext $DiagnosticContext `
+        -OriginalUserName $OriginalUserName `
+        -OriginalUserProfile $OriginalUserProfile `
+        -OriginalLocalAppData $OriginalLocalAppData
+}
+
+function Resolve-PythonInterpreterAfterInstall {
+    param(
+        [switch]$EmitDiagnostics,
+        [string]$OriginalUserName = "",
+        [string]$OriginalUserProfile = "",
+        [string]$OriginalLocalAppData = "",
+        [object[]]$PreferredCandidates = @()
+    )
+
+    if ($PreferredCandidates -and $PreferredCandidates.Count -gt 0) {
+        $preferredPython = Resolve-PythonInterpreterFromCandidateList `
+            -Candidates $PreferredCandidates `
+            -EmitDiagnostics:$EmitDiagnostics `
+            -DiagnosticContext "Deterministic post-install Python discovery" `
+            -OriginalUserName $OriginalUserName `
+            -OriginalUserProfile $OriginalUserProfile `
+            -OriginalLocalAppData $OriginalLocalAppData
+
+        if ($preferredPython) {
+            return $preferredPython
+        }
+    }
+
+    return Resolve-PythonInterpreter `
+        -EmitDiagnostics:$EmitDiagnostics `
+        -DiagnosticContext "Post-install Python discovery" `
+        -OriginalUserName $OriginalUserName `
+        -OriginalUserProfile $OriginalUserProfile `
+        -OriginalLocalAppData $OriginalLocalAppData
 }
 
 function Install-Python311WithWinget {
@@ -414,7 +819,10 @@ function Install-Python311WithWinget {
     }
 
     if (-not $wingetCommand) {
-        return $false
+        return [PSCustomObject]@{
+            Success = $false
+            Reason  = "winget not found."
+        }
     }
 
     Write-InstallerStage "Python 3.11 not found. Installing with winget..."
@@ -433,17 +841,48 @@ function Install-Python311WithWinget {
         $arguments += @("--scope", "machine")
     }
 
-    & $wingetCommand.Source @arguments | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        return $false
+    $result = Invoke-ExternalProcessCapture -FilePath $wingetCommand.Source -Arguments $arguments -TimeoutSeconds 1800
+    if (-not $result.Started) {
+        return [PSCustomObject]@{
+            Success = $false
+            Reason  = "winget failed to start: $($result.StartException)"
+            Result  = $result
+        }
     }
 
-    return $true
+    if ($result.TimedOut) {
+        return [PSCustomObject]@{
+            Success = $false
+            Reason  = "winget timed out."
+            Result  = $result
+        }
+    }
+
+    if ($result.StdOut.Trim()) {
+        Write-Host $result.StdOut.Trim()
+    }
+    if ($result.StdErr.Trim()) {
+        Write-Host $result.StdErr.Trim()
+    }
+
+    if ($result.ExitCode -ne 0) {
+        return [PSCustomObject]@{
+            Success = $false
+            Reason  = "winget exited with code $($result.ExitCode)."
+            Result  = $result
+        }
+    }
+
+    return [PSCustomObject]@{
+        Success = $true
+        Reason  = "winget install completed."
+        Result  = $result
+    }
 }
 
 function Install-Python311FromPythonOrg {
-    $pythonVersion = "3.11.9"
-    $installerUrl = "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-amd64.exe"
+    $pythonVersion = $script:Python311FallbackVersion
+    $installerUrl = $script:Python311FallbackUrl
     $targetDir = Join-Path $env:ProgramFiles "Python311"
     $tempRoot = Join-Path $env:TEMP ("alchemy-python-installer-" + [guid]::NewGuid().ToString("N"))
     $installerPath = Join-Path $tempRoot "python-$pythonVersion-amd64.exe"
@@ -464,6 +903,13 @@ function Install-Python311FromPythonOrg {
 
         if (-not (Test-Path -LiteralPath $installerPath)) {
             throw "Python installer download did not produce a file."
+        }
+
+        if ($script:Python311FallbackSha256) {
+            $downloadedHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($downloadedHash -ne $script:Python311FallbackSha256.ToLowerInvariant()) {
+                throw "Downloaded Python installer SHA256 mismatch."
+            }
         }
 
         $signature = Get-AuthenticodeSignature -LiteralPath $installerPath
@@ -494,20 +940,35 @@ function Install-Python311FromPythonOrg {
     } finally {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
+
+    return [PSCustomObject]@{
+        Success = $true
+        Reason  = "python.org install completed."
+        Path    = (Join-Path $targetDir "python.exe")
+    }
 }
 
 function Ensure-PythonInterpreter {
     Write-InstallerStage "Checking Python 3.11..."
 
-    $python = Resolve-PythonInterpreter
+    $python = Resolve-PythonInterpreter `
+        -OriginalUserName $OriginalUserName `
+        -OriginalUserProfile $OriginalUserProfile `
+        -OriginalLocalAppData $OriginalLocalAppData
     if ($python) {
         Write-Host "Verified Python: $($python.DisplayName)"
         return $python
     }
 
-    $installedWithWinget = Install-Python311WithWinget
-    if ($installedWithWinget) {
-        $python = Resolve-PythonInterpreterAfterInstall -EmitDiagnostics
+    $wingetInstall = Install-Python311WithWinget
+    if ($wingetInstall.Success) {
+        $preferredCandidates = Get-DeterministicPython311Candidates -LocalAppData $OriginalLocalAppData
+        $python = Resolve-PythonInterpreterAfterInstall `
+            -EmitDiagnostics `
+            -OriginalUserName $OriginalUserName `
+            -OriginalUserProfile $OriginalUserProfile `
+            -OriginalLocalAppData $OriginalLocalAppData `
+            -PreferredCandidates $preferredCandidates
         if ($python) {
             Write-Host "Python installed successfully."
             Write-Host "Verified Python: $($python.DisplayName)"
@@ -518,9 +979,14 @@ function Ensure-PythonInterpreter {
         Write-Host "Python was installed by winget, but no supported interpreter could be verified yet. Falling back to the official python.org installer..."
     }
 
-    Install-Python311FromPythonOrg
+    $pythonOrgInstall = Install-Python311FromPythonOrg
 
-    $python = Resolve-PythonInterpreterAfterInstall -EmitDiagnostics
+    $python = Resolve-PythonInterpreterAfterInstall `
+        -EmitDiagnostics `
+        -OriginalUserName $OriginalUserName `
+        -OriginalUserProfile $OriginalUserProfile `
+        -OriginalLocalAppData $OriginalLocalAppData `
+        -PreferredCandidates @([PSCustomObject]@{ FilePath = $pythonOrgInstall.Path; Arguments = @() })
     if (-not $python) {
         throw "Python installation completed, but no supported 64-bit Python interpreter could be verified."
     }
@@ -538,12 +1004,19 @@ function Get-TempPath {
 
 function Get-FileSha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
+
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
+
+Remove-StaleInstallerTempRoots
 
 $tempRoot = Get-TempPath
 $zipPath = Join-Path $tempRoot "bundle.zip"
 $extractRoot = Join-Path $tempRoot "bundle"
+$logPath = Join-Path $tempRoot "bootstrap_install.log"
+Set-InstallerLogPath -Path $logPath
+
+$preserveTempRoot = $true
 
 try {
     $pythonInfo = Ensure-PythonInterpreter
@@ -578,15 +1051,28 @@ try {
         throw "Installer script not found in extracted bundle."
     }
 
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $installerPath -ResolvedPythonPath $pythonInfo.Path
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installerPath `
+        -ResolvedPythonPath $pythonInfo.Path `
+        -OriginalUserName $OriginalUserName `
+        -OriginalUserProfile $OriginalUserProfile `
+        -OriginalLocalAppData $OriginalLocalAppData `
+        -OriginalOneDriveCommercial $OriginalOneDriveCommercial `
+        -OriginalOneDriveConsumer $OriginalOneDriveConsumer
     if ($LASTEXITCODE -ne 0) {
         throw "Client installation failed with exit code $LASTEXITCODE."
     }
+
+    $preserveTempRoot = $false
 } catch {
     Write-Host ""
     Write-Host "Bootstrap stage failed." -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host "Bootstrap log: $logPath" -ForegroundColor Yellow
+    Write-Host "Bootstrap temp root: $tempRoot" -ForegroundColor Yellow
+    Write-InstallerLog -Message ("ERROR: " + $_.Exception.Message)
     throw
 } finally {
-    Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $preserveTempRoot) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }

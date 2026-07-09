@@ -36,7 +36,7 @@ $repoRoot = Split-Path -Parent $scriptRoot
 $resolvedRepoRoot = (Resolve-Path $repoRoot).Path
 
 if (-not $OutputRoot) {
-    $OutputRoot = Join-Path $scriptRoot "dist\alchemy-shareable-client"
+    $OutputRoot = Join-Path $scriptRoot "dist\alchemy-shareable-client-build"
 }
 
 $resolvedOutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
