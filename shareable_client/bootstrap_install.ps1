@@ -155,7 +155,7 @@ function Test-PythonCandidate {
 
 function Add-PythonCandidate {
     param(
-        [Parameter(Mandatory = $true)][System.Collections.Generic.List[object]]$Candidates,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Candidates,
         [Parameter(Mandatory = $true)][string]$FilePath,
         [string[]]$Arguments = @()
     )
@@ -172,8 +172,8 @@ function Add-PythonCandidate {
 
 function Add-PythonPathCandidates {
     param(
-        [Parameter(Mandatory = $true)][System.Collections.Generic.List[object]]$Candidates,
-        [Parameter(Mandatory = $true)][string]$BasePath
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Candidates,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$BasePath
     )
 
     if ([string]::IsNullOrWhiteSpace($BasePath)) {
