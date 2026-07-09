@@ -41,6 +41,24 @@ function Start-CleanupProcess {
     Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $cleanupCommand) -WindowStyle Hidden | Out-Null
 }
 
+function Wait-OnFailure {
+    param(
+        [Parameter(Mandatory = $true)][System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    Write-Host ""
+    Write-Host "Installation failed." -ForegroundColor Red
+    Write-Host $ErrorRecord.Exception.Message -ForegroundColor Red
+
+    if ($ErrorRecord.ScriptStackTrace) {
+        Write-Host ""
+        Write-Host $ErrorRecord.ScriptStackTrace -ForegroundColor DarkYellow
+    }
+
+    Write-Host ""
+    [void](Read-Host "Installation failed. Press Enter to close this window.")
+}
+
 function Invoke-ReleaseBootstrap {
     if ($BootstrapUrl -like "SET_*" -or $BundleUrl -like "SET_*") {
         throw "This hosted install.ps1 is not configured yet. Populate BootstrapUrl and BundleUrl before uploading it."
@@ -134,9 +152,14 @@ $scriptSource
     Start-CleanupProcess -Path $tempRoot
 }
 
-if (-not (Test-IsAdministrator)) {
-    Start-ElevatedHostedInstaller
-    return
-}
+try {
+    if (-not (Test-IsAdministrator)) {
+        Start-ElevatedHostedInstaller
+        return
+    }
 
-Invoke-ReleaseBootstrap
+    Invoke-ReleaseBootstrap
+} catch {
+    Wait-OnFailure -ErrorRecord $_
+    exit 1
+}
