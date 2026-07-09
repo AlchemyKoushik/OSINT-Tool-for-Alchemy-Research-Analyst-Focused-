@@ -141,6 +141,40 @@ function Get-PythonLauncherPaths {
     return $paths
 }
 
+function Get-RegistryStringValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    try {
+        $value = Get-ItemPropertyValue -LiteralPath $Path -Name $Name -ErrorAction Stop
+        if ($value -is [string] -and -not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    } catch {
+    }
+
+    return $null
+}
+
+function Get-RegistryDefaultStringValue {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    try {
+        $item = Get-Item -LiteralPath $Path -ErrorAction Stop
+        if ($item -is [Microsoft.Win32.RegistryKey]) {
+            $value = $item.GetValue("", $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+            if ($value -is [string] -and -not [string]::IsNullOrWhiteSpace($value)) {
+                return $value
+            }
+        }
+    } catch {
+    }
+
+    return $null
+}
+
 function Get-KnownPythonInstallPaths {
     $candidates = New-Object System.Collections.Generic.List[string]
     $directCandidates = @(
@@ -175,14 +209,28 @@ function Get-KnownPythonInstallPaths {
 
     $registryRoots = @(
         "HKLM:\SOFTWARE\Python\PythonCore",
+        "HKLM:\SOFTWARE\WOW6432Node\Python\PythonCore",
         "HKCU:\SOFTWARE\Python\PythonCore"
     )
 
     foreach ($registryRoot in $registryRoots) {
         foreach ($key in (Get-ChildItem -Path $registryRoot -ErrorAction SilentlyContinue)) {
-            $installPath = (Get-ItemProperty -LiteralPath $key.PSPath -Name InstallPath -ErrorAction SilentlyContinue).InstallPath
-            if ($installPath) {
-                $candidates.Add((Join-Path $installPath "python.exe"))
+            $versionInstallPath = Get-RegistryStringValue -Path $key.PSPath -Name "InstallPath"
+            if ($versionInstallPath) {
+                $candidates.Add((Join-Path $versionInstallPath "python.exe"))
+            }
+
+            $installPathSubkey = Join-Path $key.PSPath "InstallPath"
+            if (Test-Path -LiteralPath $installPathSubkey) {
+                $subkeyInstallPath = Get-RegistryDefaultStringValue -Path $installPathSubkey
+                if ($subkeyInstallPath) {
+                    $candidates.Add((Join-Path $subkeyInstallPath "python.exe"))
+                }
+
+                $executablePath = Get-RegistryStringValue -Path $installPathSubkey -Name "ExecutablePath"
+                if ($executablePath) {
+                    $candidates.Add($executablePath)
+                }
             }
         }
     }
