@@ -4,6 +4,7 @@
 
 - Keeps the source repo private.
 - Builds a zip bundle for Windows installation.
+- Uses a small hosted `install.ps1` Release asset as the one-line client entry point.
 - Lets you host the bundle anywhere reachable by HTTPS.
 - Lets you fetch `backend/.env` from a separate secret URL at install time.
 - Installs the app into a hidden `%LOCALAPPDATA%\AlchemyIndustryResearchTool` folder.
@@ -43,6 +44,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\shareable_client\build_bun
 Prefer:
 
 - private GitHub repo for source,
+- a GitHub Release asset named `install.ps1` for the one-line client command,
 - `bootstrap_install.ps1` hosted on an HTTPS URL you control,
 - the built zip hosted on an HTTPS URL you control,
 - a separate HTTPS endpoint that returns the `.env` content only for a short-lived install token.
@@ -52,8 +54,15 @@ Prefer:
 This is the command format you will share with clients:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $tmp = Join-Path $env:TEMP ('alchemy-bootstrap-' + [guid]::NewGuid().ToString('N') + '.ps1'); Invoke-WebRequest -Uri 'https://your-host.example.com/bootstrap_install.ps1' -OutFile $tmp; & powershell -NoProfile -ExecutionPolicy Bypass -File $tmp -BundleUrl 'https://your-host.example.com/alchemy-shareable-client-build.zip' -EnvUrl 'https://your-secrets.example.com/client-env' -EnvBearerToken 'ONE_TIME_INSTALL_TOKEN' -ExpectedSha256 'PUT_BUNDLE_SHA256_HERE' }"
+irm "https://github.com/<owner>/<repo>/releases/download/<tag>/install.ps1" | iex
 ```
+
+That hosted `install.ps1` should:
+
+- request Administrator permission first,
+- download `bootstrap_install.ps1`,
+- pass through `BundleUrl`, `EnvUrl`, `EnvBearerToken`, and `ExpectedSha256`,
+- let `bootstrap_install.ps1` verify or install Python before downloading the bundle.
 
 ## Generate the command automatically
 
@@ -65,11 +74,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\shareable_client\new_clien
   -BundleUrl "https://your-host.example.com/alchemy-shareable-client-build.zip" `
   -EnvUrl "https://your-secrets.example.com/client-env" `
   -EnvBearerToken "ONE_TIME_INSTALL_TOKEN" `
-  -ExpectedSha256 "PUT_BUNDLE_SHA256_HERE"
+  -ExpectedSha256 "PUT_BUNDLE_SHA256_HERE" `
+  -InstallScriptUrl "https://github.com/<owner>/<repo>/releases/download/<tag>/install.ps1" `
+  -OutputInstallScriptPath ".\shareable_client\dist\install.ps1"
 ```
+
+The helper prints:
+
+- the final hosted `install.ps1` content to upload as a Release asset,
+- the short client command: `irm "<GitHub Release URL>/install.ps1" | iex`
 
 ## Notes
 
 - If you point `REDIS_URL` in `.env` to your hosted Redis, the client machine does not need a local Redis install.
 - `R2` values can remain in `.env` and be fetched from your secret endpoint at install time.
-- The installer creates a hidden install folder but does not claim strong local anti-reverse-engineering protection.
+- The installer prefers Python 3.11, accepts another supported 64-bit Python 3.11-3.13 if already present, and falls back to the last python.org Windows x64 installer for Python 3.11 when `winget` is unavailable.

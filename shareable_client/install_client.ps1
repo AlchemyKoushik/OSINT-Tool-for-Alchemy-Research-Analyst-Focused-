@@ -1,5 +1,11 @@
+param(
+    [string]$ResolvedPythonPath = ""
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "installer_common.ps1")
 
 function Invoke-RobocopyCopy {
     param(
@@ -14,33 +20,30 @@ function Invoke-RobocopyCopy {
     }
 }
 
-function Get-PythonCommand {
-    $candidates = @(
-        [PSCustomObject]@{ FilePath = "py"; Arguments = @("-3.11") },
-        [PSCustomObject]@{ FilePath = "py"; Arguments = @("-3") },
-        [PSCustomObject]@{ FilePath = "python"; Arguments = @() }
+function Ensure-ElevatedInstaller {
+    if (Test-IsAdministrator) {
+        return
+    }
+
+    Write-InstallerStage "Requesting administrator permission..."
+
+    $argumentList = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $PSCommandPath
     )
 
-    foreach ($candidate in $candidates) {
-        try {
-            $null = & $candidate.FilePath @($candidate.Arguments + @("--version")) 2>$null
-            if ($LASTEXITCODE -eq 0) {
-                return $candidate
-            }
-        } catch {
-        }
+    if ($ResolvedPythonPath) {
+        $argumentList += @("-ResolvedPythonPath", $ResolvedPythonPath)
     }
 
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host "Python was not found. Installing Python 3.11 with winget..."
-        # Do not let winget success output become part of this function's return value.
-        & winget install -e --id Python.Python.3.11 --accept-package-agreements --accept-source-agreements | Out-Host
-        if ($LASTEXITCODE -eq 0) {
-            return [PSCustomObject]@{ FilePath = "py"; Arguments = @("-3.11") }
-        }
+    try {
+        $null = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $argumentList -PassThru
+    } catch {
+        throw "Administrator permission was not granted. Installation cancelled."
     }
 
-    throw "Python 3.11+ is required for installation."
+    exit 0
 }
 
 function New-DesktopShortcut {
@@ -74,12 +77,22 @@ $installRoot = Join-Path $env:LOCALAPPDATA "AlchemyIndustryResearchTool"
 $appRoot = Join-Path $installRoot "app"
 $runRoot = Join-Path $installRoot "run"
 $desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Alchemy Industry Research Tool.lnk"
-$pythonInfo = Get-PythonCommand
+
+Ensure-ElevatedInstaller
+
+if ($ResolvedPythonPath) {
+    $pythonInfo = Test-PythonCandidate -FilePath $ResolvedPythonPath
+    if (-not $pythonInfo) {
+        Write-Host "The provided Python path is not usable anymore. Resolving Python again..."
+        $pythonInfo = Ensure-PythonInterpreter
+    }
+} else {
+    $pythonInfo = Ensure-PythonInterpreter
+}
 
 New-Item -ItemType Directory -Force -Path $installRoot, $runRoot | Out-Null
 
-Write-Host ""
-Write-Host "Installing Alchemy Industry Research Tool..."
+Write-InstallerStage "Installing Alchemy Industry Research Tool..."
 Write-Host "Install path: $installRoot"
 
 Invoke-RobocopyCopy -Source $payloadSupportRoot -Destination $installRoot
@@ -89,8 +102,8 @@ attrib +h $installRoot | Out-Null
 
 $venvPath = Join-Path $installRoot ".venv"
 if (-not (Test-Path -LiteralPath $venvPath)) {
-    Write-Host "Creating local virtual environment..."
-    & $pythonInfo.FilePath @($pythonInfo.Arguments + @("-m", "venv", $venvPath))
+    Write-InstallerStage "Creating local virtual environment..."
+    & $pythonInfo.Path -m venv $venvPath
     if ($LASTEXITCODE -ne 0) {
         throw "Virtual environment creation failed."
     }
@@ -101,12 +114,17 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
     throw "Installed Python environment is missing: $pythonExe"
 }
 
+& $pythonExe -m ensurepip --upgrade | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "ensurepip failed for the virtual environment."
+}
+
 $requirementsFile = Join-Path $appRoot "backend\requirements.txt"
 if (-not (Test-Path -LiteralPath $requirementsFile)) {
     throw "Package payload is incomplete. Missing requirements file: $requirementsFile"
 }
 
-Write-Host "Installing Python requirements..."
+Write-InstallerStage "Installing application dependencies..."
 & $pythonExe -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) {
     throw "pip upgrade failed."
@@ -116,7 +134,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Dependency installation failed."
 }
 
-Write-Host "Installing Playwright Chromium runtime..."
+Write-InstallerStage "Installing Playwright Chromium runtime..."
 & $pythonExe -m playwright install chromium
 if ($LASTEXITCODE -ne 0) {
     throw "Playwright Chromium installation failed."
@@ -124,8 +142,7 @@ if ($LASTEXITCODE -ne 0) {
 
 New-DesktopShortcut -ShortcutPath $desktopShortcut -TargetPath (Join-Path $installRoot "Alchemy Industry Research Tool.bat") -WorkingDirectory $installRoot
 
-Write-Host ""
-Write-Host "Installation complete."
+Write-InstallerStage "Installation complete."
 Write-Host "Desktop launcher created:"
 Write-Host "  $desktopShortcut"
 Write-Host ""

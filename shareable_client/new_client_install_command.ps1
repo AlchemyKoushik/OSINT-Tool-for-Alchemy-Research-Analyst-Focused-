@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory = $true)][string]$BundleUrl,
     [string]$EnvUrl = "",
     [string]$EnvBearerToken = "",
-    [string]$ExpectedSha256 = ""
+    [string]$ExpectedSha256 = "",
+    [string]$InstallScriptUrl = "",
+    [string]$OutputInstallScriptPath = ""
 )
 
 Set-StrictMode -Version Latest
@@ -14,30 +16,31 @@ function Quote-ForSingleQuotedPowerShell {
     return "'" + $Value.Replace("'", "''") + "'"
 }
 
-$commandParts = @(
-    "powershell -NoProfile -ExecutionPolicy Bypass -Command",
-    '"& {',
-    '`$tmp = Join-Path `$env:TEMP (''alchemy-bootstrap-'' + [guid]::NewGuid().ToString(''N'') + ''.ps1'');',
-    "Invoke-WebRequest -Uri $(Quote-ForSingleQuotedPowerShell $BootstrapUrl) -OutFile ``$tmp;",
-    "& powershell -NoProfile -ExecutionPolicy Bypass -File ``$tmp -BundleUrl $(Quote-ForSingleQuotedPowerShell $BundleUrl)"
-)
-
-if ($EnvUrl) {
-    $commandParts += "-EnvUrl $(Quote-ForSingleQuotedPowerShell $EnvUrl)"
+function New-HostedInstallScriptContent {
+    $template = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'install.ps1') -Raw
+    $content = $template.Replace('SET_BOOTSTRAP_URL', $BootstrapUrl)
+    $content = $content.Replace('SET_BUNDLE_URL', $BundleUrl)
+    $content = $content.Replace('SET_ENV_URL', $EnvUrl)
+    $content = $content.Replace('SET_ENV_BEARER_TOKEN', $EnvBearerToken)
+    $content = $content.Replace('SET_EXPECTED_SHA256', $ExpectedSha256)
+    return $content
 }
 
-if ($EnvBearerToken) {
-    $commandParts += "-EnvBearerToken $(Quote-ForSingleQuotedPowerShell $EnvBearerToken)"
+$installScriptContent = New-HostedInstallScriptContent
+
+if ($OutputInstallScriptPath) {
+    Set-Content -LiteralPath $OutputInstallScriptPath -Value $installScriptContent -Encoding ASCII
 }
 
-if ($ExpectedSha256) {
-    $commandParts += "-ExpectedSha256 $(Quote-ForSingleQuotedPowerShell $ExpectedSha256)"
-}
-
-$commandParts += '}"'
-
-$command = $commandParts -join " "
+Write-Host ""
+Write-Host "Hosted install.ps1 content:"
+Write-Host $installScriptContent
 
 Write-Host ""
 Write-Host "Client install command:"
-Write-Host $command
+if ($InstallScriptUrl) {
+    Write-Host ("irm " + (Quote-ForSingleQuotedPowerShell $InstallScriptUrl) + " | iex")
+} else {
+    Write-Host "Upload the generated install.ps1 to your release, then run:"
+    Write-Host "irm '<GitHub Release URL>/install.ps1' | iex"
+}

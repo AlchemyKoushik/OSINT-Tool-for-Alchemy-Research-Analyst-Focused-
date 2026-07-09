@@ -52,20 +52,24 @@ if (Test-Path -LiteralPath $resolvedOutputRoot) {
 New-Item -ItemType Directory -Force -Path $resolvedOutputRoot, $payloadRoot, $payloadAppRoot, $payloadSupportRoot | Out-Null
 
 $excludeDirectories = @(
-    ".git",
-    ".venv",
-    "venv",
-    "__pycache__",
-    "node_modules",
-    "research_artifacts",
-    "shareable_client\dist",
+    (Join-Path $resolvedRepoRoot ".git"),
+    (Join-Path $resolvedRepoRoot ".venv"),
+    (Join-Path $resolvedRepoRoot "venv"),
+    (Join-Path $resolvedRepoRoot "__pycache__"),
+    (Join-Path $resolvedRepoRoot "node_modules"),
+    (Join-Path $resolvedRepoRoot "research_artifacts"),
+    (Join-Path $resolvedRepoRoot ".pytest_cache"),
+    (Join-Path $resolvedRepoRoot "runtime_logs"),
+    (Join-Path $resolvedRepoRoot "shareable_client\dist"),
     $resolvedOutputRoot,
     $resolvedDistRoot
 )
 $excludeFiles = @(
     "*.pyc",
     "*.pyo",
-    "*.log"
+    "*.log",
+    "uvicorn-ma.stderr.log",
+    "uvicorn-ma.stdout.log"
 )
 
 if (-not $IncludeSecrets) {
@@ -76,6 +80,7 @@ Invoke-RobocopyCopy -Source $resolvedRepoRoot -Destination $payloadAppRoot -Excl
 Invoke-RobocopyCopy -Source (Join-Path $scriptRoot "runtime") -Destination $payloadSupportRoot
 
 Copy-Item -LiteralPath (Join-Path $scriptRoot "install_client.ps1") -Destination (Join-Path $resolvedOutputRoot "install_client.ps1")
+Copy-Item -LiteralPath (Join-Path $scriptRoot "installer_common.ps1") -Destination (Join-Path $resolvedOutputRoot "installer_common.ps1")
 Copy-Item -LiteralPath (Join-Path $scriptRoot "Run Alchemy Installer.bat") -Destination (Join-Path $resolvedOutputRoot "Run Alchemy Installer.bat")
 Copy-Item -LiteralPath (Join-Path $scriptRoot "bootstrap_install.ps1") -Destination (Join-Path $resolvedOutputRoot "bootstrap_install.ps1")
 
