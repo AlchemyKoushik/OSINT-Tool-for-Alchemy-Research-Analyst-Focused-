@@ -94,6 +94,68 @@ function Reset-BrokenVirtualEnvironment {
     Remove-Item -LiteralPath $VenvPath -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+function Remove-LocalVirtualEnvironment {
+    param([Parameter(Mandatory = $true)][string]$VenvPath)
+
+    if (Test-Path -LiteralPath $VenvPath) {
+        Remove-Item -LiteralPath $VenvPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function New-LocalVirtualEnvironment {
+    param(
+        [Parameter(Mandatory = $true)][string]$BasePythonPath,
+        [Parameter(Mandatory = $true)][string]$VenvPath
+    )
+
+    Write-InstallerStage "Creating local virtual environment..."
+    & $BasePythonPath -m venv $VenvPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Virtual environment creation failed."
+    }
+}
+
+function Initialize-LocalVirtualEnvironment {
+    param(
+        [Parameter(Mandatory = $true)][string]$BasePythonPath,
+        [Parameter(Mandatory = $true)][string]$VenvPath
+    )
+
+    Reset-BrokenVirtualEnvironment -VenvPath $VenvPath
+
+    $rebuilt = $false
+    while ($true) {
+        if (-not (Test-Path -LiteralPath $VenvPath)) {
+            New-LocalVirtualEnvironment -BasePythonPath $BasePythonPath -VenvPath $VenvPath
+        }
+
+        $venvPython = Join-Path $VenvPath "Scripts\python.exe"
+        if (-not (Test-Path -LiteralPath $venvPython)) {
+            if ($rebuilt) {
+                throw "Installed Python environment is missing: $venvPython"
+            }
+
+            Write-InstallerStage "Detected a broken local virtual environment. Rebuilding it..."
+            Remove-LocalVirtualEnvironment -VenvPath $VenvPath
+            $rebuilt = $true
+            continue
+        }
+
+        & $venvPython -m ensurepip --upgrade | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            return $venvPython
+        }
+
+        if ($rebuilt) {
+            throw "ensurepip failed for the virtual environment."
+        }
+
+        Write-InstallerStage "Detected a broken local virtual environment. Rebuilding it..."
+        Remove-LocalVirtualEnvironment -VenvPath $VenvPath
+        $rebuilt = $true
+    }
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $payloadAppRoot = Join-Path $scriptRoot "payload\app"
 $payloadSupportRoot = Join-Path $scriptRoot "payload\support"
@@ -141,24 +203,7 @@ Invoke-RobocopyCopy -Source $payloadAppRoot -Destination $appRoot
 attrib +h $installRoot | Out-Null
 
 $venvPath = Join-Path $installRoot ".venv"
-Reset-BrokenVirtualEnvironment -VenvPath $venvPath
-if (-not (Test-Path -LiteralPath $venvPath)) {
-    Write-InstallerStage "Creating local virtual environment..."
-    & $pythonInfo.Path -m venv $venvPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Virtual environment creation failed."
-    }
-}
-
-$pythonExe = Join-Path $venvPath "Scripts\python.exe"
-if (-not (Test-Path -LiteralPath $pythonExe)) {
-    throw "Installed Python environment is missing: $pythonExe"
-}
-
-& $pythonExe -m ensurepip --upgrade | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw "ensurepip failed for the virtual environment."
-}
+$pythonExe = Initialize-LocalVirtualEnvironment -BasePythonPath $pythonInfo.Path -VenvPath $venvPath
 
 $requirementsFile = Join-Path $appRoot "backend\requirements.txt"
 if (-not (Test-Path -LiteralPath $requirementsFile)) {
