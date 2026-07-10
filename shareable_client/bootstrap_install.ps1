@@ -216,8 +216,36 @@ function Invoke-ExternalProcessCapture {
 function Test-WindowsAppsAliasPath {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    $expanded = [System.IO.Path]::GetFullPath($Path)
+    $expanded = Resolve-FullPathSafely -Path $Path
+    if (-not $expanded) {
+        return $false
+    }
+
     return $expanded -like "*\Microsoft\WindowsApps\*"
+}
+
+function Resolve-FullPathSafely {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $null
+    }
+
+    try {
+        return [System.IO.Path]::GetFullPath($Path)
+    } catch {
+        return $null
+    }
+}
+
+function Test-PathSafely {
+    param([string]$Path)
+
+    try {
+        return Test-Path -LiteralPath $Path -ErrorAction Stop
+    } catch {
+        return $false
+    }
 }
 
 function Get-PythonProbe {
@@ -335,7 +363,7 @@ function Test-PythonCandidateDetailed {
         }
     }
 
-    if (-not (Test-Path -LiteralPath $FilePath)) {
+    if (-not (Test-PathSafely -Path $FilePath)) {
         return [PSCustomObject]@{
             Accepted = $false
             Candidate = $candidateLabel
@@ -343,7 +371,13 @@ function Test-PythonCandidateDetailed {
         }
     }
 
-    $fileInfo = Get-Item -LiteralPath $FilePath -ErrorAction SilentlyContinue
+    $fileInfo = $null
+    try {
+        $fileInfo = Get-Item -LiteralPath $FilePath -ErrorAction Stop
+    } catch {
+        $fileInfo = $null
+    }
+
     if (-not $fileInfo -or $fileInfo.PSIsContainer) {
         return [PSCustomObject]@{
             Accepted = $false
@@ -376,8 +410,16 @@ function Test-PythonCandidateDetailed {
         }
     }
 
-    $resolvedPath = [System.IO.Path]::GetFullPath($resolvedPath)
-    if (-not (Test-Path -LiteralPath $resolvedPath)) {
+    $resolvedPath = Resolve-FullPathSafely -Path $resolvedPath
+    if (-not $resolvedPath) {
+        return [PSCustomObject]@{
+            Accepted = $false
+            Candidate = $candidateLabel
+            Reason = "Probe returned a non-filesystem executable path."
+        }
+    }
+
+    if (-not (Test-PathSafely -Path $resolvedPath)) {
         return [PSCustomObject]@{
             Accepted = $false
             Candidate = $candidateLabel

@@ -196,6 +196,12 @@ try {
         Assert-True ($detail.Reason -eq "File does not exist.") "Expected an explicit missing-file reason."
     }
 
+    Invoke-TestCase -Name "Invalid candidate path characters" -Body {
+        $detail = Test-PythonCandidateDetailed -FilePath 'C:\bad"quote\python.exe'
+        Assert-True (-not $detail.Accepted) "Invalid candidate path should be rejected."
+        Assert-True ($detail.Reason -in @("File does not exist.", "Candidate is not a real file.")) "Invalid path input should not crash candidate evaluation."
+    }
+
     Invoke-TestCase -Name "Path containing spaces" -Body {
         $detail = Test-PythonCandidateDetailed -FilePath $spaceStub
         Assert-True ($detail.Accepted) "Expected the stub in a spaced path to be accepted."
