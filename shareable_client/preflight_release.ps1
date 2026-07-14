@@ -165,8 +165,8 @@ Invoke-Check -Name "Bundle URL is correct" -Body {
 
 Invoke-Check -Name "Hosted install is IEX-ready" -Body {
     $content = Get-Content -LiteralPath $generatedInstallPath -Raw
-    Assert-True ($content -match "Start-ElevatedHostedInstaller") "Hosted install.ps1 is missing elevation handoff logic."
     Assert-True ($content -match "Invoke-ReleaseBootstrap") "Hosted install.ps1 is missing bootstrap invocation logic."
+    Assert-True ($content -notmatch "-Verb\s+RunAs") "Hosted install.ps1 should not require elevation."
 }
 
 Invoke-Check -Name "Bootstrap is self-contained before extraction" -Body {

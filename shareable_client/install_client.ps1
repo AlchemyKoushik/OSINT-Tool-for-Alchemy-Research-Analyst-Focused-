@@ -25,44 +25,6 @@ function Invoke-RobocopyCopy {
     }
 }
 
-function Ensure-ElevatedInstaller {
-    if (Test-IsAdministrator) {
-        return
-    }
-
-    Write-InstallerStage "Requesting administrator permission..."
-
-    $argumentList = @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", $PSCommandPath
-    )
-
-    if ($ResolvedPythonPath) {
-        $argumentList += @("-ResolvedPythonPath", $ResolvedPythonPath)
-    }
-
-    foreach ($pair in @(
-        @("-OriginalUserName", $OriginalUserName),
-        @("-OriginalUserProfile", $OriginalUserProfile),
-        @("-OriginalLocalAppData", $OriginalLocalAppData),
-        @("-OriginalOneDriveCommercial", $OriginalOneDriveCommercial),
-        @("-OriginalOneDriveConsumer", $OriginalOneDriveConsumer)
-    )) {
-        if ($pair[1]) {
-            $argumentList += $pair
-        }
-    }
-
-    try {
-        $null = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $argumentList -PassThru
-    } catch {
-        throw "Administrator permission was not granted. Installation cancelled."
-    }
-
-    exit 0
-}
-
 function New-DesktopShortcut {
     param(
         [Parameter(Mandatory = $true)][string]$ShortcutPath,
@@ -76,6 +38,22 @@ function New-DesktopShortcut {
     $shortcut.WorkingDirectory = $WorkingDirectory
     $shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,220"
     $shortcut.Save()
+}
+
+function New-StartMenuShortcut {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProgramsPath,
+        [Parameter(Mandatory = $true)][string]$TargetPath,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
+
+    if (-not (Test-Path -LiteralPath $ProgramsPath)) {
+        return $null
+    }
+
+    $shortcutPath = Join-Path $ProgramsPath "Alchemy Industry Research Tool.lnk"
+    New-DesktopShortcut -ShortcutPath $shortcutPath -TargetPath $TargetPath -WorkingDirectory $WorkingDirectory
+    return $shortcutPath
 }
 
 function Reset-BrokenVirtualEnvironment {
@@ -179,8 +157,6 @@ $installRoot = Join-Path $userContext.LocalAppData "AlchemyIndustryResearchTool"
 $appRoot = Join-Path $installRoot "app"
 $runRoot = Join-Path $installRoot "run"
 
-Ensure-ElevatedInstaller
-
 if ($ResolvedPythonPath) {
     $pythonInfo = Test-PythonCandidate -FilePath $ResolvedPythonPath
     if (-not $pythonInfo) {
@@ -238,6 +214,18 @@ foreach ($desktopPath in $userContext.DesktopCandidates) {
     break
 }
 
+$startMenuShortcut = New-StartMenuShortcut `
+    -ProgramsPath $userContext.StartMenuPrograms `
+    -TargetPath (Join-Path $installRoot "Alchemy Industry Research Tool.bat") `
+    -WorkingDirectory $installRoot
+if ($startMenuShortcut) {
+    Write-Host "Start menu launcher created:"
+    Write-Host "  $startMenuShortcut"
+}
+
 Write-InstallerStage "Installation complete."
 Write-Host ""
+Write-Host "The application files are stored in the hidden folder:"
+Write-Host "  $installRoot"
+Write-Host "Use the desktop or Start menu shortcut to open the launcher TUI."
 Write-Host "If backend\.env is not present in the hidden install, the Start option will fail until secrets are provided."

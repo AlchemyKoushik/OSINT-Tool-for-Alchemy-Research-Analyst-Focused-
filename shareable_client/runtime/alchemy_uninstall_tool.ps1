@@ -52,6 +52,9 @@ foreach ($desktopPath in $desktopCandidates) {
     Remove-Item -LiteralPath (Join-Path $desktopPath "Alchemy Industry Research Tool.lnk") -Force -ErrorAction SilentlyContinue
 }
 
+$startMenuPrograms = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+Remove-Item -LiteralPath (Join-Path $startMenuPrograms "Alchemy Industry Research Tool.lnk") -Force -ErrorAction SilentlyContinue
+
 $cleanupScript = Join-Path $env:TEMP ("alchemy-uninstall-" + [guid]::NewGuid().ToString("N") + ".cmd")
 $cleanupBody = @"
 @echo off

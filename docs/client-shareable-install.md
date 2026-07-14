@@ -8,7 +8,7 @@
 - Lets you host the bundle anywhere reachable by HTTPS.
 - Lets you fetch `backend/.env` from a separate secret URL at install time.
 - Installs the app into a hidden `%LOCALAPPDATA%\AlchemyIndustryResearchTool` folder.
-- Creates a desktop shortcut that opens a 2-option TUI:
+- Creates a desktop shortcut and Start menu shortcut that open a 2-option TUI:
   - `1. Start the Industry Research Tool`
   - `2. Remove the Tool from Your Device`
 
@@ -48,6 +48,7 @@ Prefer:
 - `bootstrap_install.ps1` hosted on an HTTPS URL you control,
 - the built zip hosted on an HTTPS URL you control,
 - a separate HTTPS endpoint that returns the `.env` content only for a short-lived install token.
+- no Administrator rights required for the normal client install path.
 
 ## One-line client command
 
@@ -59,10 +60,10 @@ irm "https://github.com/<owner>/<repo>/releases/download/<tag>/install.ps1" | ie
 
 That hosted `install.ps1` should:
 
-- request Administrator permission first,
 - download `bootstrap_install.ps1`,
 - pass through `BundleUrl`, `EnvUrl`, `EnvBearerToken`, and `ExpectedSha256`,
-- let `bootstrap_install.ps1` verify or install Python before downloading the bundle.
+- let `bootstrap_install.ps1` verify or install Python before downloading the bundle,
+- keep the install per-user so it can complete on locked-down Windows machines.
 
 ## Generate the command automatically
 
@@ -89,3 +90,4 @@ The helper prints:
 - If you point `REDIS_URL` in `.env` to your hosted Redis, the client machine does not need a local Redis install.
 - `R2` values can remain in `.env` and be fetched from your secret endpoint at install time.
 - The installer prefers Python 3.11, accepts another supported 64-bit Python 3.11-3.13 if already present, and falls back to the last python.org Windows x64 installer for Python 3.11 when `winget` is unavailable.
+- Python fallback is installed per-user under `%LOCALAPPDATA%\Programs\Python\Python311`, so the client does not need a machine-wide Python install.

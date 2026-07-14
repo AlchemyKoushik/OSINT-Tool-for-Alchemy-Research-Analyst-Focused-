@@ -48,12 +48,6 @@ function Remove-StaleInstallerTempRoots {
     }
 }
 
-function Test-IsAdministrator {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
 function New-TempInstallRoot {
     $root = Join-Path $env:TEMP ("alchemy-release-install-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $root | Out-Null
@@ -145,49 +139,6 @@ function Invoke-ReleaseBootstrap {
     }
 }
 
-function Start-ElevatedHostedInstaller {
-    $tempRoot = New-TempInstallRoot
-    $elevatedScriptPath = Join-Path $tempRoot "install.ps1"
-    $scriptSource = $MyInvocation.MyCommand.ScriptBlock.ToString()
-
-    if (-not $scriptSource) {
-        throw "Unable to capture the hosted installer source for elevation."
-    }
-
-    $scriptContent = @"
-`$BootstrapUrl = $(Quote-ForSingleQuotedPowerShell $BootstrapUrl)
-`$BundleUrl = $(Quote-ForSingleQuotedPowerShell $BundleUrl)
-`$EnvUrl = $(Quote-ForSingleQuotedPowerShell $EnvUrl)
-`$EnvBearerToken = $(Quote-ForSingleQuotedPowerShell $EnvBearerToken)
-`$ExpectedSha256 = $(Quote-ForSingleQuotedPowerShell $ExpectedSha256)
-`$OriginalUserName = $(Quote-ForSingleQuotedPowerShell $OriginalUserName)
-`$OriginalUserProfile = $(Quote-ForSingleQuotedPowerShell $OriginalUserProfile)
-`$OriginalLocalAppData = $(Quote-ForSingleQuotedPowerShell $OriginalLocalAppData)
-`$OriginalOneDriveCommercial = $(Quote-ForSingleQuotedPowerShell $OriginalOneDriveCommercial)
-`$OriginalOneDriveConsumer = $(Quote-ForSingleQuotedPowerShell $OriginalOneDriveConsumer)
-
-$scriptSource
-"@
-
-    Set-Content -LiteralPath $elevatedScriptPath -Value $scriptContent -Encoding ASCII
-
-    Write-Host ""
-    Write-Host "Requesting administrator permission..."
-
-    try {
-        $null = Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList @(
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", $elevatedScriptPath
-        ) -PassThru
-    } catch {
-        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
-        throw "Administrator permission was not granted. Installation cancelled."
-    }
-
-    Start-CleanupProcess -Path $tempRoot
-}
-
 try {
     Remove-StaleInstallerTempRoots
 
@@ -205,11 +156,6 @@ try {
     }
     if (-not (Get-Variable -Name OriginalOneDriveConsumer -ErrorAction SilentlyContinue)) {
         $OriginalOneDriveConsumer = $env:OneDriveConsumer
-    }
-
-    if (-not (Test-IsAdministrator)) {
-        Start-ElevatedHostedInstaller
-        return
     }
 
     Invoke-ReleaseBootstrap

@@ -81,6 +81,7 @@ function Get-InstallerUserContext {
         LocalAppData       = $localAppData
         OneDriveCommercial = $oneDriveCommercial
         OneDriveConsumer   = $oneDriveConsumer
+        StartMenuPrograms  = (Join-Path $userProfile "AppData\Roaming\Microsoft\Windows\Start Menu\Programs")
         DesktopCandidates  = @(
             (Join-Path $userProfile "Desktop"),
             $(if ($oneDriveCommercial) { Join-Path $oneDriveCommercial "Desktop" }),
@@ -123,6 +124,16 @@ function Test-SupportedPythonVersion {
     )
 
     return $Major -eq 3 -and $Minor -ge 11 -and $Minor -le 13
+}
+
+function Get-PreferredPython311InstallRoot {
+    param([string]$LocalAppData = [Environment]::GetFolderPath("LocalApplicationData"))
+
+    if (-not $LocalAppData) {
+        $LocalAppData = [Environment]::GetFolderPath("LocalApplicationData")
+    }
+
+    return (Join-Path $LocalAppData "Programs\Python\Python311")
 }
 
 function Resolve-FullPathSafely {
@@ -657,8 +668,8 @@ function Get-DeterministicPython311Candidates {
     $candidates = New-Object System.Collections.Generic.List[object]
 
     foreach ($basePath in @(
-        (Join-Path $env:ProgramFiles "Python311"),
-        $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python311" })
+        (Get-PreferredPython311InstallRoot -LocalAppData $LocalAppData),
+        (Join-Path $env:ProgramFiles "Python311")
     )) {
         if ($basePath) {
             Add-PythonPathCandidates -Candidates $candidates -BasePath $basePath
@@ -674,12 +685,12 @@ function Get-KnownPythonInstallPaths {
     $candidates = New-Object System.Collections.Generic.List[object]
 
     foreach ($pathRoot in @(
-        (Join-Path $env:ProgramFiles "Python311"),
-        (Join-Path $env:ProgramFiles "Python312"),
-        (Join-Path $env:ProgramFiles "Python313"),
         $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python311" }),
         $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python312" }),
-        $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python313" })
+        $(if ($LocalAppData) { Join-Path $LocalAppData "Programs\Python\Python313" }),
+        (Join-Path $env:ProgramFiles "Python311"),
+        (Join-Path $env:ProgramFiles "Python312"),
+        (Join-Path $env:ProgramFiles "Python313")
     )) {
         if ($pathRoot) {
             Add-PythonPathCandidates -Candidates $candidates -BasePath $pathRoot
@@ -891,15 +902,12 @@ function Install-Python311WithWinget {
         "install",
         "-e",
         "--id", "Python.Python.3.11",
+        "--scope", "user",
         "--accept-package-agreements",
         "--accept-source-agreements",
         "--disable-interactivity",
         "--silent"
     )
-
-    if (Test-IsAdministrator) {
-        $arguments += @("--scope", "machine")
-    }
 
     $result = Invoke-ExternalProcessCapture -FilePath $wingetCommand.Source -Arguments $arguments -TimeoutSeconds 1800
     if (-not $result.Started) {
@@ -941,9 +949,11 @@ function Install-Python311WithWinget {
 }
 
 function Install-Python311FromPythonOrg {
+    param([string]$OriginalLocalAppData = "")
+
     $pythonVersion = $script:Python311FallbackVersion
     $installerUrl = $script:Python311FallbackUrl
-    $targetDir = Join-Path $env:ProgramFiles "Python311"
+    $targetDir = Get-PreferredPython311InstallRoot -LocalAppData $OriginalLocalAppData
     $tempRoot = Join-Path $env:TEMP ("alchemy-python-installer-" + [guid]::NewGuid().ToString("N"))
     $installerPath = Join-Path $tempRoot "python-$pythonVersion-amd64.exe"
 
@@ -983,8 +993,8 @@ function Install-Python311FromPythonOrg {
         Write-InstallerStage "Running Python installer..."
         $arguments = @(
             "/quiet",
-            "InstallAllUsers=1",
-            "PrependPath=1",
+            "InstallAllUsers=0",
+            "PrependPath=0",
             "Include_pip=1",
             "Include_test=0",
             "Shortcuts=0",
@@ -1045,7 +1055,7 @@ function Ensure-PythonInterpreter {
         Write-Host "Python was installed by winget, but no supported interpreter could be verified yet. Falling back to the official python.org installer..."
     }
 
-    $pythonOrgInstall = Install-Python311FromPythonOrg
+    $pythonOrgInstall = Install-Python311FromPythonOrg -OriginalLocalAppData $OriginalLocalAppData
 
     $python = Resolve-PythonInterpreterAfterInstall `
         -EmitDiagnostics `

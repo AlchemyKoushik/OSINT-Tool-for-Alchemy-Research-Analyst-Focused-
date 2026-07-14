@@ -395,6 +395,18 @@ try {
         Assert-True ($bootstrapContent -notmatch "installer_common\.ps1") "Bootstrap must stay self-contained."
     }
 
+    Invoke-TestCase -Name "Hosted installer stays non-elevated" -Body {
+        $installContent = Get-Content -LiteralPath (Join-Path $shareableClientRoot "install.ps1") -Raw
+        Assert-True ($installContent -notmatch "-Verb\s+RunAs") "Hosted installer should not require elevation."
+    }
+
+    Invoke-TestCase -Name "Python fallback stays per-user" -Body {
+        $helperContent = Get-Content -LiteralPath $helperPath -Raw
+        Assert-True ($helperContent -match "InstallAllUsers=0") "python.org fallback should be per-user."
+        Assert-True ($helperContent -match "Programs\\Python\\Python311") "python.org fallback should target LocalAppData."
+        Assert-True ($helperContent -match '--scope",\s*"user"') "winget fallback should stay in user scope."
+    }
+
     Invoke-TestCase -Name "Missing extracted helper" -Body {
         $tempInstallRoot = Join-Path $testRoot "missing-helper"
         New-Item -ItemType Directory -Force -Path $tempInstallRoot | Out-Null
