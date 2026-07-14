@@ -155,9 +155,11 @@ $frontendDir = Join-Path $appRoot "frontend"
 $runRoot = Join-Path $installRoot "run"
 $pythonExe = Join-Path $installRoot ".venv\Scripts\python.exe"
 $envFile = Join-Path $backendDir ".env"
-$frontendUrl = "http://127.0.0.1:3000"
+$frontendUrlBase = "http://127.0.0.1:3000"
 $backendPort = 8000
 $frontendPort = 3000
+$frontendCacheVersion = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+$frontendUrl = "$frontendUrlBase/?v=$frontendCacheVersion"
 
 New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
 

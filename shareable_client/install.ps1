@@ -113,10 +113,19 @@ function Invoke-ReleaseBootstrap {
             "-BundleUrl", $BundleUrl,
             "-OriginalUserName", $OriginalUserName,
             "-OriginalUserProfile", $OriginalUserProfile,
-            "-OriginalLocalAppData", $OriginalLocalAppData,
-            "-OriginalOneDriveCommercial", $OriginalOneDriveCommercial,
-            "-OriginalOneDriveConsumer", $OriginalOneDriveConsumer
+            "-OriginalLocalAppData", $OriginalLocalAppData
         )
+
+        foreach ($pair in @(
+            @("-OriginalOneDriveCommercial", $OriginalOneDriveCommercial),
+            @("-OriginalOneDriveConsumer", $OriginalOneDriveConsumer)
+        )) {
+            if ([string]::IsNullOrWhiteSpace([string]$pair[1])) {
+                continue
+            }
+
+            $arguments += $pair
+        }
 
         if ($EnvUrl) {
             $arguments += @("-EnvUrl", $EnvUrl)

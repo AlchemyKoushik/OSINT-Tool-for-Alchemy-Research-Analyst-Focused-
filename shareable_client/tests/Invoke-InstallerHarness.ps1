@@ -400,11 +400,22 @@ try {
         Assert-True ($installContent -notmatch "-Verb\s+RunAs") "Hosted installer should not require elevation."
     }
 
+    Invoke-TestCase -Name "Hosted installer omits empty OneDrive args" -Body {
+        $installContent = Get-Content -LiteralPath (Join-Path $shareableClientRoot "install.ps1") -Raw
+        Assert-True ($installContent -match 'foreach \(\$pair in @\(') "Hosted installer should add optional OneDrive args conditionally."
+        Assert-True ($installContent -match 'IsNullOrWhiteSpace') "Hosted installer should skip empty optional OneDrive values."
+    }
+
     Invoke-TestCase -Name "Python fallback stays per-user" -Body {
         $helperContent = Get-Content -LiteralPath $helperPath -Raw
         Assert-True ($helperContent -match "InstallAllUsers=0") "python.org fallback should be per-user."
         Assert-True ($helperContent -match "Programs\\Python\\Python311") "python.org fallback should target LocalAppData."
         Assert-True ($helperContent -match '--scope",\s*"user"') "winget fallback should stay in user scope."
+    }
+
+    Invoke-TestCase -Name "Launcher adds frontend cache buster" -Body {
+        $launcherContent = Get-Content -LiteralPath (Join-Path $shareableClientRoot "runtime\alchemy_start_tool.ps1") -Raw
+        Assert-True ($launcherContent -match '\?v=\$frontendCacheVersion') "Launcher should append a cache-busting version to the frontend URL."
     }
 
     Invoke-TestCase -Name "Missing extracted helper" -Body {
