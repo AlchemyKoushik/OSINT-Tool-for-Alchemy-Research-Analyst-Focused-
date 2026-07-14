@@ -1102,13 +1102,28 @@ try {
         throw "Installer script not found in extracted bundle."
     }
 
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installerPath `
-        -ResolvedPythonPath $pythonInfo.Path `
-        -OriginalUserName $OriginalUserName `
-        -OriginalUserProfile $OriginalUserProfile `
-        -OriginalLocalAppData $OriginalLocalAppData `
-        -OriginalOneDriveCommercial $OriginalOneDriveCommercial `
-        -OriginalOneDriveConsumer $OriginalOneDriveConsumer
+    $installerArguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $installerPath,
+        "-ResolvedPythonPath", $pythonInfo.Path,
+        "-OriginalUserName", $OriginalUserName,
+        "-OriginalUserProfile", $OriginalUserProfile,
+        "-OriginalLocalAppData", $OriginalLocalAppData
+    )
+
+    foreach ($pair in @(
+        @("-OriginalOneDriveCommercial", $OriginalOneDriveCommercial),
+        @("-OriginalOneDriveConsumer", $OriginalOneDriveConsumer)
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$pair[1])) {
+            continue
+        }
+
+        $installerArguments += $pair
+    }
+
+    & powershell.exe @installerArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Client installation failed with exit code $LASTEXITCODE."
     }

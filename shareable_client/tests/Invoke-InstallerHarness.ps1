@@ -406,6 +406,12 @@ try {
         Assert-True ($installContent -match 'IsNullOrWhiteSpace') "Hosted installer should skip empty optional OneDrive values."
     }
 
+    Invoke-TestCase -Name "Bootstrap omits empty OneDrive args" -Body {
+        $bootstrapContent = Get-Content -LiteralPath (Join-Path $shareableClientRoot "bootstrap_install.ps1") -Raw
+        Assert-True ($bootstrapContent -match '\$installerArguments = @\(') "Bootstrap should build the install_client arg list explicitly."
+        Assert-True ($bootstrapContent -match 'IsNullOrWhiteSpace') "Bootstrap should skip empty optional OneDrive values."
+    }
+
     Invoke-TestCase -Name "Python fallback stays per-user" -Body {
         $helperContent = Get-Content -LiteralPath $helperPath -Raw
         Assert-True ($helperContent -match "InstallAllUsers=0") "python.org fallback should be per-user."
