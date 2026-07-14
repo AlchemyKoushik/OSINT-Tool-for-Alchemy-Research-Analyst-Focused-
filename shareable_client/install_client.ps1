@@ -40,11 +40,28 @@ function New-DesktopShortcut {
     $shortcut.Save()
 }
 
+function Get-ShortcutTargetPath {
+    param([Parameter(Mandatory = $true)][string]$ShortcutPath)
+
+    if (-not (Test-Path -LiteralPath $ShortcutPath)) {
+        return ""
+    }
+
+    try {
+        $wshShell = New-Object -ComObject WScript.Shell
+        $shortcut = $wshShell.CreateShortcut($ShortcutPath)
+        return [string]$shortcut.TargetPath
+    } catch {
+        return ""
+    }
+}
+
 function New-StartMenuShortcut {
     param(
         [Parameter(Mandatory = $true)][string]$ProgramsPath,
         [Parameter(Mandatory = $true)][string]$TargetPath,
-        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [string[]]$LegacyPrefixes = @()
     )
 
     if (-not (Test-Path -LiteralPath $ProgramsPath)) {
@@ -52,8 +69,71 @@ function New-StartMenuShortcut {
     }
 
     $shortcutPath = Join-Path $ProgramsPath "Alchemy Industry Research Tool.lnk"
+    [void](Remove-LegacyShortcutIfPresent -ShortcutPath $shortcutPath -LegacyPrefixes $LegacyPrefixes)
     New-DesktopShortcut -ShortcutPath $shortcutPath -TargetPath $TargetPath -WorkingDirectory $WorkingDirectory
     return $shortcutPath
+}
+
+function Remove-LegacyShortcutIfPresent {
+    param(
+        [Parameter(Mandatory = $true)][string]$ShortcutPath,
+        [Parameter(Mandatory = $true)][string[]]$LegacyPrefixes
+    )
+
+    if (-not (Test-Path -LiteralPath $ShortcutPath)) {
+        return $false
+    }
+
+    $targetPath = Get-ShortcutTargetPath -ShortcutPath $ShortcutPath
+    foreach ($legacyPrefix in $LegacyPrefixes) {
+        if (-not $legacyPrefix) {
+            continue
+        }
+
+        if ($targetPath.StartsWith($legacyPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Remove-Item -LiteralPath $ShortcutPath -Force -ErrorAction SilentlyContinue
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Remove-LegacyUserRuntimeRoot {
+    param([Parameter(Mandatory = $true)][string]$RuntimeRoot)
+
+    if (-not (Test-Path -LiteralPath $RuntimeRoot)) {
+        return $false
+    }
+
+    $resolvedRuntimeRoot = (Resolve-Path -LiteralPath $RuntimeRoot).Path
+    $expectedPrefix = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Alchemy"))
+    if (-not $resolvedRuntimeRoot.StartsWith($expectedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove an unexpected legacy runtime path: $resolvedRuntimeRoot"
+    }
+
+    Remove-Item -LiteralPath $resolvedRuntimeRoot -Recurse -Force -ErrorAction SilentlyContinue
+    return (-not (Test-Path -LiteralPath $resolvedRuntimeRoot))
+}
+
+function Write-InstallManifest {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$AppRoot,
+        [Parameter(Mandatory = $true)][string]$PythonPath
+    )
+
+    $manifestPath = Join-Path $InstallRoot "install-manifest.json"
+    $manifest = [PSCustomObject]@{
+        install_root        = $InstallRoot
+        app_root            = $AppRoot
+        python_path         = $PythonPath
+        supported_sections  = @("trends", "drivers", "competitive_landscape")
+        launcher_mode       = "shareable_client"
+        installed_at_utc    = (Get-Date).ToUniversalTime().ToString("o")
+    }
+
+    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 }
 
 function Reset-BrokenVirtualEnvironment {
@@ -156,6 +236,12 @@ $userContext = Get-InstallerUserContext `
 $installRoot = Join-Path $userContext.LocalAppData "AlchemyIndustryResearchTool"
 $appRoot = Join-Path $installRoot "app"
 $runRoot = Join-Path $installRoot "run"
+$legacyProgramFilesRoot = Join-Path ${env:ProgramFiles} "Alchemy OSINT Tool"
+$legacyUserRuntimeRoot = Join-Path $userContext.LocalAppData "Alchemy\OSINTTool"
+$legacyPrefixes = @(
+    [System.IO.Path]::GetFullPath($legacyProgramFilesRoot),
+    [System.IO.Path]::GetFullPath($legacyUserRuntimeRoot)
+)
 
 if ($ResolvedPythonPath) {
     $pythonInfo = Test-PythonCandidate -FilePath $ResolvedPythonPath
@@ -202,12 +288,24 @@ if ($LASTEXITCODE -ne 0) {
     throw "Playwright Chromium installation failed."
 }
 
+$legacyRuntimeRemoved = $false
+try {
+    $legacyRuntimeRemoved = Remove-LegacyUserRuntimeRoot -RuntimeRoot $legacyUserRuntimeRoot
+} catch {
+    Write-Host "Legacy runtime cleanup skipped: $($_.Exception.Message)"
+}
+if ($legacyRuntimeRemoved) {
+    Write-Host "Removed legacy user runtime:"
+    Write-Host "  $legacyUserRuntimeRoot"
+}
+
 foreach ($desktopPath in $userContext.DesktopCandidates) {
     if (-not (Test-Path -LiteralPath $desktopPath)) {
         continue
     }
 
     $desktopShortcut = Join-Path $desktopPath "Alchemy Industry Research Tool.lnk"
+    [void](Remove-LegacyShortcutIfPresent -ShortcutPath $desktopShortcut -LegacyPrefixes $legacyPrefixes)
     New-DesktopShortcut -ShortcutPath $desktopShortcut -TargetPath (Join-Path $installRoot "Alchemy Industry Research Tool.bat") -WorkingDirectory $installRoot
     Write-Host "Desktop launcher created:"
     Write-Host "  $desktopShortcut"
@@ -217,15 +315,24 @@ foreach ($desktopPath in $userContext.DesktopCandidates) {
 $startMenuShortcut = New-StartMenuShortcut `
     -ProgramsPath $userContext.StartMenuPrograms `
     -TargetPath (Join-Path $installRoot "Alchemy Industry Research Tool.bat") `
-    -WorkingDirectory $installRoot
+    -WorkingDirectory $installRoot `
+    -LegacyPrefixes $legacyPrefixes
 if ($startMenuShortcut) {
     Write-Host "Start menu launcher created:"
     Write-Host "  $startMenuShortcut"
 }
+
+Write-InstallManifest -InstallRoot $installRoot -AppRoot $appRoot -PythonPath $pythonExe
 
 Write-InstallerStage "Installation complete."
 Write-Host ""
 Write-Host "The application files are stored in the hidden folder:"
 Write-Host "  $installRoot"
 Write-Host "Use the desktop or Start menu shortcut to open the launcher TUI."
+if (Test-Path -LiteralPath $legacyProgramFilesRoot) {
+    Write-Host ""
+    Write-Host "Legacy desktop install detected at:"
+    Write-Host "  $legacyProgramFilesRoot"
+    Write-Host "If this machine still opens the old UI, remove that old install and use the new desktop or Start menu shortcut."
+}
 Write-Host "If backend\.env is not present in the hidden install, the Start option will fail until secrets are provided."
