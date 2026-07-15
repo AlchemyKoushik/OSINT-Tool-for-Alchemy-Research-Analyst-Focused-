@@ -10,6 +10,16 @@ function Write-LauncherErrorSummary {
 
     New-Item -ItemType Directory -Force -Path $RunRoot | Out-Null
     $errorLogPath = Join-Path $RunRoot "launcher.last_error.log"
+    $backendStdErrPath = Join-Path $RunRoot "backend.stderr.log"
+    $backendStdErrTail = ""
+    if (Test-Path -LiteralPath $backendStdErrPath) {
+        try {
+            $backendStdErrTail = ((Get-Content -LiteralPath $backendStdErrPath -Tail 30 -ErrorAction Stop) -join [Environment]::NewLine).Trim()
+        } catch {
+            $backendStdErrTail = ""
+        }
+    }
+
     $lines = @(
         "timestamp=$(Get-Date -Format o)",
         "message=$($ErrorRecord.Exception.Message)",
@@ -20,6 +30,11 @@ function Write-LauncherErrorSummary {
         "worker_stderr=$(Join-Path $RunRoot 'worker.stderr.log')",
         "frontend_stderr=$(Join-Path $RunRoot 'frontend.stderr.log')"
     )
+    if ($backendStdErrTail) {
+        $lines += "backend_stderr_tail<<EOF"
+        $lines += $backendStdErrTail
+        $lines += "EOF"
+    }
     Set-Content -LiteralPath $errorLogPath -Value $lines -Encoding ASCII
     return $errorLogPath
 }

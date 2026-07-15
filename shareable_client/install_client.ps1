@@ -207,6 +207,112 @@ function Write-ClientBackendOverrides {
     Set-DotEnvKey -Path $BackendEnvPath -Key "FOLLOW_UP_ENABLED" -Value "false"
 }
 
+function Get-DotEnvMap {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $values = @{}
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $values
+    }
+
+    foreach ($rawLine in (Get-Content -LiteralPath $Path)) {
+        $line = [string]$rawLine
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        $trimmed = $line.Trim()
+        if ($trimmed.StartsWith("#")) {
+            continue
+        }
+
+        $separatorIndex = $trimmed.IndexOf("=")
+        if ($separatorIndex -lt 1) {
+            continue
+        }
+
+        $key = $trimmed.Substring(0, $separatorIndex).Trim()
+        $value = $trimmed.Substring($separatorIndex + 1).Trim()
+        if (-not $key) {
+            continue
+        }
+
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        $values[$key] = $value
+    }
+
+    return $values
+}
+
+function Test-RequiredBackendEnvironment {
+    param([Parameter(Mandatory = $true)][string]$BackendEnvPath)
+
+    if (-not (Test-Path -LiteralPath $BackendEnvPath)) {
+        throw "Missing backend environment file in the installed payload: $BackendEnvPath"
+    }
+
+    $envValues = Get-DotEnvMap -Path $BackendEnvPath
+    $requiredKeys = @(
+        "OPENAI_API_KEY",
+        "SCRAPEDO_KEY",
+        "REDIS_URL",
+        "CLOUDFLARE_R2_ACCOUNT_ID",
+        "CLOUDFLARE_R2_ACCESS_KEY_ID",
+        "CLOUDFLARE_R2_SECRET_ACCESS_KEY",
+        "CLOUDFLARE_R2_BUCKET_NAME"
+    )
+
+    $missingKeys = @(
+        foreach ($key in $requiredKeys) {
+            if (-not $envValues.ContainsKey($key) -or [string]::IsNullOrWhiteSpace([string]$envValues[$key])) {
+                $key
+            }
+        }
+    )
+
+    if ($missingKeys.Count -gt 0) {
+        throw ("backend\\.env is missing required values: " + ($missingKeys -join ", "))
+    }
+}
+
+function Test-BackendPythonConfiguration {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [Parameter(Mandatory = $true)][string]$BackendDir
+    )
+
+    $probeCode = @'
+from config.settings import settings
+
+settings.validate_required(
+    (
+        "OPENAI_API_KEY",
+        "SCRAPEDO_KEY",
+        "REDIS_URL",
+        "CLOUDFLARE_R2_ACCOUNT_ID",
+        "CLOUDFLARE_R2_ACCESS_KEY_ID",
+        "CLOUDFLARE_R2_SECRET_ACCESS_KEY",
+        "CLOUDFLARE_R2_BUCKET_NAME",
+    )
+)
+print("backend-env-ok")
+'@
+
+    $probePath = Join-Path $BackendDir "__installer_env_probe__.py"
+    try {
+        Set-Content -LiteralPath $probePath -Value $probeCode -Encoding ASCII
+        & $PythonExe $probePath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Python backend environment validation failed."
+        }
+    } finally {
+        Remove-Item -LiteralPath $probePath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Reset-BrokenVirtualEnvironment {
     param([Parameter(Mandatory = $true)][string]$VenvPath)
 
@@ -339,7 +445,9 @@ $venvPath = Join-Path $installRoot ".venv"
 $pythonExe = Initialize-LocalVirtualEnvironment -BasePythonPath $pythonInfo.Path -VenvPath $venvPath
 
 $requirementsFile = Join-Path $appRoot "backend\requirements.txt"
-Write-ClientBackendOverrides -BackendEnvPath (Join-Path $appRoot "backend\.env")
+$backendEnvPath = Join-Path $appRoot "backend\.env"
+Write-ClientBackendOverrides -BackendEnvPath $backendEnvPath
+Test-RequiredBackendEnvironment -BackendEnvPath $backendEnvPath
 
 if (-not (Test-Path -LiteralPath $requirementsFile)) {
     throw "Package payload is incomplete. Missing requirements file: $requirementsFile"
@@ -366,6 +474,9 @@ Invoke-WithRetry -StageName "Playwright Chromium installation" -ScriptBlock {
         throw "Playwright Chromium installation failed."
     }
 } -MaxAttempts 2 -DelaySeconds 5
+
+Write-InstallerStage "Validating backend configuration..."
+Test-BackendPythonConfiguration -PythonExe $pythonExe -BackendDir (Join-Path $appRoot "backend")
 
 $legacyRuntimeRemoved = $false
 try {
