@@ -6,7 +6,7 @@ from config.settings import settings
 from services.location_service import resolve_location_context
 
 
-ResearchSection = Literal["trends", "drivers", "competitive_landscape"]
+ResearchSection = str
 LocationPreference = Literal["global", "region_specific", "country_specific"]
 
 
@@ -55,6 +55,15 @@ class AnalyzeRequest(BaseModel):
     @classmethod
     def validate_topic(cls, value: str) -> str:
         return _validate_non_empty_string(value, field_name="Topic", max_length=settings.MAX_QUERY_LENGTH)
+
+    @field_validator("section")
+    @classmethod
+    def validate_section(cls, value: str) -> str:
+        normalized = _validate_non_empty_string(value, field_name="Section", max_length=64).lower()
+        if normalized not in settings.allowed_research_sections:
+            allowed = ", ".join(settings.allowed_research_sections)
+            raise ValueError(f"Section '{normalized}' is not enabled. Allowed sections: {allowed}.")
+        return normalized
 
     @field_validator("location_value")
     @classmethod

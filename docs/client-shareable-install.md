@@ -8,9 +8,11 @@
 - Lets you host the bundle anywhere reachable by HTTPS.
 - Lets you fetch `backend/.env` from a separate secret URL at install time.
 - Installs the app into a hidden `%LOCALAPPDATA%\AlchemyIndustryResearchTool` folder.
+- Restricts the installed client UI to `Trends` and `Competitive Landscape (CL)` only.
 - Creates a desktop shortcut and Start menu shortcut that open a 2-option TUI:
   - `1. Start the Industry Research Tool`
   - `2. Remove the Tool from Your Device`
+- Adds a direct uninstall launcher at `%LOCALAPPDATA%\AlchemyIndustryResearchTool\Uninstall Alchemy Industry Research Tool.bat`.
 
 ## Important security truth
 

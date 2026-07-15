@@ -31,6 +31,27 @@ function Invoke-RobocopyCopy {
     }
 }
 
+function Remove-PathIfPresent {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Remove-PathsByPattern {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string[]]$Patterns
+    )
+
+    foreach ($pattern in $Patterns) {
+        Get-ChildItem -LiteralPath $Root -Filter $pattern -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptRoot
 $resolvedRepoRoot = (Resolve-Path $repoRoot).Path
@@ -78,6 +99,37 @@ if (-not $IncludeSecrets) {
 
 Invoke-RobocopyCopy -Source $resolvedRepoRoot -Destination $payloadAppRoot -ExcludeDirectories $excludeDirectories -ExcludeFiles $excludeFiles
 Invoke-RobocopyCopy -Source (Join-Path $scriptRoot "runtime") -Destination $payloadSupportRoot
+
+$frontendConfigOverride = Join-Path $scriptRoot "client-config.shareable.json"
+if (Test-Path -LiteralPath $frontendConfigOverride) {
+    Copy-Item -LiteralPath $frontendConfigOverride -Destination (Join-Path $payloadAppRoot "frontend\client-config.json") -Force
+}
+
+foreach ($path in @(
+    (Join-Path $payloadAppRoot "test_pipeline.py"),
+    (Join-Path $payloadAppRoot "generate_trends_arch_doc.py"),
+    (Join-Path $payloadAppRoot "OSINT_Tool_Alpha_Trends_Technical_Architecture.docx"),
+    (Join-Path $payloadAppRoot "launch_alchemy.bat"),
+    (Join-Path $payloadAppRoot "launch_backend_console.cmd"),
+    (Join-Path $payloadAppRoot "launch_frontend_console.cmd"),
+    (Join-Path $payloadAppRoot "launch_worker_console.cmd"),
+    (Join-Path $payloadAppRoot "run_backend.bat"),
+    (Join-Path $payloadAppRoot "run_fullstack.bat"),
+    (Join-Path $payloadAppRoot "backend\docs"),
+    (Join-Path $payloadAppRoot "backend\render.yaml"),
+    (Join-Path $payloadAppRoot "backend\Procfile"),
+    (Join-Path $payloadAppRoot "backend\scripts"),
+    (Join-Path $payloadAppRoot "frontend\vercel.json"),
+    (Join-Path $payloadAppRoot "shareable_client\dist"),
+    (Join-Path $payloadAppRoot "shareable_client\tests")
+)) {
+    Remove-PathIfPresent -Path $path
+}
+
+Remove-PathsByPattern -Root (Join-Path $payloadAppRoot "backend") -Patterns @(
+    "tmp_*.json",
+    "test*.py"
+)
 
 Copy-Item -LiteralPath (Join-Path $scriptRoot "install_client.ps1") -Destination (Join-Path $resolvedOutputRoot "install_client.ps1")
 Copy-Item -LiteralPath (Join-Path $scriptRoot "installer_common.ps1") -Destination (Join-Path $resolvedOutputRoot "installer_common.ps1")

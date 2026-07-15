@@ -481,6 +481,9 @@ async def get_locations() -> Dict[str, Any]:
 
 @router.post("/follow-up")
 async def follow_up(request: Request) -> Dict[str, Any]:
+    if not settings.FOLLOW_UP_ENABLED:
+        raise HTTPException(status_code=404, detail="Follow-up is disabled for this installation.")
+
     try:
         payload = await _read_json_payload(request)
         request_model = FollowUpRequest(**payload)

@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     MAX_EXPORT_REQUEST_BYTES: int = 2500000
     MAX_QUERY_LENGTH: int = 500
     MAX_FOLLOW_UP_QUERY_LENGTH: int = 500
+    ALLOWED_RESEARCH_SECTIONS: str = "trends,drivers,competitive_landscape"
+    FOLLOW_UP_ENABLED: bool = True
     MAX_EXISTING_CHUNKS: int = 250
     MAX_CHUNK_TEXT_LENGTH: int = 6000
     CLEANUP_MAX_RETRIES: int = 2
@@ -109,6 +111,19 @@ class Settings(BaseSettings):
         missing = [key for key in keys if not str(getattr(self, key, "")).strip()]
         if missing:
             raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+    @property
+    def allowed_research_sections(self) -> tuple[str, ...]:
+        normalized: list[str] = []
+        for raw_value in str(self.ALLOWED_RESEARCH_SECTIONS or "").split(","):
+            section = raw_value.strip().lower()
+            if section and section not in normalized:
+                normalized.append(section)
+
+        if not normalized:
+            return ("trends", "drivers", "competitive_landscape")
+
+        return tuple(normalized)
 
 
 settings = Settings()

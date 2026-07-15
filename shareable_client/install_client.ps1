@@ -59,6 +59,7 @@ function Get-ShortcutTargetPath {
 function New-StartMenuShortcut {
     param(
         [Parameter(Mandatory = $true)][string]$ProgramsPath,
+        [Parameter(Mandatory = $true)][string]$ShortcutName,
         [Parameter(Mandatory = $true)][string]$TargetPath,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
         [string[]]$LegacyPrefixes = @()
@@ -68,7 +69,7 @@ function New-StartMenuShortcut {
         return $null
     }
 
-    $shortcutPath = Join-Path $ProgramsPath "Alchemy Industry Research Tool.lnk"
+    $shortcutPath = Join-Path $ProgramsPath $ShortcutName
     [void](Remove-LegacyShortcutIfPresent -ShortcutPath $shortcutPath -LegacyPrefixes $LegacyPrefixes)
     New-DesktopShortcut -ShortcutPath $shortcutPath -TargetPath $TargetPath -WorkingDirectory $WorkingDirectory
     return $shortcutPath
@@ -128,12 +129,82 @@ function Write-InstallManifest {
         install_root        = $InstallRoot
         app_root            = $AppRoot
         python_path         = $PythonPath
-        supported_sections  = @("trends", "drivers", "competitive_landscape")
+        supported_sections  = @("trends", "competitive_landscape")
+        follow_up_enabled   = $false
         launcher_mode       = "shareable_client"
         installed_at_utc    = (Get-Date).ToUniversalTime().ToString("o")
     }
 
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+}
+
+function Invoke-WithRetry {
+    param(
+        [Parameter(Mandatory = $true)][string]$StageName,
+        [Parameter(Mandatory = $true)][scriptblock]$ScriptBlock,
+        [int]$MaxAttempts = 3,
+        [int]$DelaySeconds = 3
+    )
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            & $ScriptBlock
+            return
+        } catch {
+            $lastError = $_
+            if ($attempt -ge $MaxAttempts) {
+                break
+            }
+
+            Write-Host "$StageName failed on attempt $attempt of $MaxAttempts. Retrying in $DelaySeconds second(s)..."
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+
+    throw $lastError
+}
+
+function Set-DotEnvKey {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Key,
+        [Parameter(Mandatory = $true)][string]$Value
+    )
+
+    $lines = @()
+    if (Test-Path -LiteralPath $Path) {
+        $lines = @(Get-Content -LiteralPath $Path)
+    }
+
+    $updated = $false
+    $outputLines = @(
+        foreach ($line in $lines) {
+        if ([string]$line -match "^\s*$([regex]::Escape($Key))\s*=") {
+            $updated = $true
+            "{0}={1}" -f $Key, $Value
+        } else {
+            $line
+        }
+        }
+    )
+
+    if (-not $updated) {
+        $outputLines += "{0}={1}" -f $Key, $Value
+    }
+
+    Set-Content -LiteralPath $Path -Value $outputLines -Encoding UTF8
+}
+
+function Write-ClientBackendOverrides {
+    param([Parameter(Mandatory = $true)][string]$BackendEnvPath)
+
+    if (-not (Test-Path -LiteralPath $BackendEnvPath)) {
+        return
+    }
+
+    Set-DotEnvKey -Path $BackendEnvPath -Key "ALLOWED_RESEARCH_SECTIONS" -Value "trends,competitive_landscape"
+    Set-DotEnvKey -Path $BackendEnvPath -Key "FOLLOW_UP_ENABLED" -Value "false"
 }
 
 function Reset-BrokenVirtualEnvironment {
@@ -268,25 +339,33 @@ $venvPath = Join-Path $installRoot ".venv"
 $pythonExe = Initialize-LocalVirtualEnvironment -BasePythonPath $pythonInfo.Path -VenvPath $venvPath
 
 $requirementsFile = Join-Path $appRoot "backend\requirements.txt"
+Write-ClientBackendOverrides -BackendEnvPath (Join-Path $appRoot "backend\.env")
+
 if (-not (Test-Path -LiteralPath $requirementsFile)) {
     throw "Package payload is incomplete. Missing requirements file: $requirementsFile"
 }
 
 Write-InstallerStage "Installing application dependencies..."
-& $pythonExe -m pip install --upgrade pip
-if ($LASTEXITCODE -ne 0) {
-    throw "pip upgrade failed."
+Invoke-WithRetry -StageName "pip upgrade" -ScriptBlock {
+    & $pythonExe -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip upgrade failed."
+    }
 }
-& $pythonExe -m pip install -r $requirementsFile
-if ($LASTEXITCODE -ne 0) {
-    throw "Dependency installation failed."
+Invoke-WithRetry -StageName "Dependency installation" -ScriptBlock {
+    & $pythonExe -m pip install -r $requirementsFile
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dependency installation failed."
+    }
 }
 
 Write-InstallerStage "Installing Playwright Chromium runtime..."
-& $pythonExe -m playwright install chromium
-if ($LASTEXITCODE -ne 0) {
-    throw "Playwright Chromium installation failed."
-}
+Invoke-WithRetry -StageName "Playwright Chromium installation" -ScriptBlock {
+    & $pythonExe -m playwright install chromium
+    if ($LASTEXITCODE -ne 0) {
+        throw "Playwright Chromium installation failed."
+    }
+} -MaxAttempts 2 -DelaySeconds 5
 
 $legacyRuntimeRemoved = $false
 try {
@@ -314,12 +393,24 @@ foreach ($desktopPath in $userContext.DesktopCandidates) {
 
 $startMenuShortcut = New-StartMenuShortcut `
     -ProgramsPath $userContext.StartMenuPrograms `
+    -ShortcutName "Alchemy Industry Research Tool.lnk" `
     -TargetPath (Join-Path $installRoot "Alchemy Industry Research Tool.bat") `
     -WorkingDirectory $installRoot `
     -LegacyPrefixes $legacyPrefixes
 if ($startMenuShortcut) {
     Write-Host "Start menu launcher created:"
     Write-Host "  $startMenuShortcut"
+}
+
+$startMenuUninstallShortcut = New-StartMenuShortcut `
+    -ProgramsPath $userContext.StartMenuPrograms `
+    -ShortcutName "Uninstall Alchemy Industry Research Tool.lnk" `
+    -TargetPath (Join-Path $installRoot "Uninstall Alchemy Industry Research Tool.bat") `
+    -WorkingDirectory $installRoot `
+    -LegacyPrefixes $legacyPrefixes
+if ($startMenuUninstallShortcut) {
+    Write-Host "Start menu uninstall shortcut created:"
+    Write-Host "  $startMenuUninstallShortcut"
 }
 
 Write-InstallManifest -InstallRoot $installRoot -AppRoot $appRoot -PythonPath $pythonExe
@@ -329,6 +420,8 @@ Write-Host ""
 Write-Host "The application files are stored in the hidden folder:"
 Write-Host "  $installRoot"
 Write-Host "Use the desktop or Start menu shortcut to open the launcher TUI."
+Write-Host "Direct uninstall command:"
+Write-Host "  $(Join-Path $installRoot 'Uninstall Alchemy Industry Research Tool.bat')"
 if (Test-Path -LiteralPath $legacyProgramFilesRoot) {
     Write-Host ""
     Write-Host "Legacy desktop install detected at:"

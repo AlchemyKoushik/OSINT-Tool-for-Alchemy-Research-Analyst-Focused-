@@ -77,6 +77,29 @@
       return output;
     }
 
+    async function loadClientConfig() {
+      const candidatePaths = ["./client-config.json", "/client-config.json"];
+      for (const path of candidatePaths) {
+        try {
+          const response = await fetch(path, { cache: "no-store" });
+          if (!response.ok) {
+            continue;
+          }
+
+          const payload = await response.json();
+          if (payload && typeof payload === "object") {
+            return payload;
+          }
+        } catch {
+        }
+      }
+
+      return {
+        enabledSections: ["trends", "drivers", "competitive_landscape"],
+        followUpEnabled: true,
+      };
+    }
+
     async function isReachableApiOrigin(origin) {
       const controller = typeof AbortController === "function" ? new AbortController() : null;
       const timeoutId = controller ? window.setTimeout(() => controller.abort(), 5000) : null;
@@ -124,6 +147,7 @@
 
     window.addEventListener("load", async () => {
       window.OSINT_API_URL = await resolveApiOrigin();
+      window.OSINT_CLIENT_CONFIG = await loadClientConfig();
       import(`./ui/app.js?v=${encodeURIComponent(resolvedStaticVersion)}`);
     });
   </script>

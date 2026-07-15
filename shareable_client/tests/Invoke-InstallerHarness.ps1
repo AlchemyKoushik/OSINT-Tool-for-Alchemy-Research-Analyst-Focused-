@@ -424,6 +424,22 @@ try {
         Assert-True ($launcherContent -match '\?v=\$frontendCacheVersion') "Launcher should append a cache-busting version to the frontend URL."
     }
 
+    Invoke-TestCase -Name "Shareable client config is restricted to Trends and CL" -Body {
+        $configPath = Join-Path $shareableClientRoot "client-config.shareable.json"
+        $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        Assert-True (@($config.enabledSections).Count -eq 2) "Shareable client config should expose exactly two sections."
+        Assert-True ($config.enabledSections[0] -eq "trends") "Trends should remain enabled."
+        Assert-True ($config.enabledSections[1] -eq "competitive_landscape") "Competitive Landscape should remain enabled."
+        Assert-True (-not [bool]$config.followUpEnabled) "Follow-up should stay disabled in the shareable client."
+    }
+
+    Invoke-TestCase -Name "Direct uninstall launcher exists" -Body {
+        $uninstallLauncherPath = Join-Path $shareableClientRoot "runtime\Uninstall Alchemy Industry Research Tool.bat"
+        Assert-True (Test-Path -LiteralPath $uninstallLauncherPath) "Expected a direct uninstall launcher in the runtime payload."
+        $content = Get-Content -LiteralPath $uninstallLauncherPath -Raw
+        Assert-True ($content -match 'alchemy_uninstall_tool\.ps1') "Direct uninstall launcher should call the uninstall script."
+    }
+
     Invoke-TestCase -Name "Missing extracted helper" -Body {
         $tempInstallRoot = Join-Path $testRoot "missing-helper"
         New-Item -ItemType Directory -Force -Path $tempInstallRoot | Out-Null

@@ -63,6 +63,33 @@ function buildFeatureFlags(section) {
     : {};
 }
 
+const BASE_SECTION_OPTIONS = [
+  { value: "trends", label: "Trends" },
+  { value: "drivers", label: "Drivers" },
+  { value: "competitive_landscape", label: "Competitive Landscape (CL)" },
+];
+
+function getClientConfig() {
+  if (typeof window === "undefined" || !window.OSINT_CLIENT_CONFIG || typeof window.OSINT_CLIENT_CONFIG !== "object") {
+    return {};
+  }
+  return window.OSINT_CLIENT_CONFIG;
+}
+
+function getEnabledSections() {
+  const configuredSections = Array.isArray(getClientConfig().enabledSections)
+    ? getClientConfig().enabledSections.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  const normalized = configuredSections.filter((value, index) =>
+    BASE_SECTION_OPTIONS.some((option) => option.value === value) && configuredSections.indexOf(value) === index,
+  );
+  return normalized.length ? normalized : BASE_SECTION_OPTIONS.map((option) => option.value);
+}
+
+function isFollowUpEnabled() {
+  return getClientConfig().followUpEnabled !== false;
+}
+
 const DEFAULT_LOCATIONS = {
   preferences: [
     { value: "global", label: "Global" },
@@ -79,11 +106,7 @@ const BUILT_IN_LOCATION_CATALOG_PATHS = [
   "/frontend/location-catalog.json",
 ];
 
-const SECTION_OPTIONS = [
-  { value: "trends", label: "Trends" },
-  { value: "drivers", label: "Drivers" },
-  { value: "competitive_landscape", label: "Competitive Landscape (CL)" },
-];
+const SECTION_OPTIONS = BASE_SECTION_OPTIONS.filter((option) => getEnabledSections().includes(option.value));
 
 const REGION_NOTES = {
   Asia: "Industrial, consumer, and policy shifts across high-growth economies.",
@@ -2662,6 +2685,7 @@ function BriefCompleted({
   meta,
   onDownload,
   exportPending,
+  followUpEnabled,
   followUpOpen,
   followUpQuery,
   followUpDraft,
@@ -2689,20 +2713,24 @@ function BriefCompleted({
           aside=${html`<${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />`}
         />
 
-        <div className="flex items-center justify-start">
-          <${FollowUpTrigger} open=${followUpOpen} onClick=${onToggleFollowUp} disabled=${isProcessing} />
-        </div>
+        ${followUpEnabled
+          ? html`
+              <div className="flex items-center justify-start">
+                <${FollowUpTrigger} open=${followUpOpen} onClick=${onToggleFollowUp} disabled=${isProcessing} />
+              </div>
 
-        <${FollowUpInput}
-          isOpen=${followUpOpen}
-          value=${followUpQuery}
-          loading=${isProcessing}
-          disabled=${isProcessing}
-          onChange=${onFollowUpQueryChange}
-          onSubmit=${onFollowUpSubmit}
-        />
+              <${FollowUpInput}
+                isOpen=${followUpOpen}
+                value=${followUpQuery}
+                loading=${isProcessing}
+                disabled=${isProcessing}
+                onChange=${onFollowUpQueryChange}
+                onSubmit=${onFollowUpSubmit}
+              />
+            `
+          : null}
 
-        ${followUpPending?.status === "confirming"
+        ${followUpEnabled && followUpPending?.status === "confirming"
           ? html`
               <${FollowUpConfirmationCard}
                 refinedQuery=${followUpPending.refined_query}
@@ -2716,11 +2744,11 @@ function BriefCompleted({
             `
           : null}
 
-        ${followUpPending?.status === "loading"
+        ${followUpEnabled && followUpPending?.status === "loading"
           ? html`<${FollowUpCard} entry=${followUpPending} />`
           : null}
 
-        ${followUps.length
+        ${followUpEnabled && followUps.length
           ? html`
               <div className="space-y-5">
                 ${followUps.map(
@@ -2777,6 +2805,7 @@ function BriefingCanvas({
   loaderFrameId,
   onDownload,
   exportPending,
+  followUpEnabled,
   followUpOpen,
   followUpQuery,
   followUpDraft,
@@ -2809,6 +2838,7 @@ function BriefingCanvas({
                   meta=${meta}
                   onDownload=${onDownload}
                   exportPending=${exportPending}
+                  followUpEnabled=${followUpEnabled}
                   followUpOpen=${followUpOpen}
                   followUpQuery=${followUpQuery}
                   followUpDraft=${followUpDraft}
@@ -2848,9 +2878,11 @@ function BriefingCanvas({
 
 function App() {
   const reducedMotion = useReducedMotion();
+  const enabledSections = SECTION_OPTIONS.map((option) => option.value);
+  const followUpEnabled = isFollowUpEnabled();
   const [isProcessing, setIsProcessing] = useState(false);
   const [topic, setTopic] = useState("");
-  const [section, setSection] = useState("trends");
+  const [section, setSection] = useState(() => enabledSections[0] || "trends");
   const [locationPreference, setLocationPreference] = useState("global");
   const [locationValue, setLocationValue] = useState("");
   const [locations, setLocations] = useState(() => loadCachedLocationCatalog() || DEFAULT_LOCATIONS);
@@ -2886,6 +2918,12 @@ function App() {
     reducedMotion,
     appendLiveJournalMessage,
   });
+
+  useEffect(() => {
+    if (!enabledSections.includes(section)) {
+      setSection(enabledSections[0] || "trends");
+    }
+  }, [enabledSections, section]);
 
   async function handleDownloadResults() {
     if (!analysisResult) {
@@ -3029,7 +3067,7 @@ function App() {
   }
 
   function toggleFollowUpComposer() {
-    if (isProcessing) {
+    if (!followUpEnabled || isProcessing) {
       return;
     }
     setFollowUpOpen((current) => !current);
@@ -3037,6 +3075,10 @@ function App() {
   }
 
   async function requestFollowUpDecision(queryText) {
+    if (!followUpEnabled) {
+      return;
+    }
+
     const trimmedQuery = String(queryText || "").trim();
     if (!trimmedQuery || !analysisResult || isProcessing) {
       return;
@@ -3123,7 +3165,7 @@ function App() {
   }
 
   async function finalizeFollowUp() {
-    if (!followUpPending?.payload || isProcessing) {
+    if (!followUpEnabled || !followUpPending?.payload || isProcessing) {
       return;
     }
 
@@ -3267,6 +3309,10 @@ function App() {
   }
 
   function editFollowUpRefinement() {
+    if (!followUpEnabled) {
+      return;
+    }
+
     setFollowUpPending((current) =>
       current
         ? {
@@ -3301,7 +3347,7 @@ function App() {
 
   async function handleFollowUpSubmit(event) {
     event.preventDefault();
-    if (isProcessing) {
+    if (!followUpEnabled || isProcessing) {
       return;
     }
     await requestFollowUpDecision(followUpQuery);
@@ -3486,6 +3532,7 @@ function App() {
                   loaderFrameId=${loaderFrameId}
                   onDownload=${handleDownloadResults}
                   exportPending=${exportPending}
+                  followUpEnabled=${followUpEnabled}
                   followUpOpen=${followUpOpen}
                   followUpQuery=${followUpQuery}
                   followUpDraft=${followUpDraft}
