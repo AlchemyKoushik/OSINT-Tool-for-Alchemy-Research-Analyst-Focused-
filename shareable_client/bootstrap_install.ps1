@@ -66,6 +66,136 @@ function Write-InstallerStage {
     Write-InstallerLog -Message $Message
 }
 
+function Get-TextPreview {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value,
+        [int]$MaxLength = 160
+    )
+
+    $normalized = $Value.Replace("`r", " ").Replace("`n", " ").Trim()
+    if ($normalized.Length -le $MaxLength) {
+        return $normalized
+    }
+
+    return $normalized.Substring(0, $MaxLength) + "..."
+}
+
+function Convert-ByteNumberStringToText {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $matches = [regex]::Matches($Value, '\d+')
+    if ($matches.Count -lt 8) {
+        return $null
+    }
+
+    $bytes = New-Object System.Collections.Generic.List[byte]
+    foreach ($match in $matches) {
+        $number = 0
+        if (-not [int]::TryParse($match.Value, [ref]$number)) {
+            return $null
+        }
+        if ($number -lt 0 -or $number -gt 255) {
+            return $null
+        }
+        $bytes.Add([byte]$number)
+    }
+
+    try {
+        return [System.Text.Encoding]::UTF8.GetString($bytes.ToArray())
+    } catch {
+        return $null
+    }
+}
+
+function Convert-SecretPayloadJsonToEnvText {
+    param([Parameter(Mandatory = $true)]$Payload)
+
+    if ($null -eq $Payload) {
+        return $null
+    }
+
+    if ($Payload -is [System.Collections.IDictionary]) {
+        foreach ($candidateKey in @("env", "env_text", "dotenv", "content", "text", "body")) {
+            if ($Payload.Contains($candidateKey) -and $Payload[$candidateKey]) {
+                return [string]$Payload[$candidateKey]
+            }
+        }
+
+        foreach ($candidateKey in @("variables", "env_vars", "secrets")) {
+            if ($Payload.Contains($candidateKey) -and $Payload[$candidateKey] -is [System.Collections.IDictionary]) {
+                $lines = foreach ($entry in $Payload[$candidateKey].GetEnumerator()) {
+                    "{0}={1}" -f [string]$entry.Key, [string]$entry.Value
+                }
+                return ($lines -join "`r`n")
+            }
+        }
+
+        $keys = @($Payload.Keys | ForEach-Object { [string]$_ })
+        if ($keys.Count -gt 0 -and ($keys -contains "OPENAI_API_KEY" -or $keys -contains "SCRAPEDO_KEY" -or $keys -contains "REDIS_URL")) {
+            $lines = foreach ($entry in $Payload.GetEnumerator()) {
+                "{0}={1}" -f [string]$entry.Key, [string]$entry.Value
+            }
+            return ($lines -join "`r`n")
+        }
+    }
+
+    return $null
+}
+
+function Convert-SecretPayloadToEnvText {
+    param(
+        [Parameter(Mandatory = $true)]$Response
+    )
+
+    $rawBody = [string]$Response.Content
+    $contentType = ""
+    try {
+        $contentType = [string]$Response.Headers["Content-Type"]
+    } catch {
+        $contentType = ""
+    }
+
+    $trimmed = $rawBody.Trim()
+    if (-not $trimmed) {
+        throw "Secret endpoint returned an empty response body."
+    }
+
+    $jsonCandidate = $null
+    if ($contentType -match "json" -or ($trimmed.StartsWith("{") -and $trimmed.EndsWith("}"))) {
+        try {
+            $jsonCandidate = $trimmed | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            $jsonCandidate = $null
+        }
+    }
+
+    if ($null -ne $jsonCandidate) {
+        $envText = Convert-SecretPayloadJsonToEnvText -Payload $jsonCandidate
+        if ($envText) {
+            return [string]$envText
+        }
+    }
+
+    $decodedFromByteNumbers = Convert-ByteNumberStringToText -Value $trimmed
+    if ($decodedFromByteNumbers) {
+        return [string]$decodedFromByteNumbers
+    }
+
+    return $rawBody
+}
+
+function Test-EnvTextLooksUsable {
+    param([Parameter(Mandatory = $true)][string]$EnvText)
+
+    foreach ($requiredMarker in @("OPENAI_API_KEY=", "SCRAPEDO_KEY=", "REDIS_URL=", "CLOUDFLARE_R2_ACCOUNT_ID=")) {
+        if ($EnvText -match [regex]::Escape($requiredMarker)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -1093,8 +1223,17 @@ try {
             $headers["Authorization"] = "Bearer $EnvBearerToken"
         }
         $envContent = Invoke-WebRequest -Uri $EnvUrl -Headers $headers -UseBasicParsing
+        $envText = Convert-SecretPayloadToEnvText -Response $envContent
+        if (-not (Test-EnvTextLooksUsable -EnvText $envText)) {
+            $preview = Get-TextPreview -Value $envText
+            if ($envText -match '(?im)^\s*param\s*\(') {
+                throw "Secret endpoint returned PowerShell script content instead of backend environment text. Check the Cloudflare secret endpoint or R2 object mapping. Preview: $preview"
+            }
+            throw "Secret endpoint returned content that does not look like a backend .env payload. Check the Cloudflare secret endpoint response format. Preview: $preview"
+        }
         $envTarget = Join-Path $extractRoot "payload\app\backend\.env"
-        Set-Content -LiteralPath $envTarget -Value $envContent.Content -Encoding UTF8
+        Set-Content -LiteralPath $envTarget -Value $envText -Encoding UTF8
+        Write-InstallerLog -Message ("Fetched backend environment payload from secret endpoint. content_type={0} preview={1}" -f [string]$envContent.Headers["Content-Type"], (Get-TextPreview -Value $envText))
     }
 
     $installerPath = Join-Path $extractRoot "install_client.ps1"

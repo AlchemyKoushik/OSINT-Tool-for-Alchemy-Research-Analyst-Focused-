@@ -412,6 +412,19 @@ try {
         Assert-True ($bootstrapContent -match 'IsNullOrWhiteSpace') "Bootstrap should skip empty optional OneDrive values."
     }
 
+    Invoke-TestCase -Name "Bootstrap secret payload normalizers exist" -Body {
+        $bootstrapContent = Get-Content -LiteralPath (Join-Path $shareableClientRoot "bootstrap_install.ps1") -Raw
+        Assert-True ($bootstrapContent -match 'function Convert-ByteNumberStringToText') "Bootstrap should decode byte-number payloads."
+        Assert-True ($bootstrapContent -match 'function Convert-SecretPayloadToEnvText') "Bootstrap should normalize secret payload formats."
+        Assert-True ($bootstrapContent -match 'function Test-EnvTextLooksUsable') "Bootstrap should validate the fetched env payload."
+    }
+
+    Invoke-TestCase -Name "Bootstrap flags script payload misconfiguration clearly" -Body {
+        $bootstrapContent = Get-Content -LiteralPath (Join-Path $shareableClientRoot "bootstrap_install.ps1") -Raw
+        Assert-True ($bootstrapContent -match 'returned PowerShell script content instead of backend environment text') "Bootstrap should emit an explicit script-payload misconfiguration error."
+        Assert-True ($bootstrapContent -match 'returned content that does not look like a backend \.env payload') "Bootstrap should emit an explicit invalid-payload error."
+    }
+
     Invoke-TestCase -Name "Python fallback stays per-user" -Body {
         $helperContent = Get-Content -LiteralPath $helperPath -Raw
         Assert-True ($helperContent -match "InstallAllUsers=0") "python.org fallback should be per-user."
