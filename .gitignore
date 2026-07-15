@@ -23,7 +23,7 @@ build/
 # Local data and artifacts
 research_artifacts/
 query_memory.json
-runtime_logs/
+runtime_logs/                                                       
 backend/*.log
 frontend/front*_*.log
 
