@@ -2178,9 +2178,9 @@ function MetricCard({ label, value, tone = "default" }) {
         : "metric-card";
 
   return html`
-    <div className=${cx("metric-card-shell flex h-full flex-col justify-between rounded-[24px] px-4 py-4", toneClass)}>
-      <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/66">${label}</p>
-      <p className="mt-3 text-[1.45rem] font-semibold leading-none tracking-[-0.03em] text-atelier-ink">
+    <div className=${cx("metric-card-shell flex h-full flex-col items-center justify-center text-center rounded-[18px] px-3 py-3 min-w-0", toneClass)}>
+      <p className="m-0 font-display text-[10px] md:text-[11px] font-medium uppercase tracking-wider text-atelier-moss/70 text-center truncate w-full" title=${label}>${label}</p>
+      <p className="mt-1.5 font-display text-base md:text-lg font-semibold tracking-tight text-atelier-ink text-center truncate w-full" title=${value}>
         ${value}
       </p>
     </div>
@@ -2540,48 +2540,46 @@ function JournalCompleted({ result, debug, meta }) {
     const summary = result.summary || {};
     const metadata = result.metadata || {};
     return html`
-      <div className="atelier-panel-strong rounded-[26px] px-5 py-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
-              Report Summary
-            </p>
-            <h3 className="mt-3 font-display text-[1.95rem] font-semibold leading-none text-atelier-ink">
-              IES report complete
-            </h3>
-            <p className="mt-3 text-sm leading-7 text-atelier-moss">
-              ${request.industry || "Selected industry"} in ${request.country || "the selected country"} returned ${summary.companies_returned || 0} companies.
-            </p>
-          </div>
-          <p className="m-0 text-sm font-semibold text-atelier-goldDeep">
-            Top ${request.top_n || summary.requested_top_n || 10}
+      <div className="atelier-panel-strong rounded-[22px] px-5 py-5 my-auto flex flex-col justify-center shadow-xs">
+        <div className="flex flex-col items-center justify-center text-center gap-1.5">
+          <p className="m-0 font-display text-[10px] font-medium uppercase tracking-[0.24em] text-atelier-moss/70">
+            Report Summary
           </p>
+          <h3 className="m-0 font-display text-xl md:text-2xl font-semibold leading-tight text-atelier-ink">
+            IES report complete
+          </h3>
+          <p className="mt-1 font-display text-xs font-medium leading-relaxed text-atelier-moss/90 max-w-xs">
+            ${request.industry || "Selected industry"} in ${request.country || "the selected country"} returned ${summary.companies_returned || 0} companies.
+          </p>
+          <div className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-atelier-goldDeep border border-amber-200/60">
+            Top ${request.top_n || summary.requested_top_n || 10} Companies
+          </div>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-2.5 grid-cols-2">
           <${MetricCard} label="Industry" value=${request.industry || summary.industry || "N/A"} tone="accent" />
           <${MetricCard} label="Country" value=${request.country || summary.country || "N/A"} tone="gold" />
           <${MetricCard} label="Top N" value=${String(request.top_n || summary.requested_top_n || 0)} />
           <${MetricCard} label="Companies" value=${String(summary.companies_returned || result.companies?.length || 0)} />
         </div>
 
-        <div className="editorial-rule mt-6"></div>
+        <div className="editorial-rule mt-4"></div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-4 grid gap-2.5 grid-cols-2">
           <${MetricCard} label="Enriched" value=${String(summary.companies_enriched ?? metadata.total_companies_successfully_enriched ?? 0)} />
-          <${MetricCard} label="Median Revenue Growth" value=${formatIesPercent(summary.median_revenue_growth)} />
-          <${MetricCard} label="Median Operating Margin" value=${formatIesPercent(summary.median_operating_margin)} />
-          <${MetricCard} label="Median EBITDA Margin" value=${formatIesPercent(summary.median_ebitda_margin)} />
-          <${MetricCard} label="Median EV / Revenue" value=${formatIesRatio(summary.median_ev_to_revenue)} />
-          <${MetricCard} label="Median EV / EBITDA" value=${formatIesRatio(summary.median_ev_to_ebitda)} />
-          <${MetricCard} label="Median Forward P/E" value=${formatIesRatio(summary.median_forward_pe)} />
+          <${MetricCard} label="Revenue Growth" value=${formatIesPercent(summary.median_revenue_growth)} />
+          <${MetricCard} label="Operating Margin" value=${formatIesPercent(summary.median_operating_margin)} />
+          <${MetricCard} label="EBITDA Margin" value=${formatIesPercent(summary.median_ebitda_margin)} />
+          <${MetricCard} label="EV / Revenue" value=${formatIesRatio(summary.median_ev_to_revenue)} />
+          <${MetricCard} label="EV / EBITDA" value=${formatIesRatio(summary.median_ev_to_ebitda)} />
+          <${MetricCard} label="Forward P/E" value=${formatIesRatio(summary.median_forward_pe)} />
           <${MetricCard} label="EPS Beat Rate" value=${formatIesPercent(summary.eps_beat_rate)} />
           <${MetricCard} label="5-Day Reaction" value=${formatIesPercent(summary.median_five_day_price_reaction)} />
         </div>
 
         ${metadata.note
           ? html`
-              <div className="mt-6 rounded-[22px] border border-atelier-line bg-white/80 px-4 py-4 text-sm leading-7 text-atelier-moss">
+              <div className="mt-4 rounded-[18px] border border-atelier-line bg-white/80 px-3.5 py-3 text-xs leading-relaxed text-atelier-moss text-center font-display font-medium">
                 ${metadata.note}
               </div>
             `
@@ -2932,25 +2930,10 @@ function IesScatterChart({ chart }) {
   }
 
   function hideTooltipIfNeeded(point) {
-    if (selectedTicker && getPointKey(point) === selectedTicker) {
-      return;
-    }
     if (activeTicker === getPointKey(point)) {
       setActiveTicker("");
     }
-    const nextSelected = pointLookup[selectedTicker];
-    if (nextSelected) {
-      setTooltipState((current) => ({
-        ...current,
-        visible: true,
-        title: nextSelected.company_name || nextSelected.ticker || "Company",
-        ticker: nextSelected.ticker || "",
-        country: nextSelected.country || nextSelected.exchange || "",
-        fields: buildTooltipFields(nextSelected),
-      }));
-    } else {
-      setTooltipState((current) => ({ ...current, visible: false }));
-    }
+    setTooltipState((current) => ({ ...current, visible: false }));
   }
 
   function handleEnter(point, event) {
@@ -2960,9 +2943,7 @@ function IesScatterChart({ chart }) {
   }
 
   function handleMove(point, event) {
-    if (activeTicker === getPointKey(point) || selectedTicker === getPointKey(point)) {
-      showTooltipForPoint(point, event);
-    }
+    showTooltipForPoint(point, event);
   }
 
   function handleLeave(point) {
@@ -2970,42 +2951,33 @@ function IesScatterChart({ chart }) {
     if (activeTicker === key) {
       setActiveTicker("");
     }
-    hideTooltipIfNeeded(point);
+    setTooltipState((current) => ({ ...current, visible: false }));
+  }
+
+  function handleStagePointerLeave() {
+    setActiveTicker("");
+    setTooltipState((current) => ({ ...current, visible: false }));
+  }
+
+  function handleStageClick(event) {
+    if (event.target.tagName === "svg" || event.target.classList.contains("ies-chart-stage") || event.target.tagName === "rect" || event.target.tagName === "line") {
+      setSelectedTicker("");
+      setActiveTicker("");
+      setTooltipState((current) => ({ ...current, visible: false }));
+    }
   }
 
   function handleSelect(point, event) {
+    event.stopPropagation();
     const key = getPointKey(point);
     const nextSelected = selectedTicker === key ? "" : key;
     setSelectedTicker(nextSelected);
     if (nextSelected) {
       showTooltipForPoint(point, event);
-    } else if (activeTicker) {
-      const hovered = pointLookup[activeTicker];
-      if (hovered) {
-        showTooltipForPoint(hovered, event);
-      }
     } else {
       setTooltipState((current) => ({ ...current, visible: false }));
     }
   }
-
-  useEffect(() => {
-    if (!selectedTicker) {
-      return;
-    }
-    const point = pointLookup[selectedTicker];
-    if (point) {
-      setTooltipState({
-        visible: true,
-        x: xScale(point.x),
-        y: yScale(point.y),
-        title: point.company_name || point.ticker || "Company",
-        ticker: point.ticker || "",
-        country: point.country || point.exchange || "",
-        fields: buildTooltipFields(point),
-      });
-    }
-  }, [selectedTicker, chart?.title, chart?.bubble_size_label, chart?.x_label, chart?.y_label]);
 
   useEffect(() => {
     function handleResize() {
@@ -3064,7 +3036,7 @@ function IesScatterChart({ chart }) {
               Interactive Scatter Visualization
             </p>
           </div>
-          <h4 className="mt-1 font-display text-2xl md:text-3xl font-bold leading-tight text-atelier-ink">
+          <h4 className="mt-1 font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">
             ${chartTitle}
           </h4>
         </div>
@@ -3093,6 +3065,8 @@ function IesScatterChart({ chart }) {
           overflow: "visible",
           minHeight: "35rem",
         }}
+        onPointerLeave=${handleStagePointerLeave}
+        onClick=${handleStageClick}
       >
         <svg viewBox=${`0 0 ${width} ${height}`} className="ies-scatter block h-auto w-full overflow-visible">
           <defs>
@@ -3173,7 +3147,7 @@ function IesScatterChart({ chart }) {
             const pointKey = getPointKey(point);
             const isActive = activeTicker === pointKey;
             const isSelected = selectedTicker === pointKey;
-            const showLabel = point.is_outlier || isActive || isSelected;
+            const showLabel = isActive || isSelected;
             const x = xScale(point.x);
             const y = yScale(point.y);
             const radius = getPointRadius(point);
@@ -3187,7 +3161,8 @@ function IesScatterChart({ chart }) {
             return html`
               <g
                 key=${pointKey}
-                className="ies-scatter-point-group"
+                className="ies-scatter-point-group outline-none focus:outline-none focus-visible:outline-none focus:ring-0"
+                style=${{ outline: "none", boxShadow: "none" }}
                 data-state=${isSelected ? "selected" : isActive ? "active" : "idle"}
                 transform=${`translate(${x}, ${y})`}
                 onPointerEnter=${(event) => handleEnter(point, event)}
@@ -3212,7 +3187,7 @@ function IesScatterChart({ chart }) {
                     `
                   : null}
                 <circle
-                  className="ies-scatter-point"
+                  className="ies-scatter-point outline-none focus:outline-none"
                   r=${displayRadius}
                   fill=${bubbleFill}
                   fillOpacity=${opacity}
@@ -3220,36 +3195,11 @@ function IesScatterChart({ chart }) {
                   strokeWidth="2"
                   filter=${isActive || isSelected ? "url(#ies-bubble-glow)" : "url(#ies-bubble-shadow)"}
                   style=${{
+                    outline: "none",
+                    boxShadow: "none",
                     transition: "transform 200ms ease-out, r 200ms ease-out, opacity 200ms ease-out",
                   }}
                 />
-                ${showLabel
-                  ? html`
-                      <g transform=${`translate(${labelOffset}, ${labelY - y})`}>
-                        <rect
-                          x=${labelAnchor === "end" ? -140 : 0}
-                          y="-14"
-                          width="140"
-                          height="20"
-                          rx="10"
-                          fill="rgba(255,255,255,0.94)"
-                          stroke="rgba(62,69,63,0.14)"
-                          strokeWidth="0.8"
-                          className="shadow-2xs"
-                        />
-                        <text
-                          x=${labelAnchor === "end" ? -70 : 70}
-                          y="0"
-                          textAnchor="middle"
-                          fontSize="10"
-                          fontWeight="700"
-                          fill="#1F2A29"
-                        >
-                          ${point.ticker || point.company_name}
-                        </text>
-                      </g>
-                    `
-                  : null}
               </g>
             `;
           })}
@@ -3275,7 +3225,7 @@ function IesScatterChart({ chart }) {
         <div
           ref=${tooltipRef}
           className=${cx(
-            "ies-scatter-tooltip pointer-events-none absolute z-30 transition-all duration-150 ease-out",
+            "ies-scatter-tooltip pointer-events-none absolute z-30 transition-all duration-180 ease-out",
             tooltipState.visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-2 pointer-events-none"
           )}
           aria-hidden=${tooltipState.visible ? "false" : "true"}
@@ -3283,6 +3233,7 @@ function IesScatterChart({ chart }) {
             left: `${tooltipState.x}px`,
             top: `${tooltipState.y}px`,
             transform: "translate(-50%, -100%) translateY(-14px)",
+            transition: "opacity 180ms ease-out, transform 180ms ease-out, left 100ms ease-out, top 100ms ease-out",
           }}
         >
           <div className="w-[19rem] md:w-[22rem] rounded-2xl border border-atelier-line/90 bg-white/94 p-4 shadow-[0_24px_50px_rgba(31,42,41,0.18)] backdrop-blur-md">
@@ -3358,43 +3309,43 @@ function IesCompanyRow({ company, index, selected, onSelect }) {
         }
       }}
     >
-      <td className="py-4 pl-5 pr-2 font-mono text-xs font-bold text-atelier-moss/60 align-middle">
+      <td className="py-3 pl-3 pr-1 font-mono text-xs font-bold text-atelier-moss/60 align-middle text-center w-8">
         ${String(index + 1).padStart(2, "0")}
       </td>
-      <td className="py-4 px-4 align-middle">
+      <td className="py-3 px-2.5 align-middle">
         <div className="flex flex-col min-w-0">
-          <span className="font-display text-sm font-bold text-atelier-ink truncate group-hover:text-atelier-forest transition-colors">
+          <span className="font-display text-xs sm:text-sm font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight">
             ${companyName}
           </span>
-          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-atelier-moss/80 font-mono">
+          <div className="flex flex-wrap items-center gap-1 mt-0.5 text-[10px] text-atelier-moss/80 font-mono">
             <span className="font-semibold text-atelier-ink">${company.ticker || "—"}</span>
             ${company.exchange ? html`<span>• ${company.exchange}</span>` : null}
             ${company.country ? html`<span>• ${company.country}</span>` : null}
           </div>
         </div>
       </td>
-      <td className="py-4 px-4 text-right font-mono text-xs font-semibold text-atelier-ink align-middle">
+      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs font-semibold text-atelier-ink align-middle">
         ${formatIesCompactNumber(company.revenue_ttm, "—")}
       </td>
-      <td className="py-4 px-4 text-right font-mono text-xs align-middle">
+      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs align-middle">
         ${renderIesMetricValue(formatIesPercent(company.revenue_growth_lq_yoy, "—"), company.revenue_growth_lq_yoy)}
       </td>
-      <td className="py-4 px-4 text-right font-mono text-xs align-middle">
+      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs align-middle">
         ${renderIesMetricValue(formatIesPercent(company.operating_margin, "—"), company.operating_margin)}
       </td>
-      <td className="py-4 px-4 text-right font-mono text-xs font-medium text-atelier-ink align-middle">
+      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs font-medium text-atelier-ink align-middle">
         ${formatIesRatio(company.ev_to_revenue_ttm, "—")}
       </td>
-      <td className="py-4 px-4 text-right font-mono text-xs font-medium text-atelier-ink align-middle">
+      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs font-medium text-atelier-ink align-middle">
         ${formatIesRatio(company.forward_pe, "—")}
       </td>
-      <td className="py-4 pr-5 pl-4 text-right align-middle">
-        <div className="flex items-center justify-end gap-1.5">
+      <td className="py-3 pr-3 pl-1 text-right align-middle">
+        <div className="flex items-center justify-end gap-1">
           ${company.is_outlier
-            ? html`<span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 uppercase tracking-wider">Outlier</span>`
+            ? html`<span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-800 uppercase tracking-wider">Outlier</span>`
             : company.enrichment_status === "ok"
-              ? html`<span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Standard</span>`
-              : html`<span className="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-medium text-stone-600 uppercase tracking-wider">${company.enrichment_status || "—"}</span>`}
+              ? html`<span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 uppercase tracking-wider">Standard</span>`
+              : html`<span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-[9px] font-medium text-stone-600 uppercase tracking-wider">${company.enrichment_status || "—"}</span>`}
         </div>
       </td>
     </tr>
@@ -3413,10 +3364,10 @@ function IesAnalystInsights({ result }) {
             Analyst Insights
           </p>
         </div>
-        <h4 className="font-display text-2xl md:text-3xl font-bold leading-tight text-atelier-ink">
+        <h4 className="font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">
           Editorial Readout & Market Structure
         </h4>
-        <p className="mt-1 text-sm leading-relaxed text-atelier-moss max-w-3xl">
+        <p className="mt-1 font-display text-xs md:text-sm font-medium leading-relaxed text-atelier-moss">
           ${insightBundle.summary}
         </p>
       </div>
@@ -3458,11 +3409,11 @@ function IesInsightCard({ label, body, tone = "default", icon }) {
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs">
           ${icon || html`<svg className="w-4 h-4 text-atelier-forest" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>`}
         </div>
-        <p className="m-0 text-xs font-bold uppercase tracking-wider text-atelier-ink">
+        <p className="m-0 font-display text-sm font-semibold text-atelier-ink">
           ${label}
         </p>
       </div>
-      <p className="mt-3 text-xs md:text-sm leading-relaxed text-atelier-moss font-medium">
+      <p className="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium">
         ${body}
       </p>
     </div>
@@ -3482,18 +3433,18 @@ function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompan
 
   return html`
     <div className="overflow-hidden rounded-2xl border border-atelier-line/80 bg-white/80 shadow-[0_18px_48px_rgba(31,42,41,0.04)]">
-      <div className="overflow-x-auto max-h-[38rem] panel-scroll">
-        <table className="w-full min-w-[920px] text-left border-collapse">
+      <div className="max-h-[38rem] overflow-y-auto panel-scroll">
+        <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 z-10 bg-[#FAF6F0]/95 backdrop-blur-md border-b border-atelier-line/80 shadow-2xs">
             <tr>
-              <th className="py-3.5 pl-5 pr-2 text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70 w-12">#</th>
-              <th className="py-3.5 px-4 text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Company & Ticker</th>
-              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Revenue TTM</th>
-              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Growth</th>
-              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Margin</th>
-              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">EV / Revenue</th>
-              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Forward P/E</th>
-              <th className="py-3.5 pr-5 pl-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Signals</th>
+              <th className="py-3 pl-3 pr-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70 w-8">#</th>
+              <th className="py-3 px-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Company & Ticker</th>
+              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue TTM</th>
+              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Growth</th>
+              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Margin</th>
+              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / Revenue</th>
+              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Forward P/E</th>
+              <th className="py-3 pr-3 pl-1 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Signals</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-atelier-line/40">
@@ -3546,14 +3497,14 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
       <!-- 1. Industry Header -->
       <section className="ies-hero">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-4xl space-y-3">
+          <div className="w-full space-y-3">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-atelier-gold animate-pulse"></span>
               <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-atelier-moss/70">
                 Executive Analytics • Equity Research
               </p>
             </div>
-            <h3 className="font-display text-4xl sm:text-5xl font-bold leading-[0.95] tracking-tight text-atelier-ink">
+            <h3 className="font-display text-4xl sm:text-5xl font-semibold leading-[0.95] tracking-tight text-atelier-ink">
               ${result?.title || "Industry Earnings Snapshot"}
             </h3>
             
@@ -3602,11 +3553,11 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
           ${executiveMetrics.map(
             (metric) => html`
               <div key=${metric.label} className="p-3 md:px-5 md:py-2 flex flex-col justify-center">
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-atelier-moss/70">
+                <span className="font-display text-[10px] font-medium uppercase tracking-[0.2em] text-atelier-moss/70">
                   ${metric.label}
                 </span>
                 <div className="mt-1.5 flex items-baseline gap-2">
-                  <span className="font-mono text-2xl md:text-3xl font-bold tracking-tight text-atelier-ink">
+                  <span className="font-display text-2xl md:text-3xl font-semibold tracking-tight text-atelier-ink">
                     ${metric.value}
                   </span>
                   ${metric.trend === "up"
@@ -3641,7 +3592,7 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
                 Universe Ranking
               </p>
             </div>
-            <h4 className="mt-1 font-display text-2xl font-bold leading-tight text-atelier-ink">
+            <h4 className="mt-1 font-display text-2xl font-semibold leading-tight text-atelier-ink">
               Company Ranking Table
             </h4>
           </div>
@@ -3694,14 +3645,14 @@ function FieldNotesPane({
   reducedMotion,
 }) {
   return html`
-    <${PanelShell} className="workspace-pane flex min-h-0 flex-col overflow-hidden px-5 py-5 md:px-6 md:py-6">
+    <${PanelShell} className="workspace-pane flex min-h-0 flex-col overflow-hidden px-4 py-4 md:px-5 md:py-5">
       <${PanelHeader}
         eyebrow="Field Notes"
         title="Evidence, workflow, and analyst memory"
         subtitle="This rail keeps the run honest: how the brief was shaped, where it looked, what it kept, and the timing behind the result."
       />
 
-      <div className="workspace-pane-body mt-5 min-h-0 flex-1 overflow-hidden">
+      <div className="workspace-pane-body mt-4 min-h-0 flex-1 flex flex-col justify-center overflow-hidden">
         <${AnimatePresence} initial=${false} mode="wait">
           ${analysisState === "completed"
             ? html`<${JournalCompleted} key="journal-completed" result=${result} debug=${debug} meta=${meta} />`
@@ -4596,8 +4547,8 @@ function BriefCompleted({
 }) {
   const isIesReport = isIesReportPayload(result);
   return html`
-    <div className="flex justify-center">
-      <div className="flex w-full max-w-4xl flex-col gap-5">
+    <div className="flex w-full justify-center">
+      <div className="flex w-full flex-col gap-5">
         ${isIesReport
           ? html`<${IesResultSection} result=${result} meta=${meta} onDownload=${onDownload} exportPending=${exportPending} />`
           : html`<${ResultSection}
@@ -5607,7 +5558,7 @@ function App() {
                     <div className="relative min-h-0">
                       <div
                         className=${cx(
-                          "workspace-main grid min-h-0 gap-4 transition-opacity duration-200 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]",
+                          "workspace-main grid min-h-0 gap-4 transition-opacity duration-200 xl:grid-cols-[minmax(0,0.56fr)_minmax(0,1.44fr)]",
                           isWorkspaceTransitioning ? "opacity-0" : "opacity-100",
                         )}
                       >

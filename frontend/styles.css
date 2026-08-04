@@ -1282,6 +1282,9 @@ textarea:disabled {
     overflow: auto;
   }
 
+    overflow: auto;
+  }
+
   html {
     font-size: 13px;
   }
@@ -1295,4 +1298,26 @@ textarea:disabled {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Remove default browser focus outline on scatter chart interactive elements */
+.ies-scatter-point-group,
+.ies-scatter-point-group:focus,
+.ies-scatter-point-group:focus-visible,
+.ies-scatter-point-group:active,
+.ies-scatter-point,
+.ies-scatter-point:focus,
+.ies-scatter-point:focus-visible,
+svg g[role="button"]:focus,
+svg g[role="button"]:focus-visible,
+svg circle:focus,
+svg circle:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Tabular nums for clean financial data alignment */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
