@@ -195,6 +195,9 @@ function formatPreparedDateForFile(value = new Date()) {
 }
 
 function sectionTitle(section) {
+  if (!section) {
+    return "Select a Module";
+  }
   if (section === "drivers") {
     return "Market Drivers";
   }
@@ -205,6 +208,9 @@ function sectionTitle(section) {
 }
 
 function sectionDescriptor(section) {
+  if (!section) {
+    return "Choose a module from the fixed selector above to expand the input pane and unlock the run controls.";
+  }
   if (section === "drivers") {
     return "Underlying forces accelerating or shaping the market.";
   }
@@ -834,6 +840,7 @@ function ThemedSelect({
   value,
   onChange,
   triggerClassName = COMMAND_SELECT_CLASS,
+  placeholderLabel = "None",
   disabled = false,
 }) {
   const rootRef = useRef(null);
@@ -841,7 +848,7 @@ function ThemedSelect({
   const menuRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState(null);
-  const selectedOption = options.find((option) => option.value === value) || options[0] || null;
+  const selectedOption = options.find((option) => option.value === value) || null;
   const listboxId = `${id}-listbox`;
 
   useEffect(() => {
@@ -976,7 +983,7 @@ function ThemedSelect({
         onClick=${toggleOpen}
         onKeyDown=${handleTriggerKeyDown}
       >
-        <span className="command-select__value">${selectedOption ? selectedOption.label : ""}</span>
+        <span className="command-select__value">${selectedOption ? selectedOption.label : placeholderLabel}</span>
         <${SelectChevron} open=${open} />
       </button>
 
@@ -1170,6 +1177,36 @@ function WorkspaceHeader({ currentLocation }) {
   `;
 }
 
+function ModuleSelectorBar({ section, onSectionChange, disabled = false }) {
+  return html`
+    <${PanelShell} className="atelier-panel-strong sticky-module-bar sticky top-3 z-20 px-4 py-4 md:px-5">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,auto)] xl:items-center">
+        <div className="min-w-0">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.28em] text-atelier-moss/72">
+            Module Selection
+          </p>
+          <h2 className="m-0 font-display text-[1.45rem] font-semibold leading-none text-atelier-ink">
+            Choose Your Research Module
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-atelier-moss">
+            Choose a module to activate the corresponding research workflow.
+          </p>
+        </div>
+
+        <div className="min-w-0">
+          <${ThemedSelect}
+            id="sectionSelect"
+            options=${SECTION_OPTIONS}
+            value=${section}
+            onChange=${onSectionChange}
+            disabled=${disabled}
+          />
+        </div>
+      </div>
+    </${PanelShell}>
+  `;
+}
+
 function RegionSelector({
   regions,
   searchValue,
@@ -1351,12 +1388,12 @@ function CommandDeck({
         <${PanelHeader}
           eyebrow="Command Deck"
           title="Design the research run"
-          subtitle="Set the topic, choose the section, apply the geographic lens, and launch a run that stays traceable from first query to final memo."
+          subtitle="Set the topic, confirm the module from the fixed header, apply the geographic lens, and launch a run that stays traceable from first query to final memo."
         />
 
         <form className="mt-6 grid gap-4" onSubmit=${onAnalyze}>
           <div className=${cx("atelier-panel-strong rounded-[26px] px-4 py-4", isProcessing && "ui-disabled-shell")}>
-            <div className="command-deck-grid grid gap-4 xl:grid-cols-[minmax(0,2.4fr)_minmax(12.75rem,0.9fr)_minmax(14.25rem,1fr)_minmax(14.5rem,0.8fr)]">
+            <div className="command-deck-grid grid gap-4 xl:grid-cols-[minmax(0,2.4fr)_minmax(14.25rem,1fr)_minmax(14.5rem,0.8fr)]">
               <div className="command-deck-field">
                 <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="topicInput">
                   Topic Input
@@ -1369,19 +1406,6 @@ function CommandDeck({
                   disabled=${isProcessing}
                   onInput=${(event) => onTopicChange(event.currentTarget.value)}
                   placeholder="EV adoption, critical minerals, mobile gaming in India, supply chain shifts..."
-                />
-              </div>
-
-              <div className="command-deck-field">
-                <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="sectionSelect">
-                  Section
-                </label>
-                <${ThemedSelect}
-                  id="sectionSelect"
-                  options=${SECTION_OPTIONS}
-                  value=${section}
-                  onChange=${onSectionChange}
-                  disabled=${isProcessing}
                 />
               </div>
 
@@ -1408,35 +1432,31 @@ function CommandDeck({
             </p>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div className="atelier-panel-strong rounded-[24px] px-4 py-4">
-              <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="sectionSelect">
-                Briefing Lens
-              </label>
-              <p className="m-0 text-sm font-bold text-atelier-ink">${sectionTitle(section)}</p>
-              <p className="mt-2 text-xs leading-5 text-atelier-moss">${sectionDescriptor(section)}</p>
-            </div>
+          <div className="atelier-panel-strong rounded-[24px] px-4 py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
+                  Applied Filter
+                </p>
+                <p className="mt-2 text-sm font-bold text-atelier-ink">
+                  ${locationPreference === "global"
+                    ? "Global"
+                    : locationValue
+                      ? `${humanizePreference(locationPreference)}: ${locationValue}`
+                      : humanizePreference(locationPreference)}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-atelier-moss">
+                  ${locationPreference === "global"
+                    ? "Global keeps the run wide and unrestricted."
+                    : locationValue
+                      ? "The run is narrowed to the chosen geography. Use the edit control if you want to change it."
+                      : "Choose a region or country to activate a scoped filter."}
+                </p>
+              </div>
 
-            <div className="atelier-panel-strong rounded-[24px] px-4 py-4">
-              <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
-                Geographic Behavior
-              </label>
-              <p className="m-0 text-sm font-bold text-atelier-ink">
-                ${locationPreference === "global" ? "Global" : humanizePreference(locationPreference)}
-              </p>
-              <p className="mt-2 text-xs leading-5 text-atelier-moss">
-                Global keeps the run wide; regional adds gentle relevance; country applies strict filtering.
-              </p>
-              ${locationValue
+              ${scopedFilterActive && locationValue
                 ? html`
-                    <p className="mt-3 text-sm font-semibold text-atelier-ink">
-                      ${selectedScopeLabel}: ${locationValue}
-                    </p>
-                  `
-                : null}
-              ${scopedFilterActive && !showSecondaryFilterPanel && locationValue
-                ? html`
-                    <div className="mt-3">
+                    <div className="shrink-0">
                       <${EditFilterButton}
                         label=${`Edit ${selectedScopeLabel} Filter`}
                         disabled=${isProcessing}
@@ -2878,11 +2898,10 @@ function BriefingCanvas({
 
 function App() {
   const reducedMotion = useReducedMotion();
-  const enabledSections = SECTION_OPTIONS.map((option) => option.value);
   const followUpEnabled = isFollowUpEnabled();
   const [isProcessing, setIsProcessing] = useState(false);
   const [topic, setTopic] = useState("");
-  const [section, setSection] = useState(() => enabledSections[0] || "trends");
+  const [section, setSection] = useState("");
   const [locationPreference, setLocationPreference] = useState("global");
   const [locationValue, setLocationValue] = useState("");
   const [locations, setLocations] = useState(() => loadCachedLocationCatalog() || DEFAULT_LOCATIONS);
@@ -2918,12 +2937,6 @@ function App() {
     reducedMotion,
     appendLiveJournalMessage,
   });
-
-  useEffect(() => {
-    if (!enabledSections.includes(section)) {
-      setSection(enabledSections[0] || "trends");
-    }
-  }, [enabledSections, section]);
 
   async function handleDownloadResults() {
     if (!analysisResult) {
@@ -3366,6 +3379,12 @@ function App() {
       return;
     }
 
+    if (!section) {
+      setAnalysisError("Choose a module from the fixed top selector before launching analysis.");
+      setAnalysisState("error");
+      return;
+    }
+
     if (locationPreference !== "global" && !locationValue) {
       setAnalysisError("Select a region or country before launching a location-specific run.");
       setAnalysisState("error");
@@ -3470,90 +3489,100 @@ function App() {
 
   return html`
     <div className="workspace-shell relative min-h-full overflow-x-hidden">
-      <div className="workspace-grid relative z-10 grid min-h-full grid-rows-[auto_auto_minmax(0,1fr)] gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4 xl:px-5 xl:py-5">
+      <div className="workspace-grid relative z-10 grid min-h-full grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4 xl:px-5 xl:py-5">
         <${WorkspaceHeader}
           currentLocation=${displayMeta.location}
         />
 
-        <${CommandDeck}
-          topic=${topic}
+        <${ModuleSelectorBar}
           section=${section}
-          locationPreference=${locationPreference}
-          locationValue=${locationValue}
-          secondaryFilterOpen=${secondaryFilterOpen}
-          locations=${locations}
-          analysisError=${analysisState === "error" ? analysisError : ""}
-          locationLoadError=${locationLoadError}
-          isProcessing=${isProcessing}
-          regionQuery=${regionQuery}
-          countryQuery=${countryQuery}
-          filteredRegions=${filteredRegions}
-          filteredCountries=${filteredCountries}
-          allCountriesCount=${allCountriesCount}
-          onTopicChange=${setTopic}
           onSectionChange=${setSection}
-          onPreferenceChange=${setLocationPreference}
-          onRegionQueryChange=${setRegionQuery}
-          onCountryQueryChange=${setCountryQuery}
-          onLocationSelect=${setLocationValue}
-          onOpenSecondaryFilter=${() => setSecondaryFilterOpen(true)}
-          onCloseSecondaryFilter=${() => setSecondaryFilterOpen(false)}
-          onAnalyze=${handleAnalyze}
+          disabled=${isProcessing}
         />
 
-        ${showWorkspacePanels
+        ${section
           ? html`
-              <div className="relative min-h-0">
-                <div
-                  className=${cx(
-                    "workspace-main grid min-h-0 gap-4 transition-opacity duration-200 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]",
-                    isWorkspaceTransitioning ? "opacity-0" : "opacity-100",
-                  )}
-                >
-                  <${FieldNotesPane}
-                    analysisState=${analysisState}
-                    result=${analysisResult}
-                    debug=${analysisDebug}
-                    meta=${displayMeta}
-                    analysisError=${analysisError}
-                    liveJournal=${liveJournal}
-                    progressValue=${progressValue}
-                    reducedMotion=${reducedMotion}
-                  />
+              <${CommandDeck}
+                topic=${topic}
+                section=${section}
+                locationPreference=${locationPreference}
+                locationValue=${locationValue}
+                secondaryFilterOpen=${secondaryFilterOpen}
+                locations=${locations}
+                analysisError=${analysisState === "error" ? analysisError : ""}
+                locationLoadError=${locationLoadError}
+                isProcessing=${isProcessing}
+                regionQuery=${regionQuery}
+                countryQuery=${countryQuery}
+                filteredRegions=${filteredRegions}
+                filteredCountries=${filteredCountries}
+                allCountriesCount=${allCountriesCount}
+                onTopicChange=${setTopic}
+                onSectionChange=${setSection}
+                onPreferenceChange=${setLocationPreference}
+                onRegionQueryChange=${setRegionQuery}
+                onCountryQueryChange=${setCountryQuery}
+                onLocationSelect=${setLocationValue}
+                onOpenSecondaryFilter=${() => setSecondaryFilterOpen(true)}
+                onCloseSecondaryFilter=${() => setSecondaryFilterOpen(false)}
+                onAnalyze=${handleAnalyze}
+              />
 
-                  <${BriefingCanvas}
-                    analysisState=${analysisState}
-                    result=${analysisResult}
-                    debug=${analysisDebug}
-                    meta=${displayMeta}
-                  analysisError=${analysisError}
-                  progressValue=${progressValue}
-                  onLoaderReady=${handleBriefingLoaderReady}
-                  loaderFrameId=${loaderFrameId}
-                  onDownload=${handleDownloadResults}
-                  exportPending=${exportPending}
-                  followUpEnabled=${followUpEnabled}
-                  followUpOpen=${followUpOpen}
-                  followUpQuery=${followUpQuery}
-                  followUpDraft=${followUpDraft}
-                    followUpPending=${followUpPending}
-                    followUps=${followUps}
-                    isProcessing=${isProcessing}
-                    onToggleFollowUp=${toggleFollowUpComposer}
-                    onFollowUpQueryChange=${setFollowUpQuery}
-                    onFollowUpDraftChange=${setFollowUpDraft}
-                    onFollowUpSubmit=${handleFollowUpSubmit}
-                    onFollowUpConfirm=${finalizeFollowUp}
-                    onFollowUpEdit=${editFollowUpRefinement}
-                  />
-                </div>
+              ${showWorkspacePanels
+                ? html`
+                    <div className="relative min-h-0">
+                      <div
+                        className=${cx(
+                          "workspace-main grid min-h-0 gap-4 transition-opacity duration-200 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]",
+                          isWorkspaceTransitioning ? "opacity-0" : "opacity-100",
+                        )}
+                      >
+                        <${FieldNotesPane}
+                          analysisState=${analysisState}
+                          result=${analysisResult}
+                          debug=${analysisDebug}
+                          meta=${displayMeta}
+                          analysisError=${analysisError}
+                          liveJournal=${liveJournal}
+                          progressValue=${progressValue}
+                          reducedMotion=${reducedMotion}
+                        />
 
-                <${AnimatePresence} initial=${false}>
-                  ${isWorkspaceTransitioning
-                    ? html`<${WorkspaceTransitionShell} key="workspace-transition" />`
-                    : null}
-                </${AnimatePresence}>
-              </div>
+                        <${BriefingCanvas}
+                          analysisState=${analysisState}
+                          result=${analysisResult}
+                          debug=${analysisDebug}
+                          meta=${displayMeta}
+                          analysisError=${analysisError}
+                          progressValue=${progressValue}
+                          onLoaderReady=${handleBriefingLoaderReady}
+                          loaderFrameId=${loaderFrameId}
+                          onDownload=${handleDownloadResults}
+                          exportPending=${exportPending}
+                          followUpEnabled=${followUpEnabled}
+                          followUpOpen=${followUpOpen}
+                          followUpQuery=${followUpQuery}
+                          followUpDraft=${followUpDraft}
+                          followUpPending=${followUpPending}
+                          followUps=${followUps}
+                          isProcessing=${isProcessing}
+                          onToggleFollowUp=${toggleFollowUpComposer}
+                          onFollowUpQueryChange=${setFollowUpQuery}
+                          onFollowUpDraftChange=${setFollowUpDraft}
+                          onFollowUpSubmit=${handleFollowUpSubmit}
+                          onFollowUpConfirm=${finalizeFollowUp}
+                          onFollowUpEdit=${editFollowUpRefinement}
+                        />
+                      </div>
+
+                      <${AnimatePresence} initial=${false}>
+                        ${isWorkspaceTransitioning
+                          ? html`<${WorkspaceTransitionShell} key="workspace-transition" />`
+                          : null}
+                      </${AnimatePresence}>
+                    </div>
+                  `
+                : null}
             `
           : null}
       </div>

@@ -972,8 +972,14 @@ textarea:disabled {
 }
 
 .workspace-grid {
-  grid-template-rows: auto auto auto !important;
+  grid-template-rows: auto auto auto auto !important;
   align-content: start;
+}
+
+.sticky-module-bar {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 20;
 }
 
 .workspace-main {
