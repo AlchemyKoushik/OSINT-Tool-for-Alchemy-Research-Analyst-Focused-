@@ -5,6 +5,7 @@ import asyncio
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
+import psycopg
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
@@ -36,6 +37,7 @@ from services.competitive_landscape_runtime import log_cl_perf
 from services.openai_service import generate_section_analysis, get_last_structured_completion_diagnostics
 from services.pipeline_orchestrator import execute_pipeline
 from services.html_export_service import build_html_export
+from services.ies_catalog_service import get_ies_catalog as load_ies_catalog
 from services.prompt_builder import build_metadata_payload, get_prompt
 from services.redis_service import check_rate_limit, delete_session, get_session, update_session
 from services.ranking_service import rank_and_limit_insights
@@ -477,6 +479,17 @@ def _resolve_insight_limit(follow_up_mode: bool) -> int:
 @router.get("/locations")
 async def get_locations() -> Dict[str, Any]:
     return get_location_catalog()
+
+
+@router.get("/ies-catalog")
+async def get_ies_catalog() -> Dict[str, Any]:
+    try:
+        return load_ies_catalog()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except psycopg.Error as exc:  # type: ignore[name-defined]
+        logger.exception("Failed to load IES catalog from the database.")
+        raise HTTPException(status_code=503, detail="Unable to load the IES catalog from the database.") from exc
 
 
 @router.post("/follow-up")

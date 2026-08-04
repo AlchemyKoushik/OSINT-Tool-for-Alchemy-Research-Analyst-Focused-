@@ -13,5 +13,8 @@ export function buildJobProgressMessage(jobPayload, fallbackSection = "trends") 
   if (fallbackSection === "drivers") {
     return "Preparing the market drivers briefing...";
   }
+  if (fallbackSection === "industry_earnings_snapshot") {
+    return "Preparing the industry earnings snapshot briefing...";
+  }
   return "Preparing the industry trends briefing...";
 }

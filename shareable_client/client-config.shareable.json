@@ -1,7 +1,9 @@
 {
   "enabledSections": [
     "trends",
-    "competitive_landscape"
+    "drivers",
+    "competitive_landscape",
+    "industry_earnings_snapshot"
   ],
-  "followUpEnabled": false
+  "followUpEnabled": true
 }

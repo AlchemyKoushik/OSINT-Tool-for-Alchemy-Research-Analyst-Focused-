@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     USE_CRAWL4AI: bool = False
     COMPARE_CRAWLERS: bool = False
     REDIS_URL: str = "redis://localhost:6379/0"
+    DATABASE_URL: str = ""
     CLOUDFLARE_R2_ACCOUNT_ID: str = ""
     CLOUDFLARE_R2_ACCESS_KEY_ID: str = ""
     CLOUDFLARE_R2_SECRET_ACCESS_KEY: str = ""
@@ -61,7 +62,7 @@ class Settings(BaseSettings):
     MAX_EXPORT_REQUEST_BYTES: int = 2500000
     MAX_QUERY_LENGTH: int = 500
     MAX_FOLLOW_UP_QUERY_LENGTH: int = 500
-    ALLOWED_RESEARCH_SECTIONS: str = "trends,drivers,competitive_landscape"
+    ALLOWED_RESEARCH_SECTIONS: str = "trends,drivers,competitive_landscape,industry_earnings_snapshot"
     FOLLOW_UP_ENABLED: bool = True
     MAX_EXISTING_CHUNKS: int = 250
     MAX_CHUNK_TEXT_LENGTH: int = 6000
@@ -121,7 +122,7 @@ class Settings(BaseSettings):
                 normalized.append(section)
 
         if not normalized:
-            return ("trends", "drivers", "competitive_landscape")
+            return ("trends", "drivers", "competitive_landscape", "industry_earnings_snapshot")
 
         return tuple(normalized)
 

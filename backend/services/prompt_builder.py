@@ -24,12 +24,17 @@ SECTION_DEFINITIONS: Final[Dict[str, str]] = {
         "Identify the key players in the market, split them into major players and small / mid-sized / emerging "
         "players, and ground every company selection in recent evidence from the last 2 to 3 years."
     ),
+    "industry_earnings_snapshot": (
+        "Synthesize the latest sector and industry earnings signals, focusing on revenue, margins, EPS, guidance, "
+        "demand, bookings, backlog, and other financially material performance changes."
+    ),
 }
 
 SECTION_TITLES: Final[Dict[str, str]] = {
     "trends": "Industry Trends",
     "drivers": "Market Drivers",
     "competitive_landscape": "Competitive Landscape",
+    "industry_earnings_snapshot": "Industry Earnings Snapshot",
 }
 
 
@@ -219,6 +224,29 @@ def build_metadata_payload(
             "- Every company must include source_ids tied directly to the evidence blocks.\n"
             "- When the evidence supports it, try to surface roughly 5 to 10 major-player candidates and 5 to 15 emerging-player candidates before later company research.\n"
             f"- Return up to {max(1, int(max_items or 1))} companies in each group when supported by evidence.\n\n"
+            "SOURCE_METADATA\n"
+            f"{_format_source_metadata(source_scores, artifact_counts)}\n\n"
+            "EVIDENCE\n"
+            f"{_format_evidence_blocks(evidence_blocks)}"
+        )
+        return payload.strip()
+
+    if normalized_section == "industry_earnings_snapshot":
+        payload = (
+            "INPUT\n"
+            f"- Topic: {topic.strip()}\n"
+            "- Section: Industry Earnings Snapshot\n"
+            f"- Research date: {get_current_research_date()}\n"
+            f"{_format_location_line(resolved_location_context)}\n\n"
+            "WORKFLOW\n"
+            "- Build an earnings-focused snapshot of the selected sector and industry.\n"
+            "- Prioritize revenue, margin, EPS, guidance, demand, bookings, backlog, and other financially material signals.\n"
+            "- Use the requested geography to keep the analysis grounded in the relevant market scope.\n"
+            "- Use the coverage level to stay focused on the requested Top N universe.\n"
+            "- Prefer recent quarterly results, earnings releases, investor presentations, and earnings-call evidence.\n"
+            "- Keep the output insight-led rather than company discovery led.\n"
+            "- Every returned item must include source_ids tied directly to the evidence blocks.\n"
+            f"- Return up to {max(1, int(max_items or 1))} insights when supported by evidence.\n\n"
             "SOURCE_METADATA\n"
             f"{_format_source_metadata(source_scores, artifact_counts)}\n\n"
             "EVIDENCE\n"
@@ -659,6 +687,64 @@ def build_example_search_query_user_prompt(
             "- Do not generate queries whose main purpose is recent developments, competitor positioning, or generic market trend summaries.\n"
             "- Avoid brittle year-scope strings such as OR OR combinations.\n"
             "- Avoid unsupported competitor names.\n\n"
+            "Return JSON in this shape:\n"
+            "{\n"
+            "  \"queries\": [\n"
+            "    {\n"
+            "      \"query\": \"search query text\",\n"
+            "      \"purpose\": \"what type of evidence this query is trying to find\",\n"
+            "      \"priority\": \"high | medium | fallback\"\n"
+            "    }\n"
+            "  ]\n"
+            "}"
+        ).strip()
+    if section.strip().lower() == "industry_earnings_snapshot":
+        return (
+            "INPUT\n"
+            f"- Topic: {topic.strip()}\n"
+            f"- Section: Industry Earnings Snapshot\n"
+            f"- Research date: {current_date}\n"
+            f"- Location: {geo}\n"
+            f"- Snapshot title: {trend_heading.strip()}\n"
+            f"- Snapshot summary: {trend_body.strip()}\n\n"
+            "TASK\n"
+            "Generate search queries to find recent earnings, revenue, margin, EPS, guidance, demand, and investor presentation evidence for this snapshot.\n\n"
+            "Rules:\n"
+            "- Generate 6 to 8 queries.\n"
+            "- Each query must include the sector or industry focus, the location, and an earnings signal.\n"
+            "- Prioritise quarterly results, earnings releases, guidance updates, and investor presentation language.\n"
+            "- Include at least one revenue query, one margin query, one EPS query, and one guidance query.\n"
+            "- Avoid generic market-trend wording.\n"
+            "- Do not include unsupported company names unless present in the snapshot text.\n\n"
+            "Return JSON in this shape:\n"
+            "{\n"
+            "  \"queries\": [\n"
+            "    {\n"
+            "      \"query\": \"search query text\",\n"
+            "      \"purpose\": \"what type of evidence this query is trying to find\",\n"
+            "      \"priority\": \"high | medium | fallback\"\n"
+            "    }\n"
+            "  ]\n"
+            "}"
+        ).strip()
+    if section.strip().lower() == "industry_earnings_snapshot":
+        return (
+            "INPUT\n"
+            f"- Topic: {topic.strip()}\n"
+            f"- Section: Industry Earnings Snapshot\n"
+            f"- Research date: {current_date}\n"
+            f"- Location: {geo}\n"
+            f"- Snapshot title: {trend_heading.strip()}\n"
+            f"- Snapshot summary: {trend_body.strip()}\n\n"
+            "TASK\n"
+            "Generate search queries to find recent earnings, revenue, margin, EPS, guidance, demand, and investor presentation evidence for this snapshot.\n\n"
+            "Rules:\n"
+            "- Generate 6 to 8 queries.\n"
+            "- Each query must include the sector or industry focus, the location, and an earnings signal.\n"
+            "- Prioritise quarterly results, earnings releases, guidance updates, and investor presentation language.\n"
+            "- Include at least one revenue query, one margin query, one EPS query, and one guidance query.\n"
+            "- Avoid generic market-trend wording.\n"
+            "- Do not include unsupported company names unless present in the snapshot text.\n\n"
             "Return JSON in this shape:\n"
             "{\n"
             "  \"queries\": [\n"

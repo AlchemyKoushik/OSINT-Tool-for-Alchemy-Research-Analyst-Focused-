@@ -15,6 +15,9 @@ The search queries should prioritise:
 - press releases,
 - regulatory filings,
 - project announcements,
+- earnings releases,
+- investor presentations,
+- quarterly results,
 - product launches,
 - partnerships,
 - acquisitions,
@@ -150,6 +153,7 @@ Section Logic:
 - Trends -> explain WHAT is changing in the market.
 - Drivers -> explain WHY the market is changing.
 - Competitive Landscape -> identify the main companies active in the market, classify them by relative market standing, and write a short overview of each company.
+- Industry Earnings Snapshot -> synthesize the latest sector and industry earnings signals, focusing on revenue, margins, EPS, guidance, demand, and other financially material performance changes.
 
 Time Rule:
 - Treat all research and analysis as being prepared as of the current date.
@@ -199,6 +203,7 @@ Description Rules:
   - why it is happening,
   - and why it matters.
 - For Trends, each description should read as a clear market insight supported by recent data, company actions, regulatory changes, expert commentary, customer behavior shifts, or other credible industry signals.
+- For Industry Earnings Snapshot, each description should read as a concise earnings-focused interpretation of the sector or industry, using recent revenue, margin, EPS, guidance, demand, and performance evidence.
 - For Competitive Landscape, each description should read as a concise company overview of no more than 3 to 4 lines. Focus on the player's business role, scale, footprint, core products/services, and market position in the requested geography.
 - Avoid unsupported assumptions, broad market summaries, repeated points across trends, and recommendation-style conclusions.
 - Avoid repeating evidence already covered in other insights.
@@ -345,6 +350,28 @@ Rules:
 - Avoid vague phrases like analysis of, overview of, future outlook, CAGR-only queries, and generic essay wording.
 - Keep each query to 16 words or fewer.
 - Make the set diverse across leader, challenger, local, regional, emerging, developer, EPC, and niche-player discovery angles.
+""".strip(),
+    "industry_earnings_snapshot": """
+You generate high-signal OSINT search queries for an industry earnings snapshot.
+
+Objective:
+- Find the latest earnings evidence for a sector and industry.
+- Surface revenue, margin, EPS, guidance, demand, backlog, pricing, bookings, and regional performance signals.
+
+Output:
+- Return strict JSON only in this exact shape: {"queries": ["..."]}.
+- Return exactly 10 queries.
+
+Rules:
+- Every query must be concise, earnings-focused, and decision-useful.
+- Every query must include the topic and reflect the requested geography and time horizon.
+- Across the full set, include evidence-seeking terms such as: earnings, quarterly results, revenue, margins, EPS, guidance, investor presentation, financial results, outlook, demand, bookings, backlog, profitability, operating margin.
+- Include several queries that surface company filings or investor materials as well as industry coverage.
+- Prefer current and recent evidence, ideally from the last two years.
+- Prefer official company pages, investor materials, earnings releases, and reputable financial or industry coverage.
+- Avoid vague phrases like analysis of, overview of, future outlook, CAGR-only queries, and generic essay wording.
+- Keep each query to 15 words or fewer.
+- Make the set diverse across earnings, revenue, margin, guidance, demand, and geography angles.
 """.strip(),
 }
 

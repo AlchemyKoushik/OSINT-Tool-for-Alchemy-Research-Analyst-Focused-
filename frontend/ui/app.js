@@ -67,6 +67,7 @@ const BASE_SECTION_OPTIONS = [
   { value: "trends", label: "Trends" },
   { value: "drivers", label: "Drivers" },
   { value: "competitive_landscape", label: "Competitive Landscape (CL)" },
+  { value: "industry_earnings_snapshot", label: "Industry Earnings Snapshot" },
 ];
 
 function getClientConfig() {
@@ -107,6 +108,14 @@ const BUILT_IN_LOCATION_CATALOG_PATHS = [
 ];
 
 const SECTION_OPTIONS = BASE_SECTION_OPTIONS.filter((option) => getEnabledSections().includes(option.value));
+
+const INDUSTRY_EARNINGS_SNAPSHOT_COVERAGE_OPTIONS = [
+  { value: "top_10", label: "Top 10" },
+  { value: "top_20", label: "Top 20" },
+  { value: "top_50", label: "Top 50" },
+];
+let cachedIesCatalog = null;
+let cachedIesCatalogPromise = null;
 
 const REGION_NOTES = {
   Asia: "Industrial, consumer, and policy shifts across high-growth economies.",
@@ -204,6 +213,9 @@ function sectionTitle(section) {
   if (section === "competitive_landscape") {
     return "Competitive Landscape";
   }
+  if (section === "industry_earnings_snapshot") {
+    return "Industry Earnings Snapshot";
+  }
   return "Industry Trends";
 }
 
@@ -217,7 +229,51 @@ function sectionDescriptor(section) {
   if (section === "competitive_landscape") {
     return "Key players and other players separated into memo-ready company profiles, with recent developments from the last 2 to 3 years.";
   }
+  if (section === "industry_earnings_snapshot") {
+    return "Choose a sector, industry, geography, and coverage level to build a focused earnings snapshot.";
+  }
   return "Observable patterns, shifts, and momentum lines across the landscape.";
+}
+
+function getOptionLabel(options, value, fallback = "") {
+  const normalizedValue = String(value || "").trim();
+  const match = Array.isArray(options)
+    ? options.find((option) => String(option?.value || "").trim() === normalizedValue)
+    : null;
+  return String(match?.label || fallback || "").trim();
+}
+
+function buildIndustryEarningsSnapshotTopic({
+  sectorOptions,
+  industriesBySector,
+  coverageOptions,
+  sector,
+  industry,
+  coverage,
+  locationLabel,
+}) {
+  const sectorLabel = getOptionLabel(Array.isArray(sectorOptions) ? sectorOptions : [], sector, sector);
+  const industryLabel = getOptionLabel(
+    (industriesBySector && industriesBySector[String(sector || "").trim()]) || [],
+    industry,
+    industry,
+  );
+  const coverageLabel = getOptionLabel(
+    Array.isArray(coverageOptions) ? coverageOptions : INDUSTRY_EARNINGS_SNAPSHOT_COVERAGE_OPTIONS,
+    coverage,
+    coverage,
+  );
+  const locationText = String(locationLabel || "").trim();
+
+  const titleParts = [sectorLabel, industryLabel].filter(Boolean);
+  const scopeParts = [coverageLabel, locationText].filter(Boolean);
+
+  if (!titleParts.length && !scopeParts.length) {
+    return "Industry Earnings Snapshot";
+  }
+
+  const titleText = titleParts.length ? titleParts.join(" / ") : "Industry Earnings Snapshot";
+  return scopeParts.length ? `${titleText} | ${scopeParts.join(" | ")}` : titleText;
 }
 
 function humanizePreference(preference) {
@@ -244,6 +300,9 @@ function followUpSectionTitle(query, fallbackSection) {
     if (fallbackSection === "competitive_landscape") {
       return "Follow-up Competitive Landscape";
     }
+    if (fallbackSection === "industry_earnings_snapshot") {
+      return "Follow-up Earnings Snapshot";
+    }
     return "Follow-up Trends";
   }
 
@@ -256,6 +315,13 @@ function followUpSectionTitle(query, fallbackSection) {
   }
   if (lowered.includes("merger") || lowered.includes("acquisition")) {
     return "Deals and Consolidation Signals";
+  }
+
+  if (fallbackSection === "industry_earnings_snapshot") {
+    return normalized
+      .split(/\s+/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
   }
 
   return normalized
@@ -464,15 +530,20 @@ function normalizeResearchResponse(payload, fallbackSection = "trends") {
   }
 
   const inferredSection =
-    payload.section === "trends" || payload.section === "drivers" || payload.section === "competitive_landscape"
+    payload.section === "trends" ||
+    payload.section === "drivers" ||
+    payload.section === "competitive_landscape" ||
+    payload.section === "industry_earnings_snapshot"
       ? payload.section
       : Array.isArray(payload.drivers)
         ? "drivers"
         : Array.isArray(payload.competitive_landscape)
           ? "competitive_landscape"
-        : Array.isArray(payload.trends)
-          ? "trends"
-          : fallbackSection;
+          : Array.isArray(payload.industry_earnings_snapshot)
+            ? "industry_earnings_snapshot"
+          : Array.isArray(payload.trends)
+            ? "trends"
+            : fallbackSection;
   const normalizedMajorPlayers =
     inferredSection === "competitive_landscape" && Array.isArray(payload.major_players)
       ? payload.major_players.map(normalizeResearchItem).filter(Boolean)
@@ -701,6 +772,115 @@ function normalizeLocationCatalog(payload) {
   };
 }
 
+function isIesCatalog(payload) {
+  return payload && typeof payload === "object" && Array.isArray(payload.sectors);
+}
+
+function normalizeIesCatalogOption(value) {
+  if (value && typeof value === "object") {
+    const normalizedValue = String(value.value || value.label || value.sector || value.industry || "").trim();
+    const normalizedLabel = String(value.label || value.value || value.sector || value.industry || "").trim();
+    if (!normalizedValue && !normalizedLabel) {
+      return null;
+    }
+    return {
+      value: normalizedValue || normalizedLabel,
+      label: normalizedLabel || normalizedValue,
+    };
+  }
+
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return null;
+  }
+  return { value: normalized, label: normalized };
+}
+
+function normalizeIesCatalog(payload) {
+  if (!isIesCatalog(payload)) {
+    return null;
+  }
+
+  const sectorsInput = Array.isArray(payload.sectors) ? payload.sectors : [];
+  const industriesBySectorInput = payload.industries_by_sector || payload.industriesBySector || {};
+  const sectors = [];
+  const industriesBySector = {};
+  const seenSectors = new Set();
+
+  sectorsInput.forEach((entry) => {
+    const sectorValue =
+      typeof entry === "string"
+        ? entry
+        : String(entry?.value || entry?.label || entry?.sector || "").trim();
+    if (!sectorValue) {
+      return;
+    }
+
+    const sectorKey = sectorValue.toLowerCase();
+    if (seenSectors.has(sectorKey)) {
+      return;
+    }
+    seenSectors.add(sectorKey);
+
+    const sectorIndustriesRaw =
+      industriesBySectorInput[sectorValue] ||
+      industriesBySectorInput[entry?.value] ||
+      industriesBySectorInput[entry?.label] ||
+      [];
+    const normalizedIndustries = Array.isArray(sectorIndustriesRaw)
+      ? sectorIndustriesRaw.map(normalizeIesCatalogOption).filter(Boolean)
+      : [];
+
+    sectors.push({
+      value: sectorValue,
+      label: sectorValue,
+      industry_count: normalizedIndustries.length,
+    });
+    industriesBySector[sectorValue] = normalizedIndustries;
+  });
+
+  if (!sectors.length) {
+    return null;
+  }
+
+  return {
+    sectors,
+    industriesBySector,
+  };
+}
+
+async function loadIesCatalog() {
+  if (cachedIesCatalog) {
+    return cachedIesCatalog;
+  }
+
+  if (!cachedIesCatalogPromise) {
+    cachedIesCatalogPromise = (async () => {
+      const response = await fetch(apiUrl("/api/ies-catalog"));
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      const normalizedCatalog = normalizeIesCatalog(payload);
+      if (!response.ok || !normalizedCatalog) {
+        throw new Error("The IES catalog could not be loaded from the database.");
+      }
+
+      cachedIesCatalog = normalizedCatalog;
+      return normalizedCatalog;
+    })();
+  }
+
+  try {
+    return await cachedIesCatalogPromise;
+  } finally {
+    cachedIesCatalogPromise = null;
+  }
+}
+
 function loadCachedLocationCatalog() {
   if (typeof window === "undefined") {
     return null;
@@ -771,6 +951,14 @@ function buildCompletedJournal(result, debug, meta) {
   const selectedUrls = Array.isArray(debug?.selected_urls) ? debug.selected_urls : [];
   const sourceCount = Number(debug?.num_sources || selectedUrls.length || 0);
   const artifacts = debug?.artifact_counts || {};
+  const outputLabel =
+    result?.section === "drivers"
+      ? "drivers"
+      : result?.section === "competitive_landscape"
+        ? "company profiles"
+        : result?.section === "industry_earnings_snapshot"
+          ? "earnings snapshot insights"
+          : "insights";
 
   return [
     {
@@ -787,7 +975,7 @@ function buildCompletedJournal(result, debug, meta) {
     },
     {
       id: "journal-output",
-      message: `Delivered ${result?.items?.length || 0} memo-ready ${result?.section === "drivers" ? "drivers" : result?.section === "competitive_landscape" ? "company profiles" : "insights"} in the final canvas.`,
+      message: `Delivered ${result?.items?.length || 0} memo-ready ${outputLabel} in the final canvas.`,
     },
   ];
 }
@@ -1179,7 +1367,7 @@ function WorkspaceHeader({ currentLocation }) {
 
 function ModuleSelectorBar({ section, onSectionChange, disabled = false }) {
   return html`
-    <${PanelShell} className="atelier-panel-strong sticky-module-bar sticky top-3 z-20 px-4 py-4 md:px-5">
+    <${PanelShell} className="atelier-panel-strong module-selector-bar sticky-module-bar sticky top-3 z-20 px-4 py-4 md:px-5">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,auto)] xl:items-center">
         <div className="min-w-0">
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.28em] text-atelier-moss/72">
@@ -1349,6 +1537,13 @@ function CountrySelector({
 function CommandDeck({
   topic,
   section,
+  snapshotSector,
+  snapshotIndustry,
+  snapshotCoverage,
+  snapshotSectorOptions,
+  snapshotIndustryOptions,
+  snapshotCatalogLoading,
+  snapshotCatalogError,
   locationPreference,
   locationValue,
   secondaryFilterOpen,
@@ -1363,6 +1558,9 @@ function CommandDeck({
   allCountriesCount,
   onTopicChange,
   onSectionChange,
+  onSnapshotSectorChange,
+  onSnapshotIndustryChange,
+  onSnapshotCoverageChange,
   onPreferenceChange,
   onRegionQueryChange,
   onCountryQueryChange,
@@ -1375,6 +1573,250 @@ function CommandDeck({
   const showSecondaryFilterPanel = scopedFilterActive && (secondaryFilterOpen || !locationValue);
   const selectedScopeLabel =
     locationPreference === "country_specific" ? "Country" : "Region";
+  const isEarningsSnapshot = section === "industry_earnings_snapshot";
+  const snapshotCoverageLabel =
+    INDUSTRY_EARNINGS_SNAPSHOT_COVERAGE_OPTIONS.find((option) => option.value === snapshotCoverage)?.label || "";
+  const snapshotReady = !snapshotCatalogLoading && !snapshotCatalogError && snapshotSectorOptions.length > 0;
+
+  if (isEarningsSnapshot) {
+    return html`
+      <${motion.div}
+        initial=${{ opacity: 0, y: 18 }}
+        animate=${{ opacity: 1, y: 0 }}
+        transition=${TRANSITION}
+        style=${MOTION_SMOOTH_STYLE}
+        className="min-h-0"
+      >
+        <${PanelShell} className="atelier-panel-crisp overflow-hidden px-5 py-5 md:px-6 md:py-6">
+          <${PanelHeader}
+            eyebrow="Command Deck"
+            title="Design the earnings snapshot"
+            subtitle="Choose a sector, industry, geography, and coverage level to build a focused earnings snapshot."
+          />
+
+          <form className="mt-6 grid gap-4" onSubmit=${onAnalyze}>
+            <div className=${cx("atelier-panel-strong rounded-[26px] px-4 py-4", isProcessing && "ui-disabled-shell")}>
+              <div className="command-deck-grid grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(14rem,0.95fr)_minmax(10rem,0.72fr)_minmax(14.5rem,0.85fr)]">
+                <div className="command-deck-field">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotSector">
+                    Sector
+                  </label>
+                  <${ThemedSelect}
+                    id="snapshotSector"
+                    options=${snapshotSectorOptions}
+                    value=${snapshotSector}
+                    onChange=${onSnapshotSectorChange}
+                    disabled=${isProcessing || snapshotCatalogLoading || !snapshotSectorOptions.length}
+                    placeholderLabel=${snapshotCatalogLoading
+                      ? "Loading Sectors"
+                      : snapshotSectorOptions.length
+                        ? "Select Sector"
+                        : "No Sectors Found"}
+                  />
+                </div>
+
+                <div className="command-deck-field">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotIndustry">
+                    Industry
+                  </label>
+                  <${ThemedSelect}
+                    id="snapshotIndustry"
+                    options=${snapshotIndustryOptions}
+                    value=${snapshotIndustry}
+                    onChange=${onSnapshotIndustryChange}
+                    disabled=${isProcessing || snapshotCatalogLoading || !snapshotSector || !snapshotIndustryOptions.length}
+                    placeholderLabel=${snapshotCatalogLoading
+                      ? "Loading Industries"
+                      : snapshotSector
+                        ? snapshotIndustryOptions.length
+                          ? "Select Industry"
+                          : "No Industries Found"
+                        : "Choose Sector First"}
+                  />
+                </div>
+
+                <div className="command-deck-field">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotLocation">
+                    Geography
+                  </label>
+                  <${ThemedSelect}
+                    id="snapshotLocation"
+                    options=${locations.preferences}
+                    value=${locationPreference}
+                    onChange=${onPreferenceChange}
+                    disabled=${isProcessing}
+                  />
+                </div>
+
+                <div className="command-deck-field">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotCoverage">
+                    Coverage
+                  </label>
+                  <${ThemedSelect}
+                    id="snapshotCoverage"
+                    options=${INDUSTRY_EARNINGS_SNAPSHOT_COVERAGE_OPTIONS}
+                    value=${snapshotCoverage}
+                    onChange=${onSnapshotCoverageChange}
+                    disabled=${isProcessing || snapshotCatalogLoading}
+                    placeholderLabel="Select Coverage"
+                  />
+                </div>
+
+                <div className="command-deck-action">
+                  <${LaunchButton} disabled=${isProcessing || snapshotCatalogLoading || !snapshotReady} processing=${isProcessing} />
+                </div>
+              </div>
+            </div>
+
+            <div className="atelier-panel-strong rounded-[24px] px-4 py-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
+                    Applied Filter
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-atelier-ink">
+                    ${locationPreference === "global"
+                      ? "Global"
+                      : locationValue
+                        ? `${humanizePreference(locationPreference)}: ${locationValue}`
+                        : humanizePreference(locationPreference)}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-atelier-moss">
+                    ${locationPreference === "global"
+                      ? "Global keeps the snapshot broad and unrestricted."
+                      : locationValue
+                        ? "The earnings snapshot is narrowed to the chosen geography. Use the edit control if you want to change it."
+                        : "Choose a region or country to activate a scoped earnings snapshot."}
+                  </p>
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-atelier-moss/72">
+                    ${snapshotSector && snapshotIndustry ? `${snapshotSector.replace(/_/g, " ")} / ${snapshotIndustry.replace(/_/g, " ")}` : "Sector or industry not yet selected"}
+                    ${snapshotCoverageLabel ? ` | ${snapshotCoverageLabel}` : ""}
+                  </p>
+                </div>
+
+                ${scopedFilterActive && locationValue
+                  ? html`
+                      <div className="shrink-0">
+                        <${EditFilterButton}
+                          label=${`Edit ${selectedScopeLabel} Filter`}
+                          disabled=${isProcessing}
+                          onClick=${onOpenSecondaryFilter}
+                        />
+                      </div>
+                    `
+                  : null}
+              </div>
+            </div>
+
+            <${AnimatePresence} initial=${false} mode="wait">
+              ${locationPreference === "region_specific" && showSecondaryFilterPanel
+                ? html`
+                    <${motion.div}
+                      key="region-selector"
+                      initial=${{ opacity: 0, y: 10, scale: 0.985 }}
+                      animate=${{ opacity: 1, y: 0, scale: 1 }}
+                      exit=${{ opacity: 0, y: -8, scale: 0.985 }}
+                      transition=${TRANSITION}
+                      style=${MOTION_EXPAND_STYLE}
+                      className="overflow-hidden origin-top"
+                    >
+                      <div className="atelier-panel-strong rounded-[28px] px-4 py-4">
+                        <div className="mb-4 flex items-center justify-between gap-4">
+                          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
+                            Secondary Filter Panel
+                          </p>
+                          ${locationValue
+                            ? html`
+                                <button
+                                  type="button"
+                                  disabled=${isProcessing}
+                                  onClick=${onCloseSecondaryFilter}
+                                  aria-label="Close secondary filter panel"
+                                  className="filter-close-button"
+                                >
+                                  <${CloseIcon} />
+                                </button>
+                              `
+                            : null}
+                        </div>
+                        <${RegionSelector}
+                          regions=${filteredRegions}
+                          searchValue=${regionQuery}
+                          selectedValue=${locationValue}
+                          disabled=${isProcessing}
+                          onSearchChange=${onRegionQueryChange}
+                          onSelect=${onLocationSelect}
+                        />
+                      </div>
+                    </${motion.div}>
+                  `
+                : null}
+
+              ${locationPreference === "country_specific" && showSecondaryFilterPanel
+                ? html`
+                    <${motion.div}
+                      key="country-selector"
+                      initial=${{ opacity: 0, y: 10, scale: 0.985 }}
+                      animate=${{ opacity: 1, y: 0, scale: 1 }}
+                      exit=${{ opacity: 0, y: -8, scale: 0.985 }}
+                      transition=${TRANSITION}
+                      style=${MOTION_EXPAND_STYLE}
+                      className="overflow-hidden origin-top"
+                    >
+                      <div className="atelier-panel-strong rounded-[28px] px-4 py-4">
+                        <div className="mb-4 flex items-center justify-between gap-4">
+                          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
+                            Secondary Filter Panel
+                          </p>
+                          ${locationValue
+                            ? html`
+                                <button
+                                  type="button"
+                                  disabled=${isProcessing}
+                                  onClick=${onCloseSecondaryFilter}
+                                  aria-label="Close secondary filter panel"
+                                  className="filter-close-button"
+                                >
+                                  <${CloseIcon} />
+                                </button>
+                              `
+                            : null}
+                        </div>
+                        <${CountrySelector}
+                          countries=${filteredCountries}
+                          allCountriesCount=${allCountriesCount}
+                          searchValue=${countryQuery}
+                          selectedValue=${locationValue}
+                          disabled=${isProcessing}
+                          onSearchChange=${onCountryQueryChange}
+                          onSelect=${onLocationSelect}
+                        />
+                      </div>
+                    </${motion.div}>
+                  `
+                : null}
+            </${AnimatePresence}>
+
+            ${analysisError
+              ? html`
+                  <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-4 text-sm leading-7 text-rose-700">
+                    ${analysisError}
+                  </div>
+                `
+              : null}
+
+            ${locationLoadError
+              ? html`
+                  <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
+                    ${locationLoadError}
+                  </div>
+                `
+              : null}
+          </form>
+        </${PanelShell}>
+      </${motion.div}>
+    `;
+  }
 
   return html`
     <${motion.div}
@@ -2902,6 +3344,12 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [topic, setTopic] = useState("");
   const [section, setSection] = useState("");
+  const [snapshotSector, setSnapshotSector] = useState("");
+  const [snapshotIndustry, setSnapshotIndustry] = useState("");
+  const [snapshotCoverage, setSnapshotCoverage] = useState("");
+  const [snapshotCatalog, setSnapshotCatalog] = useState({ sectors: [], industriesBySector: {} });
+  const [snapshotCatalogLoading, setSnapshotCatalogLoading] = useState(false);
+  const [snapshotCatalogError, setSnapshotCatalogError] = useState("");
   const [locationPreference, setLocationPreference] = useState("global");
   const [locationValue, setLocationValue] = useState("");
   const [locations, setLocations] = useState(() => loadCachedLocationCatalog() || DEFAULT_LOCATIONS);
@@ -2937,6 +3385,8 @@ function App() {
     reducedMotion,
     appendLiveJournalMessage,
   });
+  const hasSelectedModule = Boolean(section);
+  const isEarningsSnapshot = section === "industry_earnings_snapshot";
 
   async function handleDownloadResults() {
     if (!analysisResult) {
@@ -3017,6 +3467,56 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!isEarningsSnapshot) {
+      setSnapshotCatalogLoading(false);
+      return;
+    }
+
+    if (cachedIesCatalog) {
+      setSnapshotCatalog(cachedIesCatalog);
+      setSnapshotCatalogError("");
+      setSnapshotCatalogLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSnapshotCatalog() {
+      setSnapshotCatalogLoading(true);
+      setSnapshotCatalogError("");
+
+      try {
+        const normalizedCatalog = await loadIesCatalog();
+
+        if (!cancelled) {
+          startTransition(() => {
+            setSnapshotCatalog(normalizedCatalog);
+            setSnapshotCatalogError("");
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "The IES catalog could not be loaded from the database.";
+          setSnapshotCatalogError(message);
+          setSnapshotCatalog({ sectors: [], industriesBySector: {} });
+        }
+      } finally {
+        if (!cancelled) {
+          setSnapshotCatalogLoading(false);
+        }
+      }
+    }
+
+    loadSnapshotCatalog();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEarningsSnapshot]);
+
+  useEffect(() => {
     setLocationValue("");
     setRegionQuery("");
     setCountryQuery("");
@@ -3039,6 +3539,18 @@ function App() {
     locationValue,
     locations.countries,
   );
+  const snapshotSectorOptions = snapshotCatalog.sectors;
+  const snapshotIndustryOptions =
+    snapshotCatalog.industriesBySector[String(snapshotSector || "").trim()] || [];
+  const snapshotTopicPreview = buildIndustryEarningsSnapshotTopic({
+    sectorOptions: snapshotSectorOptions,
+    industriesBySector: snapshotCatalog.industriesBySector,
+    coverageOptions: INDUSTRY_EARNINGS_SNAPSHOT_COVERAGE_OPTIONS,
+    sector: snapshotSector,
+    industry: snapshotIndustry,
+    coverage: snapshotCoverage,
+    locationLabel: currentLocationMeta.label,
+  });
   const filteredRegions = locations.regions.filter((region) =>
     !deferredRegionQuery.trim() ||
     region.toLowerCase().includes(deferredRegionQuery.trim().toLowerCase()),
@@ -3057,7 +3569,7 @@ function App() {
     analysisState === "completed"
       ? analysisMeta
       : {
-          topic: topic.trim(),
+          topic: isEarningsSnapshot ? snapshotTopicPreview : topic.trim(),
           location: currentLocationMeta,
         };
 
@@ -3077,6 +3589,11 @@ function App() {
     setFollowUpDraft("");
     setFollowUpPending(null);
     setFollowUps([]);
+  }
+
+  function handleSnapshotSectorChange(value) {
+    setSnapshotSector(value);
+    setSnapshotIndustry("");
   }
 
   function toggleFollowUpComposer() {
@@ -3372,15 +3889,66 @@ function App() {
       return;
     }
 
-    const trimmedTopic = topic.trim();
-    if (!trimmedTopic) {
-      setAnalysisError("Enter a topic before running analysis.");
+    if (!section) {
+      setAnalysisError("Choose a module from the fixed top selector before launching analysis.");
       setAnalysisState("error");
       return;
     }
 
-    if (!section) {
-      setAnalysisError("Choose a module from the fixed top selector before launching analysis.");
+    const trimmedTopic = topic.trim();
+    const snapshotTopic = buildIndustryEarningsSnapshotTopic({
+      sectorOptions: snapshotSectorOptions,
+      industriesBySector: snapshotCatalog.industriesBySector,
+      coverageOptions: INDUSTRY_EARNINGS_SNAPSHOT_COVERAGE_OPTIONS,
+      sector: snapshotSector,
+      industry: snapshotIndustry,
+      coverage: snapshotCoverage,
+      locationLabel: currentLocationMeta.label,
+    });
+
+    if (isEarningsSnapshot) {
+      if (snapshotCatalogLoading) {
+        setAnalysisError("Loading the industry earnings catalog from the database. Please wait a moment.");
+        setAnalysisState("error");
+        return;
+      }
+      if (snapshotCatalogError) {
+        setAnalysisError(snapshotCatalogError);
+        setAnalysisState("error");
+        return;
+      }
+      if (!snapshotSector) {
+        setAnalysisError("Choose a sector before launching the earnings snapshot.");
+        setAnalysisState("error");
+        return;
+      }
+      if (!snapshotSectorOptions.some((option) => option.value === snapshotSector)) {
+        setAnalysisError("Choose a sector from the loaded database options before launching the earnings snapshot.");
+        setAnalysisState("error");
+        return;
+      }
+      if (!snapshotIndustry) {
+        setAnalysisError("Choose an industry before launching the earnings snapshot.");
+        setAnalysisState("error");
+        return;
+      }
+      if (!snapshotIndustryOptions.some((option) => option.value === snapshotIndustry)) {
+        setAnalysisError("Choose an industry from the loaded database options before launching the earnings snapshot.");
+        setAnalysisState("error");
+        return;
+      }
+      if (!snapshotCoverage) {
+        setAnalysisError("Choose a coverage level before launching the earnings snapshot.");
+        setAnalysisState("error");
+        return;
+      }
+      if (!INDUSTRY_EARNINGS_SNAPSHOT_COVERAGE_OPTIONS.some((option) => option.value === snapshotCoverage)) {
+        setAnalysisError("Choose a valid coverage level before launching the earnings snapshot.");
+        setAnalysisState("error");
+        return;
+      }
+    } else if (!trimmedTopic) {
+      setAnalysisError("Enter a topic before running analysis.");
       setAnalysisState("error");
       return;
     }
@@ -3414,7 +3982,7 @@ function App() {
       setAnalysisDebug(null);
       resetFollowUps();
       setAnalysisMeta({
-        topic: trimmedTopic,
+        topic: isEarningsSnapshot ? snapshotTopic : trimmedTopic,
         location: requestedLocation,
       });
     });
@@ -3430,7 +3998,7 @@ function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          topic: trimmedTopic,
+          topic: isEarningsSnapshot ? snapshotTopic : trimmedTopic,
           section,
           debug: true,
           feature_flags: buildFeatureFlags(section),
@@ -3460,7 +4028,7 @@ function App() {
 
       startTransition(() => {
         const responseMeta = {
-          topic: normalizedPayload?.meta?.topic || trimmedTopic,
+          topic: normalizedPayload?.meta?.topic || (isEarningsSnapshot ? snapshotTopic : trimmedTopic),
           location: normalizedPayload?.meta?.location || requestedLocation,
         };
         setAnalysisResult(normalizedPayload);
@@ -3489,7 +4057,14 @@ function App() {
 
   return html`
     <div className="workspace-shell relative min-h-full overflow-x-hidden">
-      <div className="workspace-grid relative z-10 grid min-h-full grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4 xl:px-5 xl:py-5">
+      <div
+        className=${cx(
+          "workspace-grid relative z-10 grid min-h-full gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4 xl:px-5 xl:py-5",
+          hasSelectedModule
+            ? "grid-rows-[auto_auto_auto_minmax(0,1fr)]"
+            : "grid-rows-[auto_auto]",
+        )}
+      >
         <${WorkspaceHeader}
           currentLocation=${displayMeta.location}
         />
@@ -3500,11 +4075,18 @@ function App() {
           disabled=${isProcessing}
         />
 
-        ${section
+        ${hasSelectedModule
           ? html`
               <${CommandDeck}
                 topic=${topic}
                 section=${section}
+                snapshotSector=${snapshotSector}
+                snapshotIndustry=${snapshotIndustry}
+                snapshotCoverage=${snapshotCoverage}
+                snapshotSectorOptions=${snapshotSectorOptions}
+                snapshotIndustryOptions=${snapshotIndustryOptions}
+                snapshotCatalogLoading=${snapshotCatalogLoading}
+                snapshotCatalogError=${snapshotCatalogError}
                 locationPreference=${locationPreference}
                 locationValue=${locationValue}
                 secondaryFilterOpen=${secondaryFilterOpen}
@@ -3519,6 +4101,9 @@ function App() {
                 allCountriesCount=${allCountriesCount}
                 onTopicChange=${setTopic}
                 onSectionChange=${setSection}
+                onSnapshotSectorChange=${handleSnapshotSectorChange}
+                onSnapshotIndustryChange=${setSnapshotIndustry}
+                onSnapshotCoverageChange=${setSnapshotCoverage}
                 onPreferenceChange=${setLocationPreference}
                 onRegionQueryChange=${setRegionQuery}
                 onCountryQueryChange=${setCountryQuery}

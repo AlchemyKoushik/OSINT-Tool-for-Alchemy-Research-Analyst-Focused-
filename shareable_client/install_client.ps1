@@ -129,8 +129,8 @@ function Write-InstallManifest {
         install_root        = $InstallRoot
         app_root            = $AppRoot
         python_path         = $PythonPath
-        supported_sections  = @("trends", "competitive_landscape")
-        follow_up_enabled   = $false
+        supported_sections  = @("trends", "drivers", "competitive_landscape", "industry_earnings_snapshot")
+        follow_up_enabled   = $true
         launcher_mode       = "shareable_client"
         installed_at_utc    = (Get-Date).ToUniversalTime().ToString("o")
     }
@@ -203,8 +203,8 @@ function Write-ClientBackendOverrides {
         return
     }
 
-    Set-DotEnvKey -Path $BackendEnvPath -Key "ALLOWED_RESEARCH_SECTIONS" -Value "trends,competitive_landscape"
-    Set-DotEnvKey -Path $BackendEnvPath -Key "FOLLOW_UP_ENABLED" -Value "false"
+    Set-DotEnvKey -Path $BackendEnvPath -Key "ALLOWED_RESEARCH_SECTIONS" -Value "trends,drivers,competitive_landscape,industry_earnings_snapshot"
+    Set-DotEnvKey -Path $BackendEnvPath -Key "FOLLOW_UP_ENABLED" -Value "true"
 }
 
 function Get-DotEnvMap {

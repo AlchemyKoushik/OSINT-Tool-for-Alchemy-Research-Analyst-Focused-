@@ -41,6 +41,20 @@ COMPETITIVE_LANDSCAPE_TERMS = (
     "renewable project developers",
     "epc companies",
 )
+EARNINGS_SNAPSHOT_TERMS = (
+    "earnings",
+    "quarterly results",
+    "financial results",
+    "revenue",
+    "margin",
+    "eps",
+    "guidance",
+    "outlook",
+    "demand",
+    "bookings",
+    "backlog",
+    "investor presentation",
+)
 CURRENT_QUERY_YEAR = datetime.utcnow().year
 RECENT_QUERY_YEARS = tuple(str(CURRENT_QUERY_YEAR - offset) for offset in range(0, 2))
 QUERY_ANGLE_QUALIFIERS = (
@@ -126,6 +140,20 @@ SECTION_QUERY_FOCUSES = {
         "renewable project developers",
         "epc companies",
     ),
+    "industry_earnings_snapshot": (
+        "earnings",
+        "quarterly results",
+        "financial results",
+        "revenue",
+        "margin",
+        "eps",
+        "guidance",
+        "outlook",
+        "demand",
+        "bookings",
+        "backlog",
+        "investor presentation",
+    ),
 }
 SECTION_QUERY_SUFFIXES = (
     "statistics",
@@ -203,7 +231,11 @@ def _contains_topic_signal(query: str, topic: str) -> bool:
 
 
 def _required_query_terms(section: str) -> tuple[str, ...]:
-    return COMPETITIVE_LANDSCAPE_TERMS if section == "competitive_landscape" else BASE_DATA_TERMS
+    if section == "competitive_landscape":
+        return COMPETITIVE_LANDSCAPE_TERMS
+    if section == "industry_earnings_snapshot":
+        return EARNINGS_SNAPSHOT_TERMS
+    return BASE_DATA_TERMS
 
 
 def _validate_query(
@@ -265,7 +297,13 @@ def _ensure_required_terms_for_section(query: str, *, topic: str, context: Locat
     candidate = _normalize_query(" ".join(part for part in rebuilt_parts if part))
 
     if not any(term in lowered for term in _required_query_terms(section)):
-        fallback_term = "market share" if section == "competitive_landscape" else "statistics"
+        fallback_term = (
+            "market share"
+            if section == "competitive_landscape"
+            else "earnings"
+            if section == "industry_earnings_snapshot"
+            else "statistics"
+        )
         candidate = _normalize_query(f"{candidate} {fallback_term}")
 
     max_words = 16 if section == "competitive_landscape" else 15
@@ -357,6 +395,7 @@ def _build_query_user_prompt(
         "trends": "what is changing in the market",
         "drivers": "why the market is changing",
         "competitive_landscape": "who the key players are and how they compare",
+        "industry_earnings_snapshot": "how earnings, margins, guidance, and demand are moving",
     }.get(section, "what is changing in the market")
     focus_terms = ", ".join(_build_query_focus_terms(section)[:8])
     location_mode = "Global"

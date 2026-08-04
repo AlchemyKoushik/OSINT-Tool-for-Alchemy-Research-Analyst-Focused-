@@ -1,8 +1,8 @@
 :root {
   color-scheme: light;
   --canvas: #f7f2e9;
-  --canvas-warm: #efe6d9;
-  --surface: rgba(255, 251, 245, 0.78);
+  --canvas-warm: #f7f2e9;
+  --surface: #f7f2e9;
   --surface-strong: rgba(255, 252, 247, 0.96);
   --surface-muted: rgba(241, 233, 221, 0.86);
   --border: rgba(62, 69, 63, 0.12);
@@ -14,7 +14,6 @@
   --accent-faint: rgba(39, 67, 60, 0.04);
   --gold: #b88c52;
   --rose: #c77b76;
-  --shadow: 0 20px 55px rgba(121, 102, 72, 0.12);
   --shadow-soft: 0 12px 30px rgba(121, 102, 72, 0.08);
   --paper-shadow: 0 22px 70px rgba(114, 97, 73, 0.11);
 }
@@ -37,8 +36,15 @@ html {
     radial-gradient(circle at 84% 84%, rgba(203, 228, 217, 0.28), transparent 24%),
     linear-gradient(135deg, #fbf7f1 0%, #f4eee4 56%, #eee4d5 100%);
   overflow-x: hidden;
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 body {
@@ -46,13 +52,21 @@ body {
   font-family: "Manrope", sans-serif;
   color: var(--text);
   overflow-x: hidden;
-  overflow-y: visible;
+  overflow-y: auto;
   min-height: 100vh;
   background:
     radial-gradient(circle at 0% 0%, rgba(188, 226, 213, 0.45), transparent 24%),
     radial-gradient(circle at 100% 0%, rgba(231, 211, 181, 0.38), transparent 22%),
     radial-gradient(circle at 84% 84%, rgba(203, 228, 217, 0.28), transparent 24%),
     linear-gradient(135deg, #fbf7f1 0%, #f4eee4 56%, #eee4d5 100%);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 body::before {
@@ -369,6 +383,22 @@ textarea:disabled {
     inset 0 1px 0 rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  -ms-overflow-style: none;
+}
+
+.command-select__menu-shell::-webkit-scrollbar {
+  display: none;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.command-select__menu-shell::-webkit-scrollbar-track,
+.command-select__menu-shell::-webkit-scrollbar-thumb,
+.command-select__menu-shell::-webkit-scrollbar-corner {
+  display: none;
+  background: transparent;
 }
 
 .command-select__option {
@@ -980,6 +1010,21 @@ textarea:disabled {
   position: sticky;
   top: 0.75rem;
   z-index: 20;
+}
+
+.module-selector-bar {
+  margin-bottom: 0;
+  box-shadow: none;
+  border-bottom-color: transparent;
+  border-bottom-width: 0;
+  position: relative;
+  z-index: 2;
+  background-clip: padding-box;
+}
+
+.module-selector-bar::before,
+.module-selector-bar::after {
+  display: none;
 }
 
 .workspace-main {

@@ -860,7 +860,7 @@ def _normalize_competitive_landscape_company_payload(item) -> dict[str, object] 
 def normalize_analyze_response_payload(payload, fallback_section: str = "trends") -> dict[str, object]:
     normalized_payload = dict(payload) if isinstance(payload, dict) else {}
     normalized_section = _normalize_text_value(normalized_payload.get("section")).lower()
-    if normalized_section not in {"trends", "drivers", "competitive_landscape"}:
+    if normalized_section not in {"trends", "drivers", "competitive_landscape", "industry_earnings_snapshot"}:
         normalized_section = _normalize_text_value(fallback_section).lower() or "trends"
 
     if normalized_section == "competitive_landscape":
@@ -924,6 +924,7 @@ def normalize_analyze_response_payload(payload, fallback_section: str = "trends"
         normalized_title = {
             "drivers": "Market Drivers",
             "competitive_landscape": "Competitive Landscape",
+            "industry_earnings_snapshot": "Industry Earnings Snapshot",
         }.get(normalized_section, "Industry Trends")
 
     normalized_payload["section"] = normalized_section

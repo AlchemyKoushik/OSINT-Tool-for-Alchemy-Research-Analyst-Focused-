@@ -123,6 +123,11 @@ def _build_description(text: str, section: str) -> str:
             f"{text} Available evidence suggests this player has visible market activity, but the fallback path "
             "could not reliably position it with the same depth as the primary analysis flow."
         )
+    if section == "industry_earnings_snapshot":
+        return (
+            f"{text} The earnings evidence points to a financially material snapshot of the selected sector and industry, "
+            "but the fallback path could not fully reconstruct the detailed margin, guidance, and demand picture."
+        )
     if section == "trends":
         return (
             f"{text} The pattern is becoming more visible across the market as competitive priorities, investment focus, and operating choices adjust around the same shift."
@@ -210,7 +215,11 @@ def build_fallback_section_analysis(
     return {
         "section": section,
         "title": (
-            "Industry Trends" if section == "trends" else "Market Drivers"
+            "Industry Trends"
+            if section == "trends"
+            else "Market Drivers"
+            if section == "drivers"
+            else "Industry Earnings Snapshot"
         ),
         "items": items,
     }
