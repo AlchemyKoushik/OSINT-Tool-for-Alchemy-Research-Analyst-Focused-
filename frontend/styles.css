@@ -608,52 +608,45 @@ textarea:disabled {
 }
 
 .ies-scatter-point-group:focus-visible .ies-scatter-point {
-  stroke: rgba(39, 67, 60, 0.95);
-  stroke-width: 2.5;
+  stroke: #27433C;
+  stroke-width: 2.8px;
 }
 
 .ies-scatter-point {
   transform-box: fill-box;
   transform-origin: center;
   transition:
-    transform 180ms ease,
-    opacity 180ms ease,
-    filter 180ms ease;
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 220ms ease,
+    filter 220ms ease;
 }
 
 .ies-scatter-point-group:hover .ies-scatter-point,
 .ies-scatter-point-group[data-state="active"] .ies-scatter-point,
 .ies-scatter-point-group[data-state="selected"] .ies-scatter-point {
-  transform: scale(1.08);
-  filter: saturate(1.03);
+  transform: scale(1.15);
+  filter: drop-shadow(0 8px 16px rgba(39, 67, 60, 0.28));
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spin-slow 12s linear infinite;
 }
 
 .ies-scatter-tooltip {
   position: absolute;
-  z-index: 6;
-  min-width: 17rem;
-  max-width: 22rem;
-  padding: 1rem 1rem 0.95rem;
-  border: 1px solid rgba(39, 67, 60, 0.12);
-  border-radius: 1.35rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 244, 236, 0.96));
-  box-shadow:
-    0 24px 52px rgba(31, 42, 41, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  opacity: 0;
-  transform: translate3d(12px, 12px, 0) scale(0.98);
+  z-index: 40;
   pointer-events: none;
-  transition:
-    opacity 160ms ease,
-    transform 160ms ease;
-}
-
-.ies-scatter-tooltip.is-visible {
-  opacity: 1;
-  transform: translate3d(12px, 12px, 0) scale(1);
 }
 
 .ies-scatter-tooltip__title {

@@ -2262,26 +2262,38 @@ function buildIesInsightRows(result) {
     summary:
       `This memo covers ${summary.industry || "the selected industry"} in ${summary.country || "the selected country"} with ${coveragePhrase} coverage and ${chartPoints.length || companies.length || 0} plotted observations.`,
     rows: [
-      { label: "Highest Growth", body: highestGrowthLabel, tone: "accent" },
-      { label: "Highest Margin", body: highestMarginLabel, tone: "gold" },
-      { label: "Largest Company", body: largestCompanyLabel, tone: "default" },
-      { label: "Notable Outliers", body: outlierLabel, tone: "default" },
-      { label: "Valuation Range", body: valuationLabelText, tone: "default" },
+      {
+        label: "Highest Growth",
+        body: highestGrowthLabel,
+        tone: "accent",
+        icon: html`<svg className="w-4 h-4 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>`,
+      },
+      {
+        label: "Highest Margin",
+        body: highestMarginLabel,
+        tone: "gold",
+        icon: html`<svg className="w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>`,
+      },
+      {
+        label: "Largest Company",
+        body: largestCompanyLabel,
+        tone: "forest",
+        icon: html`<svg className="w-4 h-4 text-atelier-forest" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01" /></svg>`,
+      },
+      {
+        label: "Notable Outliers",
+        body: outlierLabel,
+        tone: "outlier",
+        icon: html`<svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>`,
+      },
+      {
+        label: "Valuation Range",
+        body: valuationLabelText,
+        tone: "slate",
+        icon: html`<svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /></svg>`,
+      },
     ],
   };
-}
-
-function IesInsightCard({ label, body, tone = "default" }) {
-  return html`
-    <div className=${cx("ies-insight-card lift-on-hover h-full rounded-[26px] px-5 py-5", tone === "accent" ? "ies-insight-card--accent" : tone === "gold" ? "ies-insight-card--gold" : "")}>
-      <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/66">
-        ${label}
-      </p>
-      <p className="mt-3 text-sm leading-8 text-atelier-moss">
-        ${body}
-      </p>
-    </div>
-  `;
 }
 
 function IesFieldGrid({ fields = [] }) {
@@ -2705,41 +2717,58 @@ function JournalCompleted({ result, debug, meta }) {
   `; 
 }
 
-function formatIesPercent(value) {
+function formatIesPercent(value, fallback = "—") {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return "N/A";
+    return fallback;
   }
-  return `${numeric.toFixed(1)}%`;
+  const sign = numeric > 0 ? "+" : "";
+  return `${sign}${numeric.toFixed(1)}%`;
 }
 
-function formatIesRatio(value) {
+function formatIesRatio(value, fallback = "—") {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return "N/A";
+    return fallback;
   }
   return `${numeric.toFixed(1)}x`;
 }
 
-function formatIesCompactNumber(value) {
+function formatIesCompactNumber(value, fallback = "—") {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return "N/A";
+    return fallback;
   }
   const abs = Math.abs(numeric);
   if (abs >= 1_000_000_000_000) {
-    return `${(numeric / 1_000_000_000_000).toFixed(1)}T`;
+    return `$${(numeric / 1_000_000_000_000).toFixed(2)}T`;
   }
   if (abs >= 1_000_000_000) {
-    return `${(numeric / 1_000_000_000).toFixed(1)}B`;
+    return `$${(numeric / 1_000_000_000).toFixed(2)}B`;
   }
   if (abs >= 1_000_000) {
-    return `${(numeric / 1_000_000).toFixed(1)}M`;
+    return `$${(numeric / 1_000_000).toFixed(2)}M`;
   }
   if (abs >= 1_000) {
-    return `${(numeric / 1_000).toFixed(1)}K`;
+    return `$${(numeric / 1_000).toFixed(1)}K`;
   }
-  return numeric.toFixed(1);
+  return `$${numeric.toFixed(2)}`;
+}
+
+function renderIesMetricValue(formattedValue, rawValue) {
+  if (formattedValue === "—" || formattedValue === "N/A") {
+    return html`<span className="text-atelier-moss/40 font-mono">—</span>`;
+  }
+  const numeric = Number(rawValue);
+  if (Number.isFinite(numeric)) {
+    if (numeric > 0) {
+      return html`<span className="text-emerald-700 font-mono font-semibold">${formattedValue}</span>`;
+    }
+    if (numeric < 0) {
+      return html`<span className="text-rose-700 font-mono font-semibold">${formattedValue}</span>`;
+    }
+  }
+  return html`<span className="text-atelier-ink font-mono font-medium">${formattedValue}</span>`;
 }
 
 function IesScatterChart({ chart }) {
@@ -2753,6 +2782,7 @@ function IesScatterChart({ chart }) {
     y: 0,
     title: "",
     ticker: "",
+    country: "",
     fields: [],
   });
 
@@ -2766,6 +2796,7 @@ function IesScatterChart({ chart }) {
       bubble: Number(point.bubble_size),
       ticker: String(point.ticker || "").trim(),
       company_name: String(point.company_name || "").trim(),
+      country: String(point.country || point.exchange || "").trim(),
       is_outlier: Boolean(point.is_outlier),
     }))
     .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
@@ -2775,7 +2806,7 @@ function IesScatterChart({ chart }) {
   const xValues = normalizedPoints.map((point) => point.x);
   const yValues = normalizedPoints.map((point) => point.y);
   const bubbleValues = normalizedPoints
-    .map((point) => Number.isFinite(point.bubble) ? point.bubble : null)
+    .map((point) => (Number.isFinite(point.bubble) ? point.bubble : null))
     .filter((value) => value !== null);
   const xMedian = hasData ? medianOfValues(xValues) : 0;
   const yMedian = hasData ? medianOfValues(yValues) : 0;
@@ -2789,7 +2820,6 @@ function IesScatterChart({ chart }) {
     acc[point.ticker || point.company_name || String(point.index)] = point;
     return acc;
   }, {});
-  const activePoint = pointLookup[activeTicker] || pointLookup[selectedTicker] || null;
   const chartTitle = String(chart?.title || "Revenue Growth vs Operating Margin").trim();
   const xLabel = String(chart?.x_label || "Revenue Growth (LQ YoY)").trim();
   const yLabel = String(chart?.y_label || "Operating Margin").trim();
@@ -2802,27 +2832,27 @@ function IesScatterChart({ chart }) {
   function getPointRadius(point) {
     const normalizedBubble = Number.isFinite(point.bubble) ? point.bubble : bubbleMin;
     const bubbleRange = Math.max(1, bubbleMax - bubbleMin);
-    const scaled = 8 + ((normalizedBubble - bubbleMin) / bubbleRange) * 18;
-    return clamp(scaled, 8, 26);
+    const scaled = 9 + ((normalizedBubble - bubbleMin) / bubbleRange) * 20;
+    return clamp(scaled, 9, 29);
   }
 
   function getChartMetrics() {
     const node = stageRef.current;
     if (!node) {
-      return { width: 980, height: 560 };
+      return { width: 1040, height: 580 };
     }
     const bounds = node.getBoundingClientRect();
-    const width = Math.max(760, bounds.width || 980);
-    return { width, height: Math.max(520, width * 0.58) };
+    const width = Math.max(780, bounds.width || 1040);
+    return { width, height: Math.max(520, Math.min(620, width * 0.52)) };
   }
 
   function getPlotFrame() {
     const { width, height } = getChartMetrics();
     const margin = {
-      top: 34,
-      right: 44,
-      bottom: 72,
-      left: 90,
+      top: 42,
+      right: 48,
+      bottom: 76,
+      left: 92,
     };
     const plotWidth = Math.max(0, width - margin.left - margin.right);
     const plotHeight = Math.max(0, height - margin.top - margin.bottom);
@@ -2843,74 +2873,39 @@ function IesScatterChart({ chart }) {
     return margin.top + plotHeight - ((value - min) / Math.max(1, max - min)) * plotHeight;
   }
 
-  function getColor(value) {
+  function getBubbleGradientId(value) {
     if (!Number.isFinite(value)) {
-      return "rgba(168, 174, 176, 0.9)";
+      return "url(#ies-grad-neu)";
     }
     const pivot = yMedian || 0;
-    const spread = Math.max(6, Math.abs(yMax - yMin) * 0.5);
-    const normalized = clamp((value - pivot) / spread, -1, 1);
-    if (normalized < 0) {
-      const t = Math.abs(normalized);
-      return `rgba(${Math.round(200 + 18 * (1 - t))}, ${Math.round(107 + 52 * (1 - t))}, ${Math.round(99 + 18 * (1 - t))}, ${0.82})`;
+    const spread = Math.max(4, Math.abs(yMax - yMin) * 0.4);
+    const diff = value - pivot;
+    if (diff > spread * 0.08) {
+      return "url(#ies-grad-pos)";
     }
-    if (normalized > 0) {
-      const t = normalized;
-      return `rgba(${Math.round(120 - 27 * (1 - t))}, ${Math.round(155 + 12 * t)}, ${Math.round(121 - 3 * t)}, ${0.82})`;
+    if (diff < -spread * 0.08) {
+      return "url(#ies-grad-neg)";
     }
-    return "rgba(169, 166, 156, 0.84)";
+    return "url(#ies-grad-neu)";
   }
 
   function formatAxisPercent(value) {
     if (!Number.isFinite(value)) {
-      return "N/A";
+      return "—";
     }
     const sign = value > 0 ? "+" : "";
     return `${sign}${value.toFixed(1)}%`;
-  }
-
-  function formatRatio(value) {
-    if (!Number.isFinite(value)) {
-      return "N/A";
-    }
-    return `${value.toFixed(1)}x`;
-  }
-
-  function formatSmallPercent(value) {
-    if (!Number.isFinite(value)) {
-      return "N/A";
-    }
-    const sign = value > 0 ? "+" : "";
-    return `${sign}${value.toFixed(1)}%`;
-  }
-
-  function formatRevenue(value) {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-      return "N/A";
-    }
-    const abs = Math.abs(numeric);
-    if (abs >= 1_000_000_000_000) {
-      return `$${(numeric / 1_000_000_000_000).toFixed(2)}T`;
-    }
-    if (abs >= 1_000_000_000) {
-      return `$${(numeric / 1_000_000_000).toFixed(2)}B`;
-    }
-    if (abs >= 1_000_000) {
-      return `$${(numeric / 1_000_000).toFixed(2)}M`;
-    }
-    return `$${numeric.toFixed(2)}`;
   }
 
   function buildTooltipFields(point) {
     return [
-      ["Revenue", formatRevenue(point.bubble)],
-      ["Revenue Growth", formatAxisPercent(point.x)],
-      ["Operating Margin", formatAxisPercent(point.y)],
-      ["EPS", Number.isFinite(point.reported_eps) ? point.reported_eps.toFixed(2) : "N/A"],
-      ["EPS Surprise", Number.isFinite(point.eps_surprise) ? formatSmallPercent(point.eps_surprise) : "N/A"],
-      ["5-Day Reaction", Number.isFinite(point.five_day_price_reaction) ? formatSmallPercent(point.five_day_price_reaction) : "N/A"],
-      ["Forward P/E", formatRatio(point.forward_pe)],
+      { label: "Revenue TTM", value: formatIesCompactNumber(point.bubble) },
+      { label: "Revenue Growth", value: formatIesPercent(point.x) },
+      { label: "Operating Margin", value: formatIesPercent(point.y) },
+      { label: "Reported EPS", value: Number.isFinite(point.reported_eps) ? `$${point.reported_eps.toFixed(2)}` : "—" },
+      { label: "EPS Surprise", value: formatIesPercent(point.eps_surprise) },
+      { label: "Forward P/E", value: formatIesRatio(point.forward_pe) },
+      { label: "5-Day Reaction", value: formatIesPercent(point.five_day_price_reaction) },
     ];
   }
 
@@ -2927,10 +2922,11 @@ function IesScatterChart({ chart }) {
     const pointerY = event?.clientY ? event.clientY - rect.top : yScale(point.y);
     setTooltipState({
       visible: true,
-      x: clamp(pointerX + 14, 12, rect.width - 12),
-      y: clamp(pointerY + 14, 12, rect.height - 12),
+      x: clamp(pointerX, 16, rect.width - 16),
+      y: clamp(pointerY, 16, rect.height - 16),
       title: point.company_name || point.ticker || "Company",
       ticker: point.ticker || "",
+      country: point.country || point.exchange || "",
       fields: buildTooltipFields(point),
     });
   }
@@ -2949,6 +2945,7 @@ function IesScatterChart({ chart }) {
         visible: true,
         title: nextSelected.company_name || nextSelected.ticker || "Company",
         ticker: nextSelected.ticker || "",
+        country: nextSelected.country || nextSelected.exchange || "",
         fields: buildTooltipFields(nextSelected),
       }));
     } else {
@@ -3004,6 +3001,7 @@ function IesScatterChart({ chart }) {
         y: yScale(point.y),
         title: point.company_name || point.ticker || "Company",
         ticker: point.ticker || "",
+        country: point.country || point.exchange || "",
         fields: buildTooltipFields(point),
       });
     }
@@ -3027,7 +3025,7 @@ function IesScatterChart({ chart }) {
 
   if (!hasData) {
     return html`
-      <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-7 text-atelier-moss">
+      <div className="rounded-[24px] border border-dashed border-atelier-line/80 bg-white/70 px-6 py-8 text-center text-sm leading-7 text-atelier-moss">
         No scatter chart data was returned for this report.
       </div>
     `;
@@ -3048,59 +3046,94 @@ function IesScatterChart({ chart }) {
   const medianX = xScale(xMedian);
   const medianY = yScale(yMedian);
 
+  const sortedPoints = [...normalizedPoints].sort((a, b) => {
+    const aActive = activeTicker === getPointKey(a) || selectedTicker === getPointKey(a);
+    const bActive = activeTicker === getPointKey(b) || selectedTicker === getPointKey(b);
+    if (aActive && !bActive) return 1;
+    if (!aActive && bActive) return -1;
+    return b.bubble - a.bubble;
+  });
+
   return html`
-    <div className="rounded-[30px] border border-atelier-line bg-white/80 px-5 py-5 shadow-[0_18px_48px_rgba(31,42,41,0.06)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="rounded-[28px] border border-atelier-line/80 bg-white/80 p-5 md:p-7 shadow-[0_20px_50px_rgba(31,42,41,0.05)]">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-atelier-line/60 pb-4">
         <div>
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
-            Growth vs Profitability
-          </p>
-          <h4 className="mt-3 font-display text-[1.65rem] font-semibold leading-none text-atelier-ink">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-atelier-forest"></span>
+            <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/70">
+              Interactive Scatter Visualization
+            </p>
+          </div>
+          <h4 className="mt-1 font-display text-2xl md:text-3xl font-bold leading-tight text-atelier-ink">
             ${chartTitle}
           </h4>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#bca99d]"></span>
-              Bubble Size = ${bubbleLabel}
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
-              <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-[#c96d64] via-[#d2c8bc] to-[#5d9b78]"></span>
-              Bubble Color = Operating Margin
-            </span>
-          </div>
         </div>
-        <div className="rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/72">
-          Hover or click a bubble for details
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="inline-flex items-center gap-2 rounded-full border border-atelier-line/80 bg-white/90 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-ink shadow-2xs">
+            <span className="h-2 w-2 rounded-full bg-amber-600"></span>
+            <span>Bubble Size: <strong className="text-atelier-forest">${bubbleLabel}</strong></span>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-atelier-line/80 bg-white/90 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-ink shadow-2xs">
+            <div className="flex h-2.5 w-6 rounded-full bg-gradient-to-r from-[#D96B60] via-[#C5BEB5] to-[#4E8764]"></div>
+            <span>Color: <strong className="text-atelier-forest">${yLabel}</strong></span>
+          </div>
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-atelier-forest/8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-forest">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            View Details
+          </div>
         </div>
       </div>
 
       <div
         ref=${stageRef}
-        className="ies-chart-stage mt-5 rounded-[30px] border border-atelier-line bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(249,243,234,0.95))] p-4 md:p-6"
+        className="ies-chart-stage mt-6 rounded-[24px] border border-atelier-line/60 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#FFFDF8] via-white to-[#F9F5EC] p-4 md:p-6 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),0_20px_50px_rgba(31,42,41,0.04)]"
         style=${{
           position: "relative",
           overflow: "visible",
-          minHeight: "34rem",
+          minHeight: "35rem",
         }}
       >
         <svg viewBox=${`0 0 ${width} ${height}`} className="ies-scatter block h-auto w-full overflow-visible">
           <defs>
-            <filter id="ies-bubble-shadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#1B2724" flood-opacity="0.12" />
+            <radialGradient id="ies-grad-pos" cx="35%" cy="35%" r="65%">
+              <stop offset="0%" stopColor="#6EA383" stopOpacity="0.95" />
+              <stop offset="70%" stopColor="#4E8764" stopOpacity="0.88" />
+              <stop offset="100%" stopColor="#3A6A4E" stopOpacity="0.9" />
+            </radialGradient>
+            <radialGradient id="ies-grad-neu" cx="35%" cy="35%" r="65%">
+              <stop offset="0%" stopColor="#DCD5CC" stopOpacity="0.95" />
+              <stop offset="70%" stopColor="#C5BEB5" stopOpacity="0.88" />
+              <stop offset="100%" stopColor="#A8A096" stopOpacity="0.9" />
+            </radialGradient>
+            <radialGradient id="ies-grad-neg" cx="35%" cy="35%" r="65%">
+              <stop offset="0%" stopColor="#E88B81" stopOpacity="0.95" />
+              <stop offset="70%" stopColor="#D96B60" stopOpacity="0.88" />
+              <stop offset="100%" stopColor="#B84F45" stopOpacity="0.9" />
+            </radialGradient>
+            <filter id="ies-bubble-shadow" x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#1F2A29" flood-opacity="0.15" />
             </filter>
-            <linearGradient id="ies-axis-fade" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="rgba(31,42,41,0)" />
-              <stop offset="50%" stopColor="rgba(31,42,41,0.18)" />
-              <stop offset="100%" stopColor="rgba(31,42,41,0)" />
-            </linearGradient>
+            <filter id="ies-bubble-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#27433C" flood-opacity="0.3" />
+            </filter>
           </defs>
 
+          <!-- Watermark Quadrant Labels -->
+          <g className="quadrant-watermarks pointer-events-none select-none">
+            <text x=${leftAxisX + plotWidth * 0.75} y=${topAxisY + plotHeight * 0.22} textAnchor="middle" fontSize="11" fontWeight="700" letterSpacing="0.22em" fill="rgba(65,80,74,0.07)">HIGH GROWTH • HIGH MARGIN</text>
+            <text x=${leftAxisX + plotWidth * 0.25} y=${topAxisY + plotHeight * 0.22} textAnchor="middle" fontSize="11" fontWeight="700" letterSpacing="0.22em" fill="rgba(65,80,74,0.07)">LOW GROWTH • HIGH MARGIN</text>
+            <text x=${leftAxisX + plotWidth * 0.75} y=${topAxisY + plotHeight * 0.78} textAnchor="middle" fontSize="11" fontWeight="700" letterSpacing="0.22em" fill="rgba(65,80,74,0.07)">HIGH GROWTH • LOW MARGIN</text>
+            <text x=${leftAxisX + plotWidth * 0.25} y=${topAxisY + plotHeight * 0.78} textAnchor="middle" fontSize="11" fontWeight="700" letterSpacing="0.22em" fill="rgba(65,80,74,0.07)">LOW GROWTH • LOW MARGIN</text>
+          </g>
+
+          <!-- Grid Lines -->
           ${yTicks.map((tick, index) => {
             const y = topAxisY + plotHeight - ((tick - axisYMin) / Math.max(1, axisYMax - axisYMin)) * plotHeight;
             return html`
               <g key=${`y-grid-${index}`}>
-                <line x1=${leftAxisX} y1=${y} x2=${rightAxisX} y2=${y} stroke="rgba(104,117,113,0.12)" strokeWidth="1" />
-                <text x=${leftAxisX - 14} y=${y + 4} textAnchor="end" fontSize="11" fill="#41504A">
+                <line x1=${leftAxisX} y1=${y} x2=${rightAxisX} y2=${y} stroke="rgba(104,117,113,0.06)" strokeWidth="0.8" />
+                <text x=${leftAxisX - 14} y=${y + 4} textAnchor="end" fontSize="11" fontFamily="Manrope, sans-serif" fontWeight="600" fill="#65706A">
                   ${formatAxisPercent(tick)}
                 </text>
               </g>
@@ -3111,21 +3144,32 @@ function IesScatterChart({ chart }) {
             const x = leftAxisX + ((tick - axisXMin) / Math.max(1, axisXMax - axisXMin)) * plotWidth;
             return html`
               <g key=${`x-grid-${index}`}>
-                <line x1=${x} y1=${topAxisY} x2=${x} y2=${bottomAxisY} stroke="rgba(104,117,113,0.10)" strokeWidth="1" />
-                <text x=${x} y=${bottomAxisY + 18} textAnchor="middle" fontSize="11" fill="#41504A">
+                <line x1=${x} y1=${topAxisY} x2=${x} y2=${bottomAxisY} stroke="rgba(104,117,113,0.06)" strokeWidth="0.8" />
+                <text x=${x} y=${bottomAxisY + 20} textAnchor="middle" fontSize="11" fontFamily="Manrope, sans-serif" fontWeight="600" fill="#65706A">
                   ${formatAxisPercent(tick)}
                 </text>
               </g>
             `;
           })}
 
-          <line x1=${leftAxisX} y1=${medianY} x2=${rightAxisX} y2=${medianY} stroke="rgba(88,104,101,0.18)" strokeWidth="1.2" strokeDasharray="6 6" />
-          <line x1=${medianX} y1=${topAxisY} x2=${medianX} y2=${bottomAxisY} stroke="rgba(88,104,101,0.18)" strokeWidth="1.2" strokeDasharray="6 6" />
+          <!-- Median Lines -->
+          <line x1=${leftAxisX} y1=${medianY} x2=${rightAxisX} y2=${medianY} stroke="rgba(88,104,101,0.25)" strokeWidth="1.2" strokeDasharray="5 5" />
+          <line x1=${medianX} y1=${topAxisY} x2=${medianX} y2=${bottomAxisY} stroke="rgba(88,104,101,0.25)" strokeWidth="1.2" strokeDasharray="5 5" />
 
-          <line x1=${leftAxisX} y1=${bottomAxisY} x2=${rightAxisX} y2=${bottomAxisY} stroke="rgba(31,42,41,0.32)" strokeWidth="1.15" />
-          <line x1=${leftAxisX} y1=${topAxisY} x2=${leftAxisX} y2=${bottomAxisY} stroke="rgba(31,42,41,0.32)" strokeWidth="1.15" />
+          <!-- Median Labels -->
+          <g className="median-labels pointer-events-none select-none">
+            <text x=${rightAxisX - 10} y=${medianY - 6} textAnchor="end" fontSize="9" fontWeight="700" letterSpacing="0.16em" fill="rgba(88,104,101,0.45)">ABOVE MEDIAN MARGIN</text>
+            <text x=${rightAxisX - 10} y=${medianY + 14} textAnchor="end" fontSize="9" fontWeight="700" letterSpacing="0.16em" fill="rgba(88,104,101,0.45)">BELOW MEDIAN MARGIN</text>
+            <text x=${medianX + 8} y=${topAxisY + 14} textAnchor="start" fontSize="9" fontWeight="700" letterSpacing="0.16em" fill="rgba(88,104,101,0.45)">ABOVE MEDIAN GROWTH</text>
+            <text x=${medianX - 8} y=${topAxisY + 14} textAnchor="end" fontSize="9" fontWeight="700" letterSpacing="0.16em" fill="rgba(88,104,101,0.45)">BELOW MEDIAN GROWTH</text>
+          </g>
 
-          ${normalizedPoints.map((point) => {
+          <!-- Axes Bounding Lines -->
+          <line x1=${leftAxisX} y1=${bottomAxisY} x2=${rightAxisX} y2=${bottomAxisY} stroke="rgba(31,42,41,0.22)" strokeWidth="1.2" />
+          <line x1=${leftAxisX} y1=${topAxisY} x2=${leftAxisX} y2=${bottomAxisY} stroke="rgba(31,42,41,0.22)" strokeWidth="1.2" />
+
+          <!-- Bubbles -->
+          ${sortedPoints.map((point) => {
             const pointKey = getPointKey(point);
             const isActive = activeTicker === pointKey;
             const isSelected = selectedTicker === pointKey;
@@ -3133,13 +3177,13 @@ function IesScatterChart({ chart }) {
             const x = xScale(point.x);
             const y = yScale(point.y);
             const radius = getPointRadius(point);
-            const displayRadius = isActive || isSelected ? radius * 1.16 : radius;
-            const opacity = isActive || isSelected ? 1 : 0.84;
-            const color = getColor(point.y);
-            const labelX = x + (isActive || isSelected ? 12 : 10);
-            const labelY = y - (isActive || isSelected ? 10 : 8);
-            const labelAnchor = x > width * 0.62 ? "end" : "start";
-            const labelOffset = x > width * 0.62 ? -12 : 12;
+            const displayRadius = isActive || isSelected ? radius * 1.15 : radius;
+            const opacity = isActive || isSelected ? 1 : 0.86;
+            const bubbleFill = getBubbleGradientId(point.y);
+            const labelY = y - (isActive || isSelected ? 12 : 10);
+            const labelAnchor = x > width * 0.64 ? "end" : "start";
+            const labelOffset = x > width * 0.64 ? -12 : 12;
+
             return html`
               <g
                 key=${pointKey}
@@ -3155,33 +3199,46 @@ function IesScatterChart({ chart }) {
                 role="button"
                 tabIndex="0"
               >
+                ${isSelected
+                  ? html`
+                      <circle
+                        r=${displayRadius + 6}
+                        fill="none"
+                        stroke="#27433C"
+                        strokeWidth="1.8"
+                        strokeDasharray="4 3"
+                        className="animate-spin-slow"
+                      />
+                    `
+                  : null}
                 <circle
                   className="ies-scatter-point"
                   r=${displayRadius}
-                  fill=${color}
+                  fill=${bubbleFill}
                   fillOpacity=${opacity}
                   stroke="#FFFFFF"
                   strokeWidth="2"
-                  filter="url(#ies-bubble-shadow)"
+                  filter=${isActive || isSelected ? "url(#ies-bubble-glow)" : "url(#ies-bubble-shadow)"}
                   style=${{
-                    transition: "transform 160ms ease, opacity 160ms ease, r 160ms ease",
+                    transition: "transform 200ms ease-out, r 200ms ease-out, opacity 200ms ease-out",
                   }}
-                ></circle>
+                />
                 ${showLabel
                   ? html`
                       <g transform=${`translate(${labelOffset}, ${labelY - y})`}>
                         <rect
-                          x=${labelAnchor === "end" ? -148 : 0}
-                          y="-15"
-                          width="148"
+                          x=${labelAnchor === "end" ? -140 : 0}
+                          y="-14"
+                          width="140"
                           height="20"
                           rx="10"
-                          fill="rgba(255,255,255,0.92)"
-                          stroke="rgba(62,69,63,0.12)"
+                          fill="rgba(255,255,255,0.94)"
+                          stroke="rgba(62,69,63,0.14)"
                           strokeWidth="0.8"
+                          className="shadow-2xs"
                         />
                         <text
-                          x=${labelAnchor === "end" ? -74 : 74}
+                          x=${labelAnchor === "end" ? -70 : 70}
                           y="0"
                           textAnchor="middle"
                           fontSize="10"
@@ -3197,7 +3254,8 @@ function IesScatterChart({ chart }) {
             `;
           })}
 
-          <text x=${(leftAxisX + rightAxisX) / 2} y=${height - 4} textAnchor="middle" fontSize="12" fill="#41504A">
+          <!-- Axis Titles -->
+          <text x=${(leftAxisX + rightAxisX) / 2} y=${height - 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#41504A">
             ${xLabel}
           </text>
           <text
@@ -3205,6 +3263,7 @@ function IesScatterChart({ chart }) {
             y=${(topAxisY + bottomAxisY) / 2}
             textAnchor="middle"
             fontSize="12"
+            fontWeight="700"
             fill="#41504A"
             transform=${`rotate(-90 18 ${(topAxisY + bottomAxisY) / 2})`}
           >
@@ -3212,43 +3271,52 @@ function IesScatterChart({ chart }) {
           </text>
         </svg>
 
+        <!-- Redesigned Executive Floating Glass Tooltip -->
         <div
           ref=${tooltipRef}
-          className=${cx("ies-scatter-tooltip", tooltipState.visible && "is-visible")}
+          className=${cx(
+            "ies-scatter-tooltip pointer-events-none absolute z-30 transition-all duration-150 ease-out",
+            tooltipState.visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-2 pointer-events-none"
+          )}
           aria-hidden=${tooltipState.visible ? "false" : "true"}
           style=${{
             left: `${tooltipState.x}px`,
             top: `${tooltipState.y}px`,
-            transform: "translate(12px, 12px)",
+            transform: "translate(-50%, -100%) translateY(-14px)",
           }}
         >
-          <p className="ies-scatter-tooltip__title">${tooltipState.title}</p>
-          ${tooltipState.ticker
-            ? html`<p className="ies-scatter-tooltip__ticker">${tooltipState.ticker}</p>`
-            : null}
-          <div className="ies-scatter-tooltip__grid">
-            ${tooltipState.fields.map(
-              ([label, value]) => html`
-                <div className="ies-scatter-tooltip__cell" key=${`${tooltipState.ticker}-${label}`}>
-                  <span className="ies-scatter-tooltip__label">${label}</span>
-                  <span className="ies-scatter-tooltip__value">${value}</span>
+          <div className="w-[19rem] md:w-[22rem] rounded-2xl border border-atelier-line/90 bg-white/94 p-4 shadow-[0_24px_50px_rgba(31,42,41,0.18)] backdrop-blur-md">
+            <div className="flex items-center justify-between gap-3 border-b border-atelier-line/50 pb-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-atelier-forest/10 font-mono text-xs font-bold text-atelier-forest">
+                  ${(tooltipState.ticker || tooltipState.title || "CO").slice(0, 3).toUpperCase()}
                 </div>
-              `,
-            )}
+                <div className="min-w-0">
+                  <h5 className="m-0 truncate font-display text-sm font-bold text-atelier-ink">
+                    ${tooltipState.title}
+                  </h5>
+                  <div className="mt-0.5 flex flex-wrap gap-1.5">
+                    ${tooltipState.ticker ? html`<span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-atelier-moss uppercase">${tooltipState.ticker}</span>` : null}
+                    ${tooltipState.country ? html`<span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900/80">${tooltipState.country}</span>` : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+              ${tooltipState.fields.map(
+                (field) => html`
+                  <div key=${field.label} className="flex flex-col min-w-0">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-atelier-moss/65">${field.label}</span>
+                    <span className="mt-0.5 text-xs font-mono font-semibold text-atelier-ink truncate">
+                      ${field.value}
+                    </span>
+                  </div>
+                `,
+              )}
+            </div>
           </div>
         </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
-          Bubble Size = Revenue
-        </span>
-        <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
-          Bubble Color = Operating Margin
-        </span>
-        <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
-          Median lines divide the four quadrants
-        </span>
       </div>
     </div>
   `;
@@ -3270,19 +3338,14 @@ function medianOfValues(values) {
 
 function IesCompanyRow({ company, index, selected, onSelect }) {
   const companyName = company.company_name || company.ticker || "Company";
-  const signalLabel = company.is_outlier ? "Outlier" : company.enrichment_status || "Standard";
-  const signalTone = company.is_outlier
-    ? "border-amber-300/70 bg-amber-50 text-amber-900"
-    : company.enrichment_status === "ok"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-      : "border-atelier-line bg-white/82 text-atelier-moss";
 
   return html`
     <tr
       className=${cx(
-        "ies-universe-row transition-colors duration-200",
-        company.is_outlier ? "ies-universe-row--outlier" : "",
-        selected ? "is-selected" : "",
+        "ies-universe-row group cursor-pointer transition-all duration-150",
+        index % 2 === 1 ? "bg-white/40" : "bg-[#FAF7F2]/30",
+        company.is_outlier ? "bg-amber-50/40" : "",
+        selected ? "bg-amber-100/60 shadow-xs border-l-4 border-l-atelier-gold" : "hover:bg-[#F5EFE6]/80"
       )}
       onClick=${onSelect}
       role="button"
@@ -3295,42 +3358,43 @@ function IesCompanyRow({ company, index, selected, onSelect }) {
         }
       }}
     >
-      <td className="py-4 pl-4 pr-3 align-top md:pl-6">
-        <div className="min-w-0">
-          <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/50">
-            ${String(index + 1).padStart(2, "0")}
-          </p>
-          <p className="mt-2 truncate font-display text-[1.15rem] font-semibold leading-none text-atelier-ink">
+      <td className="py-4 pl-5 pr-2 font-mono text-xs font-bold text-atelier-moss/60 align-middle">
+        ${String(index + 1).padStart(2, "0")}
+      </td>
+      <td className="py-4 px-4 align-middle">
+        <div className="flex flex-col min-w-0">
+          <span className="font-display text-sm font-bold text-atelier-ink truncate group-hover:text-atelier-forest transition-colors">
             ${companyName}
-          </p>
-          <p className="mt-2 truncate text-sm leading-6 text-atelier-moss">
-            ${company.ticker || "N/A"} ${company.exchange ? ` | ${company.exchange}` : ""} ${company.country ? ` | ${company.country}` : ""}
-          </p>
+          </span>
+          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-atelier-moss/80 font-mono">
+            <span className="font-semibold text-atelier-ink">${company.ticker || "—"}</span>
+            ${company.exchange ? html`<span>• ${company.exchange}</span>` : null}
+            ${company.country ? html`<span>• ${company.country}</span>` : null}
+          </div>
         </div>
       </td>
-      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
-        ${formatIesCompactNumber(company.revenue_ttm)}
+      <td className="py-4 px-4 text-right font-mono text-xs font-semibold text-atelier-ink align-middle">
+        ${formatIesCompactNumber(company.revenue_ttm, "—")}
       </td>
-      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
-        ${formatIesPercent(company.revenue_growth_lq_yoy)}
+      <td className="py-4 px-4 text-right font-mono text-xs align-middle">
+        ${renderIesMetricValue(formatIesPercent(company.revenue_growth_lq_yoy, "—"), company.revenue_growth_lq_yoy)}
       </td>
-      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
-        ${formatIesPercent(company.operating_margin)}
+      <td className="py-4 px-4 text-right font-mono text-xs align-middle">
+        ${renderIesMetricValue(formatIesPercent(company.operating_margin, "—"), company.operating_margin)}
       </td>
-      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
-        ${formatIesRatio(company.ev_to_revenue_ttm)}
+      <td className="py-4 px-4 text-right font-mono text-xs font-medium text-atelier-ink align-middle">
+        ${formatIesRatio(company.ev_to_revenue_ttm, "—")}
       </td>
-      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
-        ${formatIesRatio(company.forward_pe)}
+      <td className="py-4 px-4 text-right font-mono text-xs font-medium text-atelier-ink align-middle">
+        ${formatIesRatio(company.forward_pe, "—")}
       </td>
-      <td className="px-4 py-4 align-top text-right">
-        <div className="flex flex-wrap justify-end gap-2">
-          <span className=${cx("rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em]", signalTone)}>
-            ${signalLabel}
-          </span>
-          <span className="rounded-full border border-atelier-line bg-white/82 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss">
-            ${company.is_outlier ? "Flagged" : `${getIesMetricSourceCount(company)} Sources`}
-          </span>
+      <td className="py-4 pr-5 pl-4 text-right align-middle">
+        <div className="flex items-center justify-end gap-1.5">
+          ${company.is_outlier
+            ? html`<span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 uppercase tracking-wider">Outlier</span>`
+            : company.enrichment_status === "ok"
+              ? html`<span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Standard</span>`
+              : html`<span className="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-medium text-stone-600 uppercase tracking-wider">${company.enrichment_status || "—"}</span>`}
         </div>
       </td>
     </tr>
@@ -3341,24 +3405,23 @@ function IesAnalystInsights({ result }) {
   const insightBundle = buildIesInsightRows(result);
 
   return html`
-    <section className="ies-insights-shell rounded-[30px] border border-atelier-line bg-[linear-gradient(180deg,rgba(255,253,249,0.94),rgba(248,241,230,0.92))] px-5 py-5 md:px-6 md:py-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/66">
+    <section className="ies-insights-shell rounded-[28px] border border-atelier-line/80 bg-white/80 p-6 md:p-8 shadow-[0_20px_50px_rgba(31,42,41,0.04)]">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-atelier-gold"></span>
+          <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/70">
             Analyst Insights
           </p>
-          <h4 className="mt-3 font-display text-[1.95rem] font-semibold leading-none text-atelier-ink">
-            Editorial readout from the plotted universe
-          </h4>
         </div>
-        <p className="m-0 max-w-2xl text-sm leading-7 text-atelier-moss">
+        <h4 className="font-display text-2xl md:text-3xl font-bold leading-tight text-atelier-ink">
+          Editorial Readout & Market Structure
+        </h4>
+        <p className="mt-1 text-sm leading-relaxed text-atelier-moss max-w-3xl">
           ${insightBundle.summary}
         </p>
       </div>
 
-      <div className="editorial-rule mt-5"></div>
-
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         ${insightBundle.rows.map(
           (row, index) => html`
             <${motion.div}
@@ -3368,7 +3431,7 @@ function IesAnalystInsights({ result }) {
               transition=${{ ...TRANSITION, delay: index * 0.05 }}
               style=${MOTION_SMOOTH_STYLE}
             >
-              <${IesInsightCard} label=${row.label} body=${row.body} tone=${row.tone} />
+              <${IesInsightCard} label=${row.label} body=${row.body} tone=${row.tone} icon=${row.icon} />
             </${motion.div}>
           `,
         )}
@@ -3377,47 +3440,63 @@ function IesAnalystInsights({ result }) {
   `;
 }
 
+function IesInsightCard({ label, body, tone = "default", icon }) {
+  const borderToneClass =
+    tone === "accent"
+      ? "border-l-emerald-600 bg-gradient-to-br from-emerald-50/25 to-white/90"
+      : tone === "gold"
+        ? "border-l-amber-600 bg-gradient-to-br from-amber-50/25 to-white/90"
+        : tone === "forest"
+          ? "border-l-atelier-forest bg-gradient-to-br from-stone-50/40 to-white/90"
+          : tone === "outlier"
+            ? "border-l-amber-500 bg-gradient-to-br from-orange-50/25 to-white/90"
+            : "border-l-slate-500 bg-gradient-to-br from-slate-50/25 to-white/90";
+
+  return html`
+    <div className=${cx("ies-insight-card h-full rounded-2xl border border-atelier-line/70 border-l-4 p-5 shadow-2xs hover:shadow-md transition-all duration-200", borderToneClass)}>
+      <div className="flex items-center gap-2">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs">
+          ${icon || html`<svg className="w-4 h-4 text-atelier-forest" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>`}
+        </div>
+        <p className="m-0 text-xs font-bold uppercase tracking-wider text-atelier-ink">
+          ${label}
+        </p>
+      </div>
+      <p className="mt-3 text-xs md:text-sm leading-relaxed text-atelier-moss font-medium">
+        ${body}
+      </p>
+    </div>
+  `;
+}
+
 function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompany }) {
   const normalizedCompanies = Array.isArray(companies) ? companies.filter(Boolean) : [];
 
   if (!normalizedCompanies.length) {
     return html`
-      <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
+      <div className="rounded-[24px] border border-dashed border-atelier-line/80 bg-white/70 px-6 py-8 text-center text-sm leading-7 text-atelier-moss">
         No companies were returned for this report.
       </div>
     `;
   }
 
   return html`
-    <div className="overflow-hidden rounded-[28px] border border-atelier-line bg-white/74 shadow-[0_18px_48px_rgba(31,42,41,0.05)]">
-      <div className="overflow-x-auto">
-        <table className="ies-universe-table min-w-[960px] w-full border-collapse">
-          <thead>
-            <tr className="border-b border-atelier-line bg-[rgba(255,252,247,0.9)] text-left">
-              <th className="px-4 py-4 pl-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64 md:pl-6">
-                Company
-              </th>
-              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
-                Revenue TTM
-              </th>
-              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
-                Growth
-              </th>
-              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
-                Margin
-              </th>
-              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
-                EV / Revenue
-              </th>
-              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
-                Forward P/E
-              </th>
-              <th className="px-4 py-4 text-right text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
-                Signals
-              </th>
+    <div className="overflow-hidden rounded-2xl border border-atelier-line/80 bg-white/80 shadow-[0_18px_48px_rgba(31,42,41,0.04)]">
+      <div className="overflow-x-auto max-h-[38rem] panel-scroll">
+        <table className="w-full min-w-[920px] text-left border-collapse">
+          <thead className="sticky top-0 z-10 bg-[#FAF6F0]/95 backdrop-blur-md border-b border-atelier-line/80 shadow-2xs">
+            <tr>
+              <th className="py-3.5 pl-5 pr-2 text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70 w-12">#</th>
+              <th className="py-3.5 px-4 text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Company & Ticker</th>
+              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Revenue TTM</th>
+              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Growth</th>
+              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Margin</th>
+              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">EV / Revenue</th>
+              <th className="py-3.5 px-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Forward P/E</th>
+              <th className="py-3.5 pr-5 pl-4 text-right text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">Signals</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-atelier-line/40">
             ${normalizedCompanies.map(
               (company, index) => html`
                 <${IesCompanyRow}
@@ -3448,18 +3527,13 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
   const displayIndustry = request.industry || summary.industry || "Industry";
   const displayCountry = request.country || summary.country || meta?.location?.label || "Country";
   const preparedDate = formatDate();
-  const coverageLabel = `Top ${topN || 0}`;
-  const heroMeta = [
-    { label: "Industry", value: displayIndustry },
-    { label: "Geography", value: displayCountry },
-    { label: "Coverage", value: coverageLabel },
-    { label: "Prepared", value: preparedDate },
-  ];
+  const coverageLabel = `Top ${topN || 0} Companies`;
+
   const executiveMetrics = [
-    { label: "Companies Returned", value: String(summary.companies_returned || companies.length || 0), tone: "accent" },
-    { label: "Companies Enriched", value: String(summary.companies_enriched ?? 0), tone: "gold" },
-    { label: "Median Revenue Growth", value: formatIesPercent(summary.median_revenue_growth) },
-    { label: "Median Operating Margin", value: formatIesPercent(summary.median_operating_margin) },
+    { label: "Companies Returned", value: String(summary.companies_returned || companies.length || 0) },
+    { label: "Companies Enriched", value: String(summary.companies_enriched ?? 0) },
+    { label: "Median Revenue Growth", value: formatIesPercent(summary.median_revenue_growth), trend: Number(summary.median_revenue_growth) > 0 ? "up" : Number(summary.median_revenue_growth) < 0 ? "down" : null },
+    { label: "Median Operating Margin", value: formatIesPercent(summary.median_operating_margin), trend: Number(summary.median_operating_margin) > 0 ? "up" : Number(summary.median_operating_margin) < 0 ? "down" : null },
     { label: "Median EV / Revenue", value: formatIesRatio(summary.median_ev_to_revenue) },
   ];
 
@@ -3468,107 +3542,119 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
   }, [result?.title]);
 
   return html`
-    <div className="paper-sheet flex w-full flex-col rounded-[32px] px-5 py-5 md:px-8 md:py-8">
+    <div className="paper-sheet flex w-full flex-col rounded-[32px] px-6 py-6 md:px-10 md:py-10 space-y-9">
+      <!-- 1. Industry Header -->
       <section className="ies-hero">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-4xl">
-            <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-atelier-moss/66">
-              Institutional Equity Research Memo
-            </p>
-            <h3 className="mt-4 max-w-4xl font-display text-[2.9rem] font-semibold leading-[0.92] tracking-[-0.03em] text-atelier-ink md:text-[3.65rem]">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-4xl space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-atelier-gold animate-pulse"></span>
+              <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-atelier-moss/70">
+                Executive Analytics • Equity Research
+              </p>
+            </div>
+            <h3 className="font-display text-4xl sm:text-5xl font-bold leading-[0.95] tracking-tight text-atelier-ink">
               ${result?.title || "Industry Earnings Snapshot"}
             </h3>
-            <p className="mt-4 max-w-3xl text-base leading-8 text-atelier-moss md:text-[1.05rem]">
-              ${displayIndustry} ${displayCountry ? `coverage in ${displayCountry}` : ""} is presented as a polished research memo with the scatter plot, key metrics, and the full company universe kept in one editorial flow.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-start gap-3 lg:items-end">
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />
+            
+            <!-- Subtle Metadata Chips -->
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
+                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Industry:</span>
+                ${displayIndustry}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
+                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Region:</span>
+                ${displayCountry}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
+                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Coverage:</span>
+                ${coverageLabel}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
+                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Last Updated:</span>
+                ${preparedDate}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
+                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Reporting Period:</span>
+                LQ YoY / TTM
+              </span>
             </div>
-            <p className="text-right text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/58">
-              Prepared ${preparedDate}
-            </p>
           </div>
-        </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          ${heroMeta.map(
-            (item) => html`
-              <div className="rounded-[22px] border border-atelier-line bg-white/68 px-4 py-4">
-                <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/58">
-                  ${item.label}
-                </p>
-                <p className="mt-2 text-sm font-semibold leading-7 text-atelier-ink">
-                  ${item.value}
-                </p>
-              </div>
-            `,
-          )}
+          <div className="flex flex-col items-start gap-2.5 lg:items-end shrink-0">
+            <${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />
+          </div>
         </div>
 
         ${metadata.note
           ? html`
-              <div className="mt-5 rounded-[22px] border border-atelier-line bg-white/74 px-4 py-4 text-sm leading-7 text-atelier-moss">
+              <div className="mt-5 rounded-[22px] border border-atelier-line/80 bg-white/70 px-5 py-4 text-sm leading-7 text-atelier-moss">
                 ${metadata.note}
               </div>
             `
           : null}
       </section>
 
-      <div className="editorial-rule mt-7"></div>
-
-      <section className="mt-7">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <!-- 2. Executive KPI Strip (Horizontal Ribbon) -->
+      <section>
+        <div className="rounded-2xl border border-atelier-line/80 bg-white/75 backdrop-blur-md shadow-sm p-3 md:p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-atelier-line/50">
           ${executiveMetrics.map(
-            (metric, index) => html`
-              <${motion.div}
-                key=${`${metric.label}-${index}`}
-                initial=${{ opacity: 0, y: 10 }}
-                animate=${{ opacity: 1, y: 0 }}
-                transition=${{ ...TRANSITION, delay: index * 0.05 }}
-                style=${MOTION_SMOOTH_STYLE}
-              >
-                <${MetricCard} label=${metric.label} value=${metric.value} tone=${metric.tone || "default"} />
-              </${motion.div}>
+            (metric) => html`
+              <div key=${metric.label} className="p-3 md:px-5 md:py-2 flex flex-col justify-center">
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-atelier-moss/70">
+                  ${metric.label}
+                </span>
+                <div className="mt-1.5 flex items-baseline gap-2">
+                  <span className="font-mono text-2xl md:text-3xl font-bold tracking-tight text-atelier-ink">
+                    ${metric.value}
+                  </span>
+                  ${metric.trend === "up"
+                    ? html`<span className="text-xs font-bold text-emerald-700">↑</span>`
+                    : metric.trend === "down"
+                      ? html`<span className="text-xs font-bold text-rose-700">↓</span>`
+                      : null}
+                </div>
+              </div>
             `,
           )}
         </div>
       </section>
 
-      <section className="mt-8">
+      <!-- 3. Interactive Scatter Visualization (Hero Component) -->
+      <section>
         <${IesScatterChart} chart=${chart} />
       </section>
 
-      <section className="mt-8">
+      <!-- 4. Insight Cards (Executive Insight Tiles) -->
+      <section>
         <${IesAnalystInsights} result=${result} />
       </section>
 
-      <div className="editorial-rule mt-8"></div>
-
-      <section className="mt-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+      <!-- 5. Company Ranking Table -->
+      <section>
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <div>
-            <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/66">
-              Company Universe
-            </p>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-atelier-moss">
-              Compact research table. Click any row to open the full dossier with all available metrics, flags, sources, and notes.
-            </p>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-atelier-forest"></span>
+              <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/70">
+                Universe Ranking
+              </p>
+            </div>
+            <h4 className="mt-1 font-display text-2xl font-bold leading-tight text-atelier-ink">
+              Company Ranking Table
+            </h4>
           </div>
-          <p className="m-0 text-sm font-semibold text-atelier-ink">
-            ${companies.length} companies
-          </p>
+          <div className="rounded-full bg-stone-100 px-3.5 py-1 text-xs font-bold text-atelier-ink">
+            ${companies.length} Companies Tracked
+          </div>
         </div>
 
-        <div className="mt-5">
-          <${IesCompanyUniverseTable}
-            companies=${companies}
-            selectedCompanyKey=${selectedCompanyKey}
-            onSelectCompany=${(key) => setSelectedCompanyKey((current) => (current === key ? "" : key))}
-          />
-        </div>
+        <${IesCompanyUniverseTable}
+          companies=${companies}
+          selectedCompanyKey=${selectedCompanyKey}
+          onSelectCompany=${(key) => setSelectedCompanyKey((current) => (current === key ? "" : key))}
+        />
       </section>
 
       <${IesCompanyDrawer}
