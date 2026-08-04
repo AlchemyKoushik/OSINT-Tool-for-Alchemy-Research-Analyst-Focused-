@@ -2178,11 +2178,348 @@ function MetricCard({ label, value, tone = "default" }) {
         : "metric-card";
 
   return html`
-    <div className=${cx("rounded-[22px] border px-4 py-4", toneClass)}>
-      <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-atelier-moss/68">${label}</p>
-      <p className="mt-2 text-lg font-bold text-atelier-ink">${value}</p>
+    <div className=${cx("metric-card-shell flex h-full flex-col justify-between rounded-[24px] px-4 py-4", toneClass)}>
+      <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/66">${label}</p>
+      <p className="mt-3 text-[1.45rem] font-semibold leading-none tracking-[-0.03em] text-atelier-ink">
+        ${value}
+      </p>
     </div>
   `;
+}
+
+function formatIesLabel(value, fallback = "N/A") {
+  const normalized = String(value || "").trim();
+  return normalized || fallback;
+}
+
+function formatIesDateLabel(value) {
+  const normalized = String(value || "").trim();
+  return normalized || "N/A";
+}
+
+function getIesMetricSourceCount(company) {
+  const sourceMap = company?.metric_sources && typeof company.metric_sources === "object" ? company.metric_sources : {};
+  return Object.keys(sourceMap).length;
+}
+
+function getIesDisplayCompanyKey(company, index = 0) {
+  return String(company?.ticker || company?.company_name || `company-${index}`).trim();
+}
+
+function buildIesInsightRows(result) {
+  const companies = Array.isArray(result?.companies) ? result.companies.filter(Boolean) : [];
+  const summary = result?.summary || {};
+  const chartPoints = Array.isArray(result?.scatter_chart?.data) ? result.scatter_chart.data.filter(Boolean) : [];
+  const outliers = companies.filter((company) => company?.is_outlier);
+
+  const highestGrowth = [...companies]
+    .filter((company) => Number.isFinite(Number(company?.revenue_growth_lq_yoy)))
+    .sort((a, b) => Number(b.revenue_growth_lq_yoy) - Number(a.revenue_growth_lq_yoy))[0];
+
+  const highestMargin = [...companies]
+    .filter((company) => Number.isFinite(Number(company?.operating_margin)))
+    .sort((a, b) => Number(b.operating_margin) - Number(a.operating_margin))[0];
+
+  const largestCompany = [...companies]
+    .filter((company) => Number.isFinite(Number(company?.market_cap)) || Number.isFinite(Number(company?.revenue_ttm)))
+    .sort((a, b) => {
+      const aPrimary = Number.isFinite(Number(a?.market_cap)) ? Number(a.market_cap) : Number(a?.revenue_ttm);
+      const bPrimary = Number.isFinite(Number(b?.market_cap)) ? Number(b.market_cap) : Number(b?.revenue_ttm);
+      return bPrimary - aPrimary;
+    })[0];
+
+  const valuationCandidates = companies
+    .map((company) => Number(company?.ev_to_revenue_ttm))
+    .filter((value) => Number.isFinite(value));
+  const valuationFallbackCandidates = companies
+    .map((company) => Number(company?.forward_pe))
+    .filter((value) => Number.isFinite(value));
+  const valuationSeries = valuationCandidates.length ? valuationCandidates : valuationFallbackCandidates;
+  const valuationLabel = valuationCandidates.length ? "EV / Revenue" : "Forward P/E";
+  const valuationMin = valuationSeries.length ? Math.min(...valuationSeries) : null;
+  const valuationMax = valuationSeries.length ? Math.max(...valuationSeries) : null;
+  const coverageCount = Number(summary.requested_top_n || companies.length || 0);
+  const coveragePhrase = coverageCount ? `Top ${coverageCount}` : "focused";
+
+  const highestGrowthLabel = highestGrowth
+    ? `${highestGrowth.company_name || highestGrowth.ticker || "Company"} leads revenue growth at ${formatIesPercent(highestGrowth.revenue_growth_lq_yoy)}.`
+    : "Revenue growth leadership is not available in the current universe.";
+  const highestMarginLabel = highestMargin
+    ? `${highestMargin.company_name || highestMargin.ticker || "Company"} shows the highest operating margin at ${formatIesPercent(highestMargin.operating_margin)}.`
+    : "Operating margin leadership is not available in the current universe.";
+  const largestCompanyLabel = largestCompany
+    ? `${largestCompany.company_name || largestCompany.ticker || "Company"} is the largest company in the universe at ${formatIesCompactNumber(largestCompany.market_cap || largestCompany.revenue_ttm)}.`
+    : "A clear largest company could not be isolated from the current data.";
+  const outlierLabel = outliers.length
+    ? `${outliers.slice(0, 3).map((company) => company.company_name || company.ticker).filter(Boolean).join(", ")} ${outliers.length === 1 ? "is" : "are"} flagged as outliers.`
+    : "No companies were flagged as outliers in the current universe.";
+  const valuationLabelText =
+    valuationMin !== null && valuationMax !== null
+      ? `${valuationLabel} spans ${formatIesRatio(valuationMin)} to ${formatIesRatio(valuationMax)} across the universe.`
+      : "A stable valuation range could not be derived from the available companies.";
+
+  return {
+    summary:
+      `This memo covers ${summary.industry || "the selected industry"} in ${summary.country || "the selected country"} with ${coveragePhrase} coverage and ${chartPoints.length || companies.length || 0} plotted observations.`,
+    rows: [
+      { label: "Highest Growth", body: highestGrowthLabel, tone: "accent" },
+      { label: "Highest Margin", body: highestMarginLabel, tone: "gold" },
+      { label: "Largest Company", body: largestCompanyLabel, tone: "default" },
+      { label: "Notable Outliers", body: outlierLabel, tone: "default" },
+      { label: "Valuation Range", body: valuationLabelText, tone: "default" },
+    ],
+  };
+}
+
+function IesInsightCard({ label, body, tone = "default" }) {
+  return html`
+    <div className=${cx("ies-insight-card lift-on-hover h-full rounded-[26px] px-5 py-5", tone === "accent" ? "ies-insight-card--accent" : tone === "gold" ? "ies-insight-card--gold" : "")}>
+      <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/66">
+        ${label}
+      </p>
+      <p className="mt-3 text-sm leading-8 text-atelier-moss">
+        ${body}
+      </p>
+    </div>
+  `;
+}
+
+function IesFieldGrid({ fields = [] }) {
+  const normalizedFields = Array.isArray(fields)
+    ? fields
+        .map((field) => ({
+          label: String(field?.label || "").trim(),
+          value: String(field?.value || "").trim(),
+        }))
+        .filter((field) => field.label)
+    : [];
+
+  if (!normalizedFields.length) {
+    return null;
+  }
+
+  return html`
+    <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      ${normalizedFields.map(
+        (field) => html`
+          <div className="rounded-[20px] border border-atelier-line bg-white/78 px-4 py-4">
+            <dt className="text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/64">
+              ${field.label}
+            </dt>
+            <dd className="mt-2 text-sm leading-7 text-atelier-ink">
+              ${field.value || "N/A"}
+            </dd>
+          </div>
+        `,
+      )}
+    </dl>
+  `;
+}
+
+function IesCompanyDrawerSection({ title, fields }) {
+  const normalizedFields = Array.isArray(fields) ? fields.filter((field) => field?.label) : [];
+
+  if (!normalizedFields.length) {
+    return null;
+  }
+
+  return html`
+    <section className="ies-drawer__section">
+      <div className="flex items-end justify-between gap-3">
+        <h5 className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
+          ${title}
+        </h5>
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/50">
+          ${normalizedFields.length} fields
+        </span>
+      </div>
+      <div className="mt-3">
+        <${IesFieldGrid} fields=${normalizedFields} />
+      </div>
+    </section>
+  `;
+}
+
+function IesCompanyDrawer({ company, open, onClose }) {
+  const [renderedCompany, setRenderedCompany] = useState(company || null);
+
+  useEffect(() => {
+    if (open && company) {
+      setRenderedCompany(company);
+    }
+  }, [company, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
+  const portalRoot = getFloatingLayerRoot();
+
+  if (!portalRoot) {
+    return null;
+  }
+
+  return createPortal(
+    html`
+      <${AnimatePresence} initial=${false}>
+        ${open && renderedCompany
+          ? html`
+              <${motion.div}
+                key="ies-company-drawer"
+                className="ies-drawer fixed inset-0 z-[190] flex items-stretch justify-end"
+                initial=${{ opacity: 0 }}
+                animate=${{ opacity: 1 }}
+                exit=${{ opacity: 0 }}
+                transition=${TRANSITION}
+              >
+                <button
+                  type="button"
+                  className="ies-drawer__backdrop absolute inset-0 border-0 bg-[#1a211d]/28 backdrop-blur-[2px]"
+                  aria-label="Close company details"
+                  onClick=${onClose}
+                ></button>
+
+                <${motion.aside}
+                  className="ies-drawer__panel relative z-10 flex h-full w-full max-w-[44rem] flex-col overflow-hidden border-l border-atelier-line bg-[linear-gradient(180deg,rgba(255,253,248,0.98),rgba(248,242,232,0.98))] shadow-[0_30px_70px_rgba(31,42,41,0.16)]"
+                  initial=${{ x: 38, opacity: 0 }}
+                  animate=${{ x: 0, opacity: 1 }}
+                  exit=${{ x: 38, opacity: 0 }}
+                  transition=${TRANSITION}
+                >
+                  <div className="flex items-start justify-between gap-4 border-b border-atelier-line px-6 py-6 md:px-7">
+                    <div className="min-w-0">
+                      <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/66">
+                        Company Dossier
+                      </p>
+                      <h4 className="mt-3 truncate font-display text-[2.2rem] font-semibold leading-none text-atelier-ink">
+                        ${renderedCompany.company_name || renderedCompany.ticker || "Company"}
+                      </h4>
+                      <p className="mt-2 text-sm leading-7 text-atelier-moss">
+                        ${renderedCompany.ticker || "N/A"} ${renderedCompany.exchange ? ` | ${renderedCompany.exchange}` : ""} ${renderedCompany.country ? ` | ${renderedCompany.country}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick=${onClose}
+                      className="filter-close-button mt-1"
+                      aria-label="Close drawer"
+                    >
+                      <svg className="filter-close-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M7 7l10 10M17 7 7 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="panel-scroll flex-1 space-y-6 px-6 py-6 md:px-7">
+                    <div className="rounded-[26px] border border-atelier-line bg-white/76 px-5 py-5">
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <${MetricCard} label="Revenue TTM" value=${formatIesCompactNumber(renderedCompany.revenue_ttm)} tone="accent" />
+                        <${MetricCard} label="Market Cap" value=${formatIesCompactNumber(renderedCompany.market_cap)} />
+                        <${MetricCard} label="EV / Revenue" value=${formatIesRatio(renderedCompany.ev_to_revenue_ttm)} />
+                        <${MetricCard} label="EV / EBITDA" value=${formatIesRatio(renderedCompany.ev_to_ebitda_ttm)} tone="gold" />
+                      </div>
+                    </div>
+
+                    <${IesCompanyDrawerSection}
+                      title="Financial Performance"
+                      fields=${[
+                        { label: "Revenue TTM", value: formatIesCompactNumber(renderedCompany.revenue_ttm) },
+                        { label: "Market Cap", value: formatIesCompactNumber(renderedCompany.market_cap) },
+                        { label: "Enterprise Value", value: formatIesCompactNumber(renderedCompany.enterprise_value) },
+                        { label: "Current EV", value: formatIesCompactNumber(renderedCompany.current_ev) },
+                        { label: "EBITDA TTM", value: formatIesCompactNumber(renderedCompany.ebitda_ttm) },
+                        { label: "Revenue Growth", value: formatIesPercent(renderedCompany.revenue_growth_lq_yoy) },
+                        { label: "Operating Margin", value: formatIesPercent(renderedCompany.operating_margin) },
+                        { label: "EBITDA Margin", value: formatIesPercent(renderedCompany.ebitda_margin) },
+                      ]}
+                    />
+
+                    <${IesCompanyDrawerSection}
+                      title="Valuation"
+                      fields=${[
+                        { label: "EV / Revenue", value: formatIesRatio(renderedCompany.ev_to_revenue_ttm) },
+                        { label: "EV / EBITDA", value: formatIesRatio(renderedCompany.ev_to_ebitda_ttm) },
+                        { label: "Forward P/E", value: formatIesRatio(renderedCompany.forward_pe) },
+                      ]}
+                    />
+
+                    <${IesCompanyDrawerSection}
+                      title="Earnings"
+                      fields=${[
+                        { label: "Reported EPS", value: formatIesLabel(Number.isFinite(renderedCompany.reported_eps) ? renderedCompany.reported_eps.toFixed(2) : "") },
+                        { label: "EPS Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.eps_estimate) ? renderedCompany.eps_estimate.toFixed(2) : "") },
+                        { label: "EPS Surprise", value: formatIesPercent(renderedCompany.eps_surprise) },
+                        { label: "Last Reported EPS", value: formatIesLabel(Number.isFinite(renderedCompany.last_reported_eps) ? renderedCompany.last_reported_eps.toFixed(2) : "") },
+                        { label: "Last Reported Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.last_reported_eps_estimate) ? renderedCompany.last_reported_eps_estimate.toFixed(2) : "") },
+                        { label: "Last Reported Surprise", value: formatIesPercent(renderedCompany.last_reported_eps_surprise) },
+                        { label: "Latest Earnings Date", value: formatIesDateLabel(renderedCompany.latest_earnings_date) },
+                        { label: "Last Reported Earnings Date", value: formatIesDateLabel(renderedCompany.last_reported_earnings_date) },
+                        { label: "Next Earnings Date", value: formatIesDateLabel(renderedCompany.next_earnings_date) },
+                        { label: "Next EPS Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.next_eps_estimate) ? renderedCompany.next_eps_estimate.toFixed(2) : "") },
+                        { label: "5-Day Reaction", value: formatIesPercent(renderedCompany.five_day_price_reaction) },
+                      ]}
+                    />
+
+                    <${IesCompanyDrawerSection}
+                      title="Flags"
+                      fields=${[
+                        { label: "Enrichment Status", value: formatIesLabel(renderedCompany.enrichment_status) },
+                        { label: "Outlier", value: renderedCompany.is_outlier ? "Yes" : "No" },
+                        { label: "Outlier Metrics", value: outlierMetrics.length ? outlierMetrics.join(", ") : "None" },
+                        { label: "Validation Warnings", value: warnings.length ? warnings.join(" • ") : "None" },
+                        { label: "Enrichment Error", value: formatIesLabel(renderedCompany.enrichment_error) },
+                      ]}
+                    />
+
+                    <${IesCompanyDrawerSection}
+                      title="Sources"
+                      fields=${[
+                        { label: "Metric Source Count", value: sourceCount ? String(sourceCount) : "0" },
+                        ...sourceEntries.map(([key, value]) => ({
+                          label: key,
+                          value: typeof value === "object" ? JSON.stringify(value) : formatIesLabel(value),
+                        })),
+                      ]}
+                    />
+
+                    <${IesCompanyDrawerSection}
+                      title="Notes"
+                      fields=${[
+                        { label: "Canonical Company ID", value: formatIesLabel(renderedCompany.canonical_company_id) },
+                        { label: "Sector", value: formatIesLabel(renderedCompany.sector) },
+                        { label: "Industry", value: formatIesLabel(renderedCompany.industry) },
+                        { label: "Country", value: formatIesLabel(renderedCompany.country) },
+                        { label: "Region", value: formatIesLabel(renderedCompany.region) },
+                        { label: "Exchange", value: formatIesLabel(renderedCompany.exchange) },
+                        { label: "Currency", value: formatIesLabel(renderedCompany.currency) },
+                        { label: "Listing Country", value: formatIesLabel(renderedCompany.listing_country) },
+                        { label: "Listing Region", value: formatIesLabel(renderedCompany.listing_region) },
+                        { label: "Listing Exchange", value: formatIesLabel(renderedCompany.listing_exchange) },
+                        { label: "Company Country", value: formatIesLabel(renderedCompany.company_country) },
+                        { label: "Company Region", value: formatIesLabel(renderedCompany.company_region) },
+                        { label: "Company Exchange", value: formatIesLabel(renderedCompany.company_exchange) },
+                      ]}
+                    />
+                  </div>
+                </${motion.aside}>
+              </${motion.div}>
+            `
+          : null}
+      </${AnimatePresence}>
+    `,
+    portalRoot,
+  );
 }
 
 function JournalCompleted({ result, debug, meta }) {
@@ -2406,8 +2743,289 @@ function formatIesCompactNumber(value) {
 }
 
 function IesScatterChart({ chart }) {
+  const stageRef = useRef(null);
+  const tooltipRef = useRef(null);
+  const [activeTicker, setActiveTicker] = useState("");
+  const [selectedTicker, setSelectedTicker] = useState("");
+  const [tooltipState, setTooltipState] = useState({
+    visible: false,
+    x: 0,
+    y: 0,
+    title: "",
+    ticker: "",
+    fields: [],
+  });
+
   const points = Array.isArray(chart?.data) ? chart.data.filter(Boolean) : [];
-  if (!points.length) {
+  const normalizedPoints = points
+    .map((point, index) => ({
+      ...point,
+      index,
+      x: Number(point.revenue_growth_lq_yoy),
+      y: Number(point.operating_margin),
+      bubble: Number(point.bubble_size),
+      ticker: String(point.ticker || "").trim(),
+      company_name: String(point.company_name || "").trim(),
+      is_outlier: Boolean(point.is_outlier),
+    }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  const hasData = normalizedPoints.length > 0;
+
+  const xValues = normalizedPoints.map((point) => point.x);
+  const yValues = normalizedPoints.map((point) => point.y);
+  const bubbleValues = normalizedPoints
+    .map((point) => Number.isFinite(point.bubble) ? point.bubble : null)
+    .filter((value) => value !== null);
+  const xMedian = hasData ? medianOfValues(xValues) : 0;
+  const yMedian = hasData ? medianOfValues(yValues) : 0;
+  const xMin = hasData ? Math.min(...xValues) : 0;
+  const xMax = hasData ? Math.max(...xValues) : 1;
+  const yMin = hasData ? Math.min(...yValues) : 0;
+  const yMax = hasData ? Math.max(...yValues) : 1;
+  const bubbleMin = bubbleValues.length ? Math.min(...bubbleValues) : 1;
+  const bubbleMax = bubbleValues.length ? Math.max(...bubbleValues) : 1;
+  const pointLookup = normalizedPoints.reduce((acc, point) => {
+    acc[point.ticker || point.company_name || String(point.index)] = point;
+    return acc;
+  }, {});
+  const activePoint = pointLookup[activeTicker] || pointLookup[selectedTicker] || null;
+  const chartTitle = String(chart?.title || "Revenue Growth vs Operating Margin").trim();
+  const xLabel = String(chart?.x_label || "Revenue Growth (LQ YoY)").trim();
+  const yLabel = String(chart?.y_label || "Operating Margin").trim();
+  const bubbleLabel = String(chart?.bubble_size_label || "Revenue TTM").trim();
+
+  function getPointKey(point) {
+    return point.ticker || point.company_name || String(point.index);
+  }
+
+  function getPointRadius(point) {
+    const normalizedBubble = Number.isFinite(point.bubble) ? point.bubble : bubbleMin;
+    const bubbleRange = Math.max(1, bubbleMax - bubbleMin);
+    const scaled = 8 + ((normalizedBubble - bubbleMin) / bubbleRange) * 18;
+    return clamp(scaled, 8, 26);
+  }
+
+  function getChartMetrics() {
+    const node = stageRef.current;
+    if (!node) {
+      return { width: 980, height: 560 };
+    }
+    const bounds = node.getBoundingClientRect();
+    const width = Math.max(760, bounds.width || 980);
+    return { width, height: Math.max(520, width * 0.58) };
+  }
+
+  function getPlotFrame() {
+    const { width, height } = getChartMetrics();
+    const margin = {
+      top: 34,
+      right: 44,
+      bottom: 72,
+      left: 90,
+    };
+    const plotWidth = Math.max(0, width - margin.left - margin.right);
+    const plotHeight = Math.max(0, height - margin.top - margin.bottom);
+    return { width, height, margin, plotWidth, plotHeight };
+  }
+
+  function xScale(value) {
+    const { margin, plotWidth } = getPlotFrame();
+    const min = xMin - (xMax - xMin || 1) * 0.18;
+    const max = xMax + (xMax - xMin || 1) * 0.18;
+    return margin.left + ((value - min) / Math.max(1, max - min)) * plotWidth;
+  }
+
+  function yScale(value) {
+    const { margin, plotHeight } = getPlotFrame();
+    const min = yMin - (yMax - yMin || 1) * 0.18;
+    const max = yMax + (yMax - yMin || 1) * 0.18;
+    return margin.top + plotHeight - ((value - min) / Math.max(1, max - min)) * plotHeight;
+  }
+
+  function getColor(value) {
+    if (!Number.isFinite(value)) {
+      return "rgba(168, 174, 176, 0.9)";
+    }
+    const pivot = yMedian || 0;
+    const spread = Math.max(6, Math.abs(yMax - yMin) * 0.5);
+    const normalized = clamp((value - pivot) / spread, -1, 1);
+    if (normalized < 0) {
+      const t = Math.abs(normalized);
+      return `rgba(${Math.round(200 + 18 * (1 - t))}, ${Math.round(107 + 52 * (1 - t))}, ${Math.round(99 + 18 * (1 - t))}, ${0.82})`;
+    }
+    if (normalized > 0) {
+      const t = normalized;
+      return `rgba(${Math.round(120 - 27 * (1 - t))}, ${Math.round(155 + 12 * t)}, ${Math.round(121 - 3 * t)}, ${0.82})`;
+    }
+    return "rgba(169, 166, 156, 0.84)";
+  }
+
+  function formatAxisPercent(value) {
+    if (!Number.isFinite(value)) {
+      return "N/A";
+    }
+    const sign = value > 0 ? "+" : "";
+    return `${sign}${value.toFixed(1)}%`;
+  }
+
+  function formatRatio(value) {
+    if (!Number.isFinite(value)) {
+      return "N/A";
+    }
+    return `${value.toFixed(1)}x`;
+  }
+
+  function formatSmallPercent(value) {
+    if (!Number.isFinite(value)) {
+      return "N/A";
+    }
+    const sign = value > 0 ? "+" : "";
+    return `${sign}${value.toFixed(1)}%`;
+  }
+
+  function formatRevenue(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return "N/A";
+    }
+    const abs = Math.abs(numeric);
+    if (abs >= 1_000_000_000_000) {
+      return `$${(numeric / 1_000_000_000_000).toFixed(2)}T`;
+    }
+    if (abs >= 1_000_000_000) {
+      return `$${(numeric / 1_000_000_000).toFixed(2)}B`;
+    }
+    if (abs >= 1_000_000) {
+      return `$${(numeric / 1_000_000).toFixed(2)}M`;
+    }
+    return `$${numeric.toFixed(2)}`;
+  }
+
+  function buildTooltipFields(point) {
+    return [
+      ["Revenue", formatRevenue(point.bubble)],
+      ["Revenue Growth", formatAxisPercent(point.x)],
+      ["Operating Margin", formatAxisPercent(point.y)],
+      ["EPS", Number.isFinite(point.reported_eps) ? point.reported_eps.toFixed(2) : "N/A"],
+      ["EPS Surprise", Number.isFinite(point.eps_surprise) ? formatSmallPercent(point.eps_surprise) : "N/A"],
+      ["5-Day Reaction", Number.isFinite(point.five_day_price_reaction) ? formatSmallPercent(point.five_day_price_reaction) : "N/A"],
+      ["Forward P/E", formatRatio(point.forward_pe)],
+    ];
+  }
+
+  function showTooltipForPoint(point, event) {
+    if (!point) {
+      return;
+    }
+    const container = stageRef.current;
+    if (!container) {
+      return;
+    }
+    const rect = container.getBoundingClientRect();
+    const pointerX = event?.clientX ? event.clientX - rect.left : xScale(point.x);
+    const pointerY = event?.clientY ? event.clientY - rect.top : yScale(point.y);
+    setTooltipState({
+      visible: true,
+      x: clamp(pointerX + 14, 12, rect.width - 12),
+      y: clamp(pointerY + 14, 12, rect.height - 12),
+      title: point.company_name || point.ticker || "Company",
+      ticker: point.ticker || "",
+      fields: buildTooltipFields(point),
+    });
+  }
+
+  function hideTooltipIfNeeded(point) {
+    if (selectedTicker && getPointKey(point) === selectedTicker) {
+      return;
+    }
+    if (activeTicker === getPointKey(point)) {
+      setActiveTicker("");
+    }
+    const nextSelected = pointLookup[selectedTicker];
+    if (nextSelected) {
+      setTooltipState((current) => ({
+        ...current,
+        visible: true,
+        title: nextSelected.company_name || nextSelected.ticker || "Company",
+        ticker: nextSelected.ticker || "",
+        fields: buildTooltipFields(nextSelected),
+      }));
+    } else {
+      setTooltipState((current) => ({ ...current, visible: false }));
+    }
+  }
+
+  function handleEnter(point, event) {
+    const key = getPointKey(point);
+    setActiveTicker(key);
+    showTooltipForPoint(point, event);
+  }
+
+  function handleMove(point, event) {
+    if (activeTicker === getPointKey(point) || selectedTicker === getPointKey(point)) {
+      showTooltipForPoint(point, event);
+    }
+  }
+
+  function handleLeave(point) {
+    const key = getPointKey(point);
+    if (activeTicker === key) {
+      setActiveTicker("");
+    }
+    hideTooltipIfNeeded(point);
+  }
+
+  function handleSelect(point, event) {
+    const key = getPointKey(point);
+    const nextSelected = selectedTicker === key ? "" : key;
+    setSelectedTicker(nextSelected);
+    if (nextSelected) {
+      showTooltipForPoint(point, event);
+    } else if (activeTicker) {
+      const hovered = pointLookup[activeTicker];
+      if (hovered) {
+        showTooltipForPoint(hovered, event);
+      }
+    } else {
+      setTooltipState((current) => ({ ...current, visible: false }));
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedTicker) {
+      return;
+    }
+    const point = pointLookup[selectedTicker];
+    if (point) {
+      setTooltipState({
+        visible: true,
+        x: xScale(point.x),
+        y: yScale(point.y),
+        title: point.company_name || point.ticker || "Company",
+        ticker: point.ticker || "",
+        fields: buildTooltipFields(point),
+      });
+    }
+  }, [selectedTicker, chart?.title, chart?.bubble_size_label, chart?.x_label, chart?.y_label]);
+
+  useEffect(() => {
+    function handleResize() {
+      const point = pointLookup[selectedTicker] || pointLookup[activeTicker];
+      if (point) {
+        setTooltipState((current) => ({
+          ...current,
+          x: xScale(point.x),
+          y: yScale(point.y),
+        }));
+      }
+    }
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [activeTicker, selectedTicker, chart?.title]);
+
+  if (!hasData) {
     return html`
       <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-7 text-atelier-moss">
         No scatter chart data was returned for this report.
@@ -2415,160 +3033,406 @@ function IesScatterChart({ chart }) {
     `;
   }
 
-  const numericPoints = points
-    .map((point) => ({
-      ...point,
-      x: Number(point.revenue_growth_lq_yoy),
-      y: Number(point.operating_margin),
-      bubble: Number(point.bubble_size),
-    }))
-    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-
-  if (!numericPoints.length) {
-    return html`
-      <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-7 text-atelier-moss">
-        The report returned companies, but no usable scatter chart coordinates were available.
-      </div>
-    `;
-  }
-
-  const minX = Math.min(...numericPoints.map((point) => point.x));
-  const maxX = Math.max(...numericPoints.map((point) => point.x));
-  const minY = Math.min(...numericPoints.map((point) => point.y));
-  const maxY = Math.max(...numericPoints.map((point) => point.y));
-  const minBubble = Math.min(...numericPoints.map((point) => (Number.isFinite(point.bubble) ? point.bubble : 0)));
-  const maxBubble = Math.max(...numericPoints.map((point) => (Number.isFinite(point.bubble) ? point.bubble : 0)));
-  const spanX = maxX - minX || 1;
-  const spanY = maxY - minY || 1;
-  const spanBubble = maxBubble - minBubble || 1;
+  const { width, height, margin, plotWidth, plotHeight } = getPlotFrame();
+  const axisXMin = xMin - (xMax - xMin || 1) * 0.18;
+  const axisXMax = xMax + (xMax - xMin || 1) * 0.18;
+  const axisYMin = yMin - (yMax - yMin || 1) * 0.18;
+  const axisYMax = yMax + (yMax - yMin || 1) * 0.18;
+  const gridLineCount = 4;
+  const xTicks = Array.from({ length: gridLineCount + 1 }, (_, index) => axisXMin + ((axisXMax - axisXMin) * index) / gridLineCount);
+  const yTicks = Array.from({ length: gridLineCount + 1 }, (_, index) => axisYMin + ((axisYMax - axisYMin) * index) / gridLineCount);
+  const leftAxisX = margin.left;
+  const rightAxisX = margin.left + plotWidth;
+  const topAxisY = margin.top;
+  const bottomAxisY = margin.top + plotHeight;
+  const medianX = xScale(xMedian);
+  const medianY = yScale(yMedian);
 
   return html`
-    <div className="rounded-[28px] border border-atelier-line bg-white/78 px-5 py-5">
+    <div className="rounded-[30px] border border-atelier-line bg-white/80 px-5 py-5 shadow-[0_18px_48px_rgba(31,42,41,0.06)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
-            Scatter Chart
+            Growth vs Profitability
           </p>
-          <h4 className="mt-3 font-display text-[1.5rem] font-semibold leading-none text-atelier-ink">
-            ${chart?.title || "Revenue Growth vs Operating Margin"}
+          <h4 className="mt-3 font-display text-[1.65rem] font-semibold leading-none text-atelier-ink">
+            ${chartTitle}
           </h4>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#bca99d]"></span>
+              Bubble Size = ${bubbleLabel}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
+              <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-[#c96d64] via-[#d2c8bc] to-[#5d9b78]"></span>
+              Bubble Color = Operating Margin
+            </span>
+          </div>
         </div>
-        <p className="m-0 text-sm font-semibold text-atelier-moss">
-          ${chart?.bubble_size_label || "Revenue TTM"} bubbles
-        </p>
+        <div className="rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/72">
+          Hover or click a bubble for details
+        </div>
       </div>
 
-      <div className="mt-5 rounded-[24px] border border-atelier-line bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(250,245,235,0.92))] p-4">
-        <svg viewBox="0 0 100 100" className="block h-[24rem] w-full">
+      <div
+        ref=${stageRef}
+        className="ies-chart-stage mt-5 rounded-[30px] border border-atelier-line bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(249,243,234,0.95))] p-4 md:p-6"
+        style=${{
+          position: "relative",
+          overflow: "visible",
+          minHeight: "34rem",
+        }}
+      >
+        <svg viewBox=${`0 0 ${width} ${height}`} className="ies-scatter block h-auto w-full overflow-visible">
           <defs>
-            <pattern id="ies-grid" width="10" height="10" patternUnits="userSpaceOnUse">
-              <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(24,35,33,0.08)" strokeWidth="0.5"></path>
-            </pattern>
+            <filter id="ies-bubble-shadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#1B2724" flood-opacity="0.12" />
+            </filter>
+            <linearGradient id="ies-axis-fade" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="rgba(31,42,41,0)" />
+              <stop offset="50%" stopColor="rgba(31,42,41,0.18)" />
+              <stop offset="100%" stopColor="rgba(31,42,41,0)" />
+            </linearGradient>
           </defs>
-          <rect x="0" y="0" width="100" height="100" fill="url(#ies-grid)"></rect>
-          ${numericPoints.map((point, index) => {
-            const x = 8 + ((point.x - minX) / spanX) * 84;
-            const y = 92 - ((point.y - minY) / spanY) * 78;
-            const bubble = 5 + ((Number.isFinite(point.bubble) ? point.bubble : minBubble) - minBubble) / spanBubble * 9;
-            const radius = Number.isFinite(bubble) ? Math.max(4, Math.min(12, bubble)) : 5;
+
+          ${yTicks.map((tick, index) => {
+            const y = topAxisY + plotHeight - ((tick - axisYMin) / Math.max(1, axisYMax - axisYMin)) * plotHeight;
             return html`
-              <g key=${`${point.ticker || point.company_name || index}`} transform=${`translate(${x}, ${y})`}>
-                <circle
-                  r=${radius}
-                  fill=${point.is_outlier ? "rgba(159,111,47,0.22)" : "rgba(39,67,60,0.18)"}
-                  stroke=${point.is_outlier ? "rgba(159,111,47,0.92)" : "rgba(39,67,60,0.9)"}
-                  strokeWidth="0.8"
-                ></circle>
-                <text
-                  x="0"
-                  y="1.7"
-                  textAnchor="middle"
-                  fill="#182321"
-                  fontSize="2.6"
-                  fontWeight="700"
-                >
-                  ${point.ticker || point.company_name || ""}
+              <g key=${`y-grid-${index}`}>
+                <line x1=${leftAxisX} y1=${y} x2=${rightAxisX} y2=${y} stroke="rgba(104,117,113,0.12)" strokeWidth="1" />
+                <text x=${leftAxisX - 14} y=${y + 4} textAnchor="end" fontSize="11" fill="#41504A">
+                  ${formatAxisPercent(tick)}
                 </text>
               </g>
             `;
           })}
+
+          ${xTicks.map((tick, index) => {
+            const x = leftAxisX + ((tick - axisXMin) / Math.max(1, axisXMax - axisXMin)) * plotWidth;
+            return html`
+              <g key=${`x-grid-${index}`}>
+                <line x1=${x} y1=${topAxisY} x2=${x} y2=${bottomAxisY} stroke="rgba(104,117,113,0.10)" strokeWidth="1" />
+                <text x=${x} y=${bottomAxisY + 18} textAnchor="middle" fontSize="11" fill="#41504A">
+                  ${formatAxisPercent(tick)}
+                </text>
+              </g>
+            `;
+          })}
+
+          <line x1=${leftAxisX} y1=${medianY} x2=${rightAxisX} y2=${medianY} stroke="rgba(88,104,101,0.18)" strokeWidth="1.2" strokeDasharray="6 6" />
+          <line x1=${medianX} y1=${topAxisY} x2=${medianX} y2=${bottomAxisY} stroke="rgba(88,104,101,0.18)" strokeWidth="1.2" strokeDasharray="6 6" />
+
+          <line x1=${leftAxisX} y1=${bottomAxisY} x2=${rightAxisX} y2=${bottomAxisY} stroke="rgba(31,42,41,0.32)" strokeWidth="1.15" />
+          <line x1=${leftAxisX} y1=${topAxisY} x2=${leftAxisX} y2=${bottomAxisY} stroke="rgba(31,42,41,0.32)" strokeWidth="1.15" />
+
+          ${normalizedPoints.map((point) => {
+            const pointKey = getPointKey(point);
+            const isActive = activeTicker === pointKey;
+            const isSelected = selectedTicker === pointKey;
+            const showLabel = point.is_outlier || isActive || isSelected;
+            const x = xScale(point.x);
+            const y = yScale(point.y);
+            const radius = getPointRadius(point);
+            const displayRadius = isActive || isSelected ? radius * 1.16 : radius;
+            const opacity = isActive || isSelected ? 1 : 0.84;
+            const color = getColor(point.y);
+            const labelX = x + (isActive || isSelected ? 12 : 10);
+            const labelY = y - (isActive || isSelected ? 10 : 8);
+            const labelAnchor = x > width * 0.62 ? "end" : "start";
+            const labelOffset = x > width * 0.62 ? -12 : 12;
+            return html`
+              <g
+                key=${pointKey}
+                className="ies-scatter-point-group"
+                data-state=${isSelected ? "selected" : isActive ? "active" : "idle"}
+                transform=${`translate(${x}, ${y})`}
+                onPointerEnter=${(event) => handleEnter(point, event)}
+                onPointerMove=${(event) => handleMove(point, event)}
+                onPointerLeave=${() => handleLeave(point)}
+                onFocus=${(event) => handleEnter(point, event)}
+                onBlur=${() => handleLeave(point)}
+                onClick=${(event) => handleSelect(point, event)}
+                role="button"
+                tabIndex="0"
+              >
+                <circle
+                  className="ies-scatter-point"
+                  r=${displayRadius}
+                  fill=${color}
+                  fillOpacity=${opacity}
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                  filter="url(#ies-bubble-shadow)"
+                  style=${{
+                    transition: "transform 160ms ease, opacity 160ms ease, r 160ms ease",
+                  }}
+                ></circle>
+                ${showLabel
+                  ? html`
+                      <g transform=${`translate(${labelOffset}, ${labelY - y})`}>
+                        <rect
+                          x=${labelAnchor === "end" ? -148 : 0}
+                          y="-15"
+                          width="148"
+                          height="20"
+                          rx="10"
+                          fill="rgba(255,255,255,0.92)"
+                          stroke="rgba(62,69,63,0.12)"
+                          strokeWidth="0.8"
+                        />
+                        <text
+                          x=${labelAnchor === "end" ? -74 : 74}
+                          y="0"
+                          textAnchor="middle"
+                          fontSize="10"
+                          fontWeight="700"
+                          fill="#1F2A29"
+                        >
+                          ${point.ticker || point.company_name}
+                        </text>
+                      </g>
+                    `
+                  : null}
+              </g>
+            `;
+          })}
+
+          <text x=${(leftAxisX + rightAxisX) / 2} y=${height - 4} textAnchor="middle" fontSize="12" fill="#41504A">
+            ${xLabel}
+          </text>
+          <text
+            x="18"
+            y=${(topAxisY + bottomAxisY) / 2}
+            textAnchor="middle"
+            fontSize="12"
+            fill="#41504A"
+            transform=${`rotate(-90 18 ${(topAxisY + bottomAxisY) / 2})`}
+          >
+            ${yLabel}
+          </text>
         </svg>
+
+        <div
+          ref=${tooltipRef}
+          className=${cx("ies-scatter-tooltip", tooltipState.visible && "is-visible")}
+          aria-hidden=${tooltipState.visible ? "false" : "true"}
+          style=${{
+            left: `${tooltipState.x}px`,
+            top: `${tooltipState.y}px`,
+            transform: "translate(12px, 12px)",
+          }}
+        >
+          <p className="ies-scatter-tooltip__title">${tooltipState.title}</p>
+          ${tooltipState.ticker
+            ? html`<p className="ies-scatter-tooltip__ticker">${tooltipState.ticker}</p>`
+            : null}
+          <div className="ies-scatter-tooltip__grid">
+            ${tooltipState.fields.map(
+              ([label, value]) => html`
+                <div className="ies-scatter-tooltip__cell" key=${`${tooltipState.ticker}-${label}`}>
+                  <span className="ies-scatter-tooltip__label">${label}</span>
+                  <span className="ies-scatter-tooltip__value">${value}</span>
+                </div>
+              `,
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.18em] text-atelier-moss/72">
-        <span>${chart?.x_label || "Revenue Growth (LQ YoY)"}</span>
-        <span>${chart?.y_label || "Operating Margin"}</span>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
+          Bubble Size = Revenue
+        </span>
+        <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
+          Bubble Color = Operating Margin
+        </span>
+        <span className="inline-flex items-center gap-2 rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
+          Median lines divide the four quadrants
+        </span>
       </div>
     </div>
   `;
 }
 
-function IesCompanyCard({ company, index }) {
-  const warnings = Array.isArray(company.validation_warnings) ? company.validation_warnings : [];
-  const outlierMetrics = Array.isArray(company.outlier_metrics) ? company.outlier_metrics : [];
-  const sourceCount = company.metric_sources && typeof company.metric_sources === "object" ? Object.keys(company.metric_sources).length : 0;
+function medianOfValues(values) {
+  const numericValues = Array.isArray(values)
+    ? values.map((value) => Number(value)).filter((value) => Number.isFinite(value)).sort((a, b) => a - b)
+    : [];
+  if (!numericValues.length) {
+    return 0;
+  }
+  const middle = Math.floor(numericValues.length / 2);
+  if (numericValues.length % 2) {
+    return numericValues[middle];
+  }
+  return (numericValues[middle - 1] + numericValues[middle]) / 2;
+}
+
+function IesCompanyRow({ company, index, selected, onSelect }) {
+  const companyName = company.company_name || company.ticker || "Company";
+  const signalLabel = company.is_outlier ? "Outlier" : company.enrichment_status || "Standard";
+  const signalTone = company.is_outlier
+    ? "border-amber-300/70 bg-amber-50 text-amber-900"
+    : company.enrichment_status === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : "border-atelier-line bg-white/82 text-atelier-moss";
 
   return html`
-    <article className=${cx("rounded-[28px] border px-5 py-5", company.is_outlier ? "border-amber-300/70 bg-amber-50/60" : "border-atelier-line bg-white/80")}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <tr
+      className=${cx(
+        "ies-universe-row transition-colors duration-200",
+        company.is_outlier ? "ies-universe-row--outlier" : "",
+        selected ? "is-selected" : "",
+      )}
+      onClick=${onSelect}
+      role="button"
+      tabIndex="0"
+      aria-selected=${selected ? "true" : "false"}
+      onKeyDown=${(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(event);
+        }
+      }}
+    >
+      <td className="py-4 pl-4 pr-3 align-top md:pl-6">
         <div className="min-w-0">
-          <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
-            Company ${index + 1}
+          <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/50">
+            ${String(index + 1).padStart(2, "0")}
           </p>
-          <h4 className="mt-2 font-display text-[1.7rem] font-semibold leading-none text-atelier-ink">
-            ${company.company_name || company.ticker || "Company"}
-          </h4>
-          <p className="mt-2 text-sm leading-7 text-atelier-moss">
+          <p className="mt-2 truncate font-display text-[1.15rem] font-semibold leading-none text-atelier-ink">
+            ${companyName}
+          </p>
+          <p className="mt-2 truncate text-sm leading-6 text-atelier-moss">
             ${company.ticker || "N/A"} ${company.exchange ? ` | ${company.exchange}` : ""} ${company.country ? ` | ${company.country}` : ""}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          ${company.enrichment_status
-            ? html`<span className=${cx("rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em]", company.enrichment_status === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-700")}>
-                ${company.enrichment_status}
-              </span>`
-            : null}
-          ${company.is_outlier
-            ? html`<span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-900">
-                Outlier
-              </span>`
-            : null}
+      </td>
+      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
+        ${formatIesCompactNumber(company.revenue_ttm)}
+      </td>
+      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
+        ${formatIesPercent(company.revenue_growth_lq_yoy)}
+      </td>
+      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
+        ${formatIesPercent(company.operating_margin)}
+      </td>
+      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
+        ${formatIesRatio(company.ev_to_revenue_ttm)}
+      </td>
+      <td className="px-3 py-4 align-top text-sm text-atelier-ink">
+        ${formatIesRatio(company.forward_pe)}
+      </td>
+      <td className="px-4 py-4 align-top text-right">
+        <div className="flex flex-wrap justify-end gap-2">
+          <span className=${cx("rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em]", signalTone)}>
+            ${signalLabel}
+          </span>
+          <span className="rounded-full border border-atelier-line bg-white/82 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss">
+            ${company.is_outlier ? "Flagged" : `${getIesMetricSourceCount(company)} Sources`}
+          </span>
         </div>
+      </td>
+    </tr>
+  `;
+}
+
+function IesAnalystInsights({ result }) {
+  const insightBundle = buildIesInsightRows(result);
+
+  return html`
+    <section className="ies-insights-shell rounded-[30px] border border-atelier-line bg-[linear-gradient(180deg,rgba(255,253,249,0.94),rgba(248,241,230,0.92))] px-5 py-5 md:px-6 md:py-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/66">
+            Analyst Insights
+          </p>
+          <h4 className="mt-3 font-display text-[1.95rem] font-semibold leading-none text-atelier-ink">
+            Editorial readout from the plotted universe
+          </h4>
+        </div>
+        <p className="m-0 max-w-2xl text-sm leading-7 text-atelier-moss">
+          ${insightBundle.summary}
+        </p>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <${MetricCard} label="Revenue TTM" value=${formatIesCompactNumber(company.revenue_ttm)} />
-        <${MetricCard} label="Market Cap" value=${formatIesCompactNumber(company.market_cap)} />
-        <${MetricCard} label="EV / Revenue" value=${formatIesRatio(company.ev_to_revenue_ttm)} />
-        <${MetricCard} label="EV / EBITDA" value=${formatIesRatio(company.ev_to_ebitda_ttm)} />
-        <${MetricCard} label="Operating Margin" value=${formatIesPercent(company.operating_margin)} />
-        <${MetricCard} label="EBITDA Margin" value=${formatIesPercent(company.ebitda_margin)} />
-        <${MetricCard} label="Forward P/E" value=${formatIesRatio(company.forward_pe)} />
-        <${MetricCard} label="EPS Surprise" value=${formatIesPercent(company.eps_surprise)} />
-      </div>
+      <div className="editorial-rule mt-5"></div>
 
-      <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
-        ${sourceCount ? html`<span className="rounded-full border border-atelier-line bg-white/82 px-3 py-1">Sources ${sourceCount}</span>` : null}
-        ${outlierMetrics.length
-          ? html`<span className="rounded-full border border-amber-300/60 bg-amber-50 px-3 py-1 text-amber-900">
-              ${outlierMetrics.join(", ")}
-            </span>`
-          : null}
-        ${warnings.length
-          ? html`<span className="rounded-full border border-rose-200/70 bg-rose-50 px-3 py-1 text-rose-700">
-              ${warnings[0]}
-            </span>`
-          : null}
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        ${insightBundle.rows.map(
+          (row, index) => html`
+            <${motion.div}
+              key=${`${row.label}-${index}`}
+              initial=${{ opacity: 0, y: 10 }}
+              animate=${{ opacity: 1, y: 0 }}
+              transition=${{ ...TRANSITION, delay: index * 0.05 }}
+              style=${MOTION_SMOOTH_STYLE}
+            >
+              <${IesInsightCard} label=${row.label} body=${row.body} tone=${row.tone} />
+            </${motion.div}>
+          `,
+        )}
       </div>
+    </section>
+  `;
+}
 
-      ${company.enrichment_error
-        ? html`
-            <p className="mt-4 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-7 text-rose-800">
-              ${company.enrichment_error}
-            </p>
-          `
-        : null}
-    </article>
+function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompany }) {
+  const normalizedCompanies = Array.isArray(companies) ? companies.filter(Boolean) : [];
+
+  if (!normalizedCompanies.length) {
+    return html`
+      <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
+        No companies were returned for this report.
+      </div>
+    `;
+  }
+
+  return html`
+    <div className="overflow-hidden rounded-[28px] border border-atelier-line bg-white/74 shadow-[0_18px_48px_rgba(31,42,41,0.05)]">
+      <div className="overflow-x-auto">
+        <table className="ies-universe-table min-w-[960px] w-full border-collapse">
+          <thead>
+            <tr className="border-b border-atelier-line bg-[rgba(255,252,247,0.9)] text-left">
+              <th className="px-4 py-4 pl-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64 md:pl-6">
+                Company
+              </th>
+              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
+                Revenue TTM
+              </th>
+              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
+                Growth
+              </th>
+              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
+                Margin
+              </th>
+              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
+                EV / Revenue
+              </th>
+              <th className="px-3 py-4 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
+                Forward P/E
+              </th>
+              <th className="px-4 py-4 text-right text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/64">
+                Signals
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            ${normalizedCompanies.map(
+              (company, index) => html`
+                <${IesCompanyRow}
+                  key=${`${getIesDisplayCompanyKey(company, index)}-${index}`}
+                  company=${company}
+                  index=${index}
+                  selected=${selectedCompanyKey === getIesDisplayCompanyKey(company, index)}
+                  onSelect=${() => onSelectCompany(getIesDisplayCompanyKey(company, index))}
+                />
+              `,
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   `;
 }
 
@@ -2577,93 +3441,141 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
   const summary = result?.summary || {};
   const companies = Array.isArray(result?.companies) ? result.companies : [];
   const chart = result?.scatter_chart || {};
+  const metadata = result?.metadata || {};
   const topN = request.top_n || summary.requested_top_n || companies.length || 0;
+  const [selectedCompanyKey, setSelectedCompanyKey] = useState("");
+  const selectedCompany = companies.find((company, index) => getIesDisplayCompanyKey(company, index) === selectedCompanyKey) || null;
+  const displayIndustry = request.industry || summary.industry || "Industry";
+  const displayCountry = request.country || summary.country || meta?.location?.label || "Country";
+  const preparedDate = formatDate();
+  const coverageLabel = `Top ${topN || 0}`;
+  const heroMeta = [
+    { label: "Industry", value: displayIndustry },
+    { label: "Geography", value: displayCountry },
+    { label: "Coverage", value: coverageLabel },
+    { label: "Prepared", value: preparedDate },
+  ];
+  const executiveMetrics = [
+    { label: "Companies Returned", value: String(summary.companies_returned || companies.length || 0), tone: "accent" },
+    { label: "Companies Enriched", value: String(summary.companies_enriched ?? 0), tone: "gold" },
+    { label: "Median Revenue Growth", value: formatIesPercent(summary.median_revenue_growth) },
+    { label: "Median Operating Margin", value: formatIesPercent(summary.median_operating_margin) },
+    { label: "Median EV / Revenue", value: formatIesRatio(summary.median_ev_to_revenue) },
+  ];
+
+  useEffect(() => {
+    setSelectedCompanyKey("");
+  }, [result?.title]);
 
   return html`
-    <div className="paper-sheet flex w-full flex-col rounded-[30px] px-6 py-6 md:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.26em] text-atelier-moss/68">
-            Final Brief
-          </p>
-          <h3 className="mt-3 font-display text-[3rem] font-semibold leading-[0.92] text-atelier-ink">
-            ${result?.title || "Industry Earnings Snapshot"}
-          </h3>
-        </div>
-        <div className="text-right">
-          <p className="m-0 text-sm font-semibold text-atelier-ink">
-            ${meta?.location?.label || request.country || "Country"}
-          </p>
-          <p className="m-0 mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/72">
-            Top ${topN}
-          </p>
-        </div>
-        <div className="shrink-0">
-          <${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />
-        </div>
-      </div>
-
-      <p className="mt-4 max-w-3xl text-sm leading-8 text-atelier-moss">
-        ${request.industry || summary.industry || "Industry"} ${request.country ? `in ${request.country}` : ""} is summarized below with a revenue-growth vs operating-margin view and memo-ready company rows.
-      </p>
-
-      <div className="mt-5 rounded-[24px] border border-atelier-line bg-white/72 px-5 py-4">
-        <${BriefMetaRow} meta=${meta} debug=${{ num_sources: companies.length }} section="industry_earnings_snapshot" />
-      </div>
-
-      <div className="editorial-rule mt-6"></div>
-
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <${MetricCard} label="Companies Returned" value=${String(summary.companies_returned || companies.length || 0)} tone="accent" />
-        <${MetricCard} label="Companies Enriched" value=${String(summary.companies_enriched ?? 0)} tone="gold" />
-        <${MetricCard} label="Outliers" value=${String(summary.outlier_count ?? 0)} />
-        <${MetricCard} label="Median Revenue Growth" value=${formatIesPercent(summary.median_revenue_growth)} />
-        <${MetricCard} label="Median Operating Margin" value=${formatIesPercent(summary.median_operating_margin)} />
-        <${MetricCard} label="Median EBITDA Margin" value=${formatIesPercent(summary.median_ebitda_margin)} />
-        <${MetricCard} label="Median EV / Revenue" value=${formatIesRatio(summary.median_ev_to_revenue)} />
-        <${MetricCard} label="Median EV / EBITDA" value=${formatIesRatio(summary.median_ev_to_ebitda)} />
-        <${MetricCard} label="Median Forward P/E" value=${formatIesRatio(summary.median_forward_pe)} />
-      </div>
-
-      <div className="mt-6">
-        <${IesScatterChart} chart=${chart} />
-      </div>
-
-      <div className="editorial-rule mt-6"></div>
-
-      <div className="mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
-              Company Memo
+    <div className="paper-sheet flex w-full flex-col rounded-[32px] px-5 py-5 md:px-8 md:py-8">
+      <section className="ies-hero">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-4xl">
+            <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-atelier-moss/66">
+              Institutional Equity Research Memo
             </p>
-            <p className="mt-2 text-sm leading-7 text-atelier-moss">
-              Ranked by the response payload and presented in the same memo shell as the other modules.
+            <h3 className="mt-4 max-w-4xl font-display text-[2.9rem] font-semibold leading-[0.92] tracking-[-0.03em] text-atelier-ink md:text-[3.65rem]">
+              ${result?.title || "Industry Earnings Snapshot"}
+            </h3>
+            <p className="mt-4 max-w-3xl text-base leading-8 text-atelier-moss md:text-[1.05rem]">
+              ${displayIndustry} ${displayCountry ? `coverage in ${displayCountry}` : ""} is presented as a polished research memo with the scatter plot, key metrics, and the full company universe kept in one editorial flow.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-start gap-3 lg:items-end">
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />
+            </div>
+            <p className="text-right text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/58">
+              Prepared ${preparedDate}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          ${heroMeta.map(
+            (item) => html`
+              <div className="rounded-[22px] border border-atelier-line bg-white/68 px-4 py-4">
+                <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/58">
+                  ${item.label}
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-7 text-atelier-ink">
+                  ${item.value}
+                </p>
+              </div>
+            `,
+          )}
+        </div>
+
+        ${metadata.note
+          ? html`
+              <div className="mt-5 rounded-[22px] border border-atelier-line bg-white/74 px-4 py-4 text-sm leading-7 text-atelier-moss">
+                ${metadata.note}
+              </div>
+            `
+          : null}
+      </section>
+
+      <div className="editorial-rule mt-7"></div>
+
+      <section className="mt-7">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          ${executiveMetrics.map(
+            (metric, index) => html`
+              <${motion.div}
+                key=${`${metric.label}-${index}`}
+                initial=${{ opacity: 0, y: 10 }}
+                animate=${{ opacity: 1, y: 0 }}
+                transition=${{ ...TRANSITION, delay: index * 0.05 }}
+                style=${MOTION_SMOOTH_STYLE}
+              >
+                <${MetricCard} label=${metric.label} value=${metric.value} tone=${metric.tone || "default"} />
+              </${motion.div}>
+            `,
+          )}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <${IesScatterChart} chart=${chart} />
+      </section>
+
+      <section className="mt-8">
+        <${IesAnalystInsights} result=${result} />
+      </section>
+
+      <div className="editorial-rule mt-8"></div>
+
+      <section className="mt-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/66">
+              Company Universe
+            </p>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-atelier-moss">
+              Compact research table. Click any row to open the full dossier with all available metrics, flags, sources, and notes.
             </p>
           </div>
           <p className="m-0 text-sm font-semibold text-atelier-ink">
-            ${companies.length} rows
+            ${companies.length} companies
           </p>
         </div>
 
-        <div className="mt-4 space-y-4">
-          ${companies.length
-            ? companies.map(
-                (company, index) => html`
-                  <${IesCompanyCard}
-                    key=${`${company.ticker || company.company_name || index}-${index}`}
-                    company=${company}
-                    index=${index}
-                  />
-                `,
-              )
-            : html`
-                <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
-                  No companies were returned for this report.
-                </div>
-              `}
+        <div className="mt-5">
+          <${IesCompanyUniverseTable}
+            companies=${companies}
+            selectedCompanyKey=${selectedCompanyKey}
+            onSelectCompany=${(key) => setSelectedCompanyKey((current) => (current === key ? "" : key))}
+          />
         </div>
-      </div>
+      </section>
+
+      <${IesCompanyDrawer}
+        company=${selectedCompany}
+        open=${Boolean(selectedCompany)}
+        onClose=${() => setSelectedCompanyKey("")}
+      />
     </div>
   `;
 }
