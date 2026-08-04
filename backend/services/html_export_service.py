@@ -47,9 +47,228 @@ def _count_competitive_landscape_sources(result: Dict[str, Any]) -> int:
     return _count_sources([*list(result.get("major_players", []) or []), *list(result.get("emerging_players", []) or [])])
 
 
+def _render_ies_metric_cards(summary: Dict[str, Any], metadata: Dict[str, Any], request: Dict[str, Any], company_count: int) -> str:
+    cards = [
+        ("Industry", _escape(request.get("industry") or summary.get("industry") or "N/A")),
+        ("Country", _escape(request.get("country") or summary.get("country") or "N/A")),
+        ("Top N", _escape(request.get("top_n") or summary.get("requested_top_n") or "N/A")),
+        ("Companies", html.escape(str(summary.get("companies_returned") or company_count or 0))),
+        ("Enriched", html.escape(str(summary.get("companies_enriched") or metadata.get("total_companies_successfully_enriched") or 0))),
+        ("Median Revenue Growth", _escape(_format_ies_percent(summary.get("median_revenue_growth")))),
+        ("Median Operating Margin", _escape(_format_ies_percent(summary.get("median_operating_margin")))),
+        ("Median EBITDA Margin", _escape(_format_ies_percent(summary.get("median_ebitda_margin")))),
+        ("Median EV / Revenue", _escape(_format_ies_ratio(summary.get("median_ev_to_revenue")))),
+        ("Median EV / EBITDA", _escape(_format_ies_ratio(summary.get("median_ev_to_ebitda")))),
+        ("Median Forward P/E", _escape(_format_ies_ratio(summary.get("median_forward_pe")))),
+        ("EPS Beat Rate", _escape(_format_ies_percent(summary.get("eps_beat_rate")))),
+        ("5-Day Reaction", _escape(_format_ies_percent(summary.get("median_five_day_price_reaction")))),
+    ]
+    return "".join(
+        f"<div class=\"summary-card\"><span>{label}</span><strong>{value}</strong></div>"
+        for label, value in cards
+    )
+
+
+def _render_ies_scatter_chart(scatter_chart: Dict[str, Any]) -> str:
+    points = list(scatter_chart.get("data", []) or [])
+    if not points:
+        return (
+            "<div class=\"memo-empty-state\">"
+            "No scatter chart data was returned for this report."
+            "</div>"
+        )
+
+    rows = []
+    for index, point in enumerate(points, start=1):
+        ticker = _escape(point.get("ticker"), f"Point {index}")
+        company_name = _escape(point.get("company_name"), ticker)
+        revenue_growth = _escape(_format_ies_percent(point.get("revenue_growth_lq_yoy")))
+        operating_margin = _escape(_format_ies_percent(point.get("operating_margin")))
+        bubble_size = _escape(_format_ies_compact_number(point.get("bubble_size")))
+        outlier = "Outlier" if bool(point.get("is_outlier")) else "In range"
+        rows.append(
+            "<div class=\"ies-chart-row\">"
+            f"<div class=\"ies-chart-row__ticker\">{ticker}</div>"
+            f"<div class=\"ies-chart-row__company\">{company_name}</div>"
+            f"<div class=\"ies-chart-row__metric\">{revenue_growth}</div>"
+            f"<div class=\"ies-chart-row__metric\">{operating_margin}</div>"
+            f"<div class=\"ies-chart-row__metric\">{bubble_size}</div>"
+            f"<div class=\"ies-chart-row__metric\">{outlier}</div>"
+            "</div>"
+        )
+
+    return (
+        "<div class=\"ies-chart\">"
+        "<div class=\"ies-chart__header\">"
+        f"<h4>{html.escape(_safe_text(scatter_chart.get('title'), 'Revenue Growth vs Operating Margin'))}</h4>"
+        f"<p>{html.escape(_safe_text(scatter_chart.get('bubble_size_label'), 'Revenue TTM'))} bubbles</p>"
+        "</div>"
+        "<div class=\"ies-chart__legend\">"
+        f"<span>{html.escape(_safe_text(scatter_chart.get('x_label'), 'Revenue Growth (LQ YoY)'))}</span>"
+        f"<span>{html.escape(_safe_text(scatter_chart.get('y_label'), 'Operating Margin'))}</span>"
+        "</div>"
+        "<div class=\"ies-chart-table\">"
+        "<div class=\"ies-chart-row ies-chart-row--header\">"
+        "<div>Ticker</div><div>Company</div><div>Growth</div><div>Margin</div><div>Bubble</div><div>Status</div>"
+        "</div>"
+        f"{''.join(rows)}"
+        "</div>"
+        "</div>"
+    )
+
+
+def _render_ies_company_card(company: Dict[str, Any], index: int) -> str:
+    ticker = _escape(company.get("ticker"), "N/A")
+    company_name = _escape(company.get("company_name"), "Company")
+    exchange = _escape(company.get("exchange"))
+    country = _escape(company.get("country"))
+    status = _escape(company.get("enrichment_status"), "unknown")
+    outlier = bool(company.get("is_outlier"))
+    warnings = list(company.get("validation_warnings", []) or [])
+    outlier_metrics = list(company.get("outlier_metrics", []) or [])
+    metric_sources = company.get("metric_sources", {}) if isinstance(company.get("metric_sources", {}), dict) else {}
+    source_count = len(metric_sources)
+    card_classes = "memo-item"
+    if outlier:
+        card_classes += " memo-item--outlier"
+
+    badges = []
+    if status:
+        badges.append(f"<span class=\"memo-badge memo-badge--status\">{status}</span>")
+    if outlier:
+        badges.append("<span class=\"memo-badge memo-badge--outlier\">Outlier</span>")
+
+    extra_badges = []
+    if source_count:
+        extra_badges.append(f"<span class=\"memo-pill\">Sources {source_count}</span>")
+    if outlier_metrics:
+        extra_badges.append(f"<span class=\"memo-pill memo-pill--warn\">{html.escape(', '.join(outlier_metrics))}</span>")
+    if warnings:
+        extra_badges.append(f"<span class=\"memo-pill memo-pill--error\">{html.escape(warnings[0])}</span>")
+
+    error_block = ""
+    enrichment_error = _safe_text(company.get("enrichment_error"))
+    if enrichment_error:
+        error_block = f"<p class=\"memo-error\">{html.escape(enrichment_error)}</p>"
+
+    return (
+        f"<article class=\"{card_classes}\">"
+        "<div class=\"memo-item__header\">"
+        f"<span class=\"memo-item__index\">{index}</span>"
+        "<div>"
+        f"<div class=\"memo-item__badge\">Company {index}</div>"
+        f"<h3>{company_name}</h3>"
+        f"<p class=\"memo-item__meta\">{ticker}{f' | {exchange}' if exchange else ''}{f' | {country}' if country else ''}</p>"
+        "</div>"
+        f"<div class=\"memo-item__badges\">{''.join(badges)}</div>"
+        "</div>"
+        "<div class=\"ies-company-grid\">"
+        f"<div class=\"summary-card\"><span>Revenue TTM</span><strong>{_escape(_format_ies_compact_number(company.get('revenue_ttm')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>Market Cap</span><strong>{_escape(_format_ies_compact_number(company.get('market_cap')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>EV / Revenue</span><strong>{_escape(_format_ies_ratio(company.get('ev_to_revenue_ttm')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>EV / EBITDA</span><strong>{_escape(_format_ies_ratio(company.get('ev_to_ebitda_ttm')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>Operating Margin</span><strong>{_escape(_format_ies_percent(company.get('operating_margin')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>EBITDA Margin</span><strong>{_escape(_format_ies_percent(company.get('ebitda_margin')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>Forward P/E</span><strong>{_escape(_format_ies_ratio(company.get('forward_pe')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>EPS Surprise</span><strong>{_escape(_format_ies_percent(company.get('eps_surprise')))}</strong></div>"
+        "</div>"
+        f"<div class=\"memo-pill-row\">{''.join(extra_badges)}</div>"
+        f"{error_block}"
+        "</article>"
+    )
+
+
+def _render_ies_section(result: Dict[str, Any], meta: Dict[str, Any], *, title_override: str | None = None) -> str:
+    request = dict(result.get("request", {}) or {})
+    summary = dict(result.get("summary", {}) or {})
+    metadata = dict(result.get("metadata", {}) or {})
+    chart = dict(result.get("scatter_chart", {}) or {})
+    companies = list(result.get("companies", []) or [])
+    title = _escape(title_override or result.get("title"), "Industry Earnings Snapshot")
+    scope = _escape(meta.get("location", {}).get("label"), "Country")
+    top_n = _escape(request.get("top_n") or summary.get("requested_top_n") or len(companies) or "N/A")
+    company_cards = "".join(_render_ies_company_card(company, index) for index, company in enumerate(companies, start=1))
+    company_cards_html = company_cards or '<div class="memo-empty-state">No companies were returned for this report.</div>'
+    note = _safe_text(metadata.get("note"))
+    note_html = f"<div class=\"memo-note\">{html.escape(note)}</div>" if note else ""
+
+    return (
+        "<section class=\"memo-section memo-section--ies\">"
+        "<div class=\"memo-section__hero\">"
+        "<div>"
+        "<div class=\"memo-eyebrow\">Final Brief</div>"
+        f"<h1>{title}</h1>"
+        f"<p class=\"memo-topic\">{html.escape(_safe_text(request.get('industry') or summary.get('industry'), 'Industry'))} | {html.escape(_safe_text(request.get('country') or summary.get('country'), 'Country'))} | Top {top_n}</p>"
+        "<p class=\"memo-description\">"
+        "A country-scoped earnings snapshot with summary metrics, a revenue-growth vs operating-margin chart, and memo-ready company rows."
+        "</p>"
+        "</div>"
+        f"<div class=\"memo-scope\">{scope} | {title}</div>"
+        "</div>"
+        "<div class=\"memo-meta-panel\">"
+        f"<div class=\"memo-summary-grid\">{_render_ies_metric_cards(summary, metadata, request, len(companies))}</div>"
+        "</div>"
+        f"{note_html}"
+        "<div class=\"editorial-rule\"></div>"
+        "<div class=\"ies-chart-shell\">"
+        f"{_render_ies_scatter_chart(chart)}"
+        "</div>"
+        "<div class=\"editorial-rule\"></div>"
+        "<div class=\"memo-items\">"
+        "<div class=\"competitive-group__header\"><h2>Company Memo</h2><span>"
+        f"{len(companies)}"
+        "</span></div>"
+        f"{company_cards_html}"
+        "</div>"
+        "</section>"
+    )
+
+
 def _normalize_export_result(payload: Dict[str, Any]) -> Dict[str, Any]:
     fallback_section = _safe_text(payload.get("section"), "trends").lower() or "trends"
     return normalize_analyze_response_payload(payload, fallback_section=fallback_section)
+
+
+def _is_ies_report_payload(payload: Dict[str, Any]) -> bool:
+    return bool(
+        isinstance(payload, dict)
+        and isinstance(payload.get("summary"), dict)
+        and isinstance(payload.get("scatter_chart"), dict)
+        and isinstance(payload.get("companies"), list)
+    )
+
+
+def _format_ies_percent(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "N/A"
+    return f"{numeric:.1f}%"
+
+
+def _format_ies_ratio(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "N/A"
+    return f"{numeric:.1f}x"
+
+
+def _format_ies_compact_number(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "N/A"
+    absolute = abs(numeric)
+    if absolute >= 1_000_000_000_000:
+        return f"{numeric / 1_000_000_000_000:.1f}T"
+    if absolute >= 1_000_000_000:
+        return f"{numeric / 1_000_000_000:.1f}B"
+    if absolute >= 1_000_000:
+        return f"{numeric / 1_000_000:.1f}M"
+    if absolute >= 1_000:
+        return f"{numeric / 1_000:.1f}K"
+    return f"{numeric:.1f}"
 
 
 def _render_source_link(source: Dict[str, Any], index: int) -> str:
@@ -313,7 +532,27 @@ def build_html_export(
     meta_payload: Dict[str, Any],
     follow_up_payloads: Sequence[Dict[str, Any]],
 ) -> Tuple[bytes, str]:
-    result = _normalize_export_result(result_payload)
+    is_ies_report = _is_ies_report_payload(result_payload)
+    if is_ies_report:
+        result = dict(result_payload)
+        request = dict(result.get("request", {}) or {})
+        summary = dict(result.get("summary", {}) or {})
+        title = _safe_text(result.get("title"), "")
+        if not title:
+            title = " | ".join(
+                part
+                for part in [request.get("industry") or summary.get("industry"), request.get("country") or summary.get("country")]
+                if _safe_text(part)
+            ) or "Industry Earnings Snapshot"
+        result["section"] = "industry_earnings_snapshot"
+        result["title"] = title
+        result["request"] = request
+        result["summary"] = summary
+        result["scatter_chart"] = dict(result.get("scatter_chart", {}) or {})
+        result["companies"] = list(result.get("companies", []) or [])
+        result["metadata"] = dict(result.get("metadata", {}) or {})
+    else:
+        result = _normalize_export_result(result_payload)
     meta = dict(meta_payload or {})
     location_meta = meta.get("location") if isinstance(meta.get("location"), dict) else {}
     meta["location"] = {
@@ -322,13 +561,14 @@ def build_html_export(
     meta["prepared"] = _safe_text(meta.get("prepared"), "")
 
     follow_up_sections: List[str] = []
-    for follow_up in [payload for payload in (follow_up_payloads or []) if isinstance(payload, dict)]:
-        follow_title = _safe_text(follow_up.get("title"), "Follow-up Brief")
-        follow_meta = follow_up.get("meta") if isinstance(follow_up.get("meta"), dict) else meta
-        normalized_follow_up = _normalize_export_result(follow_up)
-        follow_up_sections.append(
-            _render_section(normalized_follow_up, follow_meta, title_override=follow_title)
-        )
+    if not is_ies_report:
+        for follow_up in [payload for payload in (follow_up_payloads or []) if isinstance(payload, dict)]:
+            follow_title = _safe_text(follow_up.get("title"), "Follow-up Brief")
+            follow_meta = follow_up.get("meta") if isinstance(follow_up.get("meta"), dict) else meta
+            normalized_follow_up = _normalize_export_result(follow_up)
+            follow_up_sections.append(
+                _render_section(normalized_follow_up, follow_meta, title_override=follow_title)
+            )
 
     document_title = _escape(result.get("title"), "Industry Trends")
     full_html = f"""<!DOCTYPE html>
@@ -683,6 +923,184 @@ def build_html_export(
       color: var(--muted);
     }}
 
+    .memo-section--ies .memo-topic {{
+      font-weight: 700;
+      color: var(--accent);
+    }}
+
+    .memo-item--outlier {{
+      border-color: rgba(159, 111, 47, 0.36);
+      background: rgba(255, 248, 237, 0.9);
+    }}
+
+    .memo-item__meta {{
+      margin: 10px 0 0;
+      font: 600 12px/1.5 Arial, sans-serif;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }}
+
+    .memo-item__badges {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }}
+
+    .memo-badge,
+    .memo-pill {{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 6px 10px;
+      font: 700 10px/1 Arial, sans-serif;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--muted);
+    }}
+
+    .memo-badge--outlier,
+    .memo-pill--warn {{
+      border-color: rgba(159, 111, 47, 0.28);
+      color: var(--gold);
+      background: rgba(255, 248, 237, 0.95);
+    }}
+
+    .memo-badge--status {{
+      border-color: rgba(39, 67, 60, 0.18);
+      color: var(--accent);
+      background: rgba(220, 232, 225, 0.65);
+    }}
+
+    .memo-pill-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }}
+
+    .memo-pill--error {{
+      border-color: rgba(185, 28, 28, 0.2);
+      color: #b91c1c;
+      background: rgba(254, 242, 242, 0.95);
+    }}
+
+    .memo-error {{
+      margin: 14px 0 0;
+      border-radius: 18px;
+      border: 1px solid rgba(185, 28, 28, 0.18);
+      background: rgba(254, 242, 242, 0.95);
+      padding: 12px 14px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #b91c1c;
+    }}
+
+    .ies-chart-shell {{
+      overflow: hidden;
+    }}
+
+    .ies-chart {{
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 18px;
+    }}
+
+    .ies-chart__header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-bottom: 14px;
+    }}
+
+    .ies-chart__header h4 {{
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.06;
+      color: var(--ink);
+    }}
+
+    .ies-chart__header p {{
+      margin: 0;
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }}
+
+    .ies-chart-table {{
+      display: grid;
+      gap: 8px;
+      margin-top: 16px;
+    }}
+
+    .ies-chart-row {{
+      display: grid;
+      grid-template-columns: minmax(72px, 0.7fr) minmax(170px, 1.6fr) repeat(4, minmax(70px, 0.75fr));
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.8);
+    }}
+
+    .ies-chart-row--header {{
+      font: 700 10px/1.4 Arial, sans-serif;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(247, 240, 230, 0.88);
+    }}
+
+    .ies-chart-row__company {{
+      color: var(--ink);
+      font-weight: 700;
+    }}
+
+    .ies-chart-row__metric,
+    .ies-chart-row__ticker {{
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--muted);
+    }}
+
+    .ies-company-grid {{
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 18px;
+    }}
+
+    @media (max-width: 960px) {{
+      .ies-chart-row {{
+        grid-template-columns: minmax(64px, 0.6fr) minmax(120px, 1.2fr) repeat(2, minmax(0, 1fr));
+      }}
+
+      .ies-chart-row--header {{
+        display: none;
+      }}
+
+      .ies-company-grid {{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }}
+    }}
+
+    @media (max-width: 640px) {{
+      .ies-chart-row {{
+        grid-template-columns: 1fr 1fr;
+      }}
+
+      .ies-company-grid {{
+        grid-template-columns: minmax(0, 1fr);
+      }}
+    }}
+
     @media (max-width: 860px) {{
       .memo-section {{
         padding: 22px 18px;
@@ -730,7 +1148,7 @@ def build_html_export(
 </head>
 <body>
   <main class="memo-shell">
-    {_render_section(result, meta)}
+    {_render_ies_section(result, meta) if is_ies_report else _render_section(result, meta)}
     {''.join(follow_up_sections)}
   </main>
 </body>

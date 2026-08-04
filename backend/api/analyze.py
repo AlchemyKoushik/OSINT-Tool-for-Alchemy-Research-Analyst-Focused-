@@ -5,13 +5,14 @@ import asyncio
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urlparse
 
+import httpx
 import psycopg
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from config.settings import settings
 from core.diagnostics import ProgressCallback, ResearchDiagnostics
-from models.request_models import AnalyzeExistingRequest, AnalyzeRequest, FollowUpRequest, PdfExportRequest
+from models.request_models import AnalyzeExistingRequest, AnalyzeRequest, FollowUpRequest, IESReportRequest, PdfExportRequest
 from models.response_models import AnalyzeResponse, normalize_analyze_response_payload
 from services.cache_service import get_cached_result, set_cached_result
 from services.fallback_analysis import build_fallback_section_analysis
@@ -56,6 +57,7 @@ INTERNAL_FRESHNESS = "high"
 MAX_WEB_SCRAPE_URLS = 100
 INITIAL_INSIGHT_LIMIT = 10
 FOLLOW_UP_INSIGHT_LIMIT = 5
+IES_REPORT_API_URL = "https://ies-api.alchemy-research.com/v1/reports/ies"
 
 
 def _sanitize_for_log(value: str, limit: int = 120) -> str:
@@ -512,6 +514,35 @@ async def follow_up(request: Request) -> Dict[str, Any]:
         existing_filtered_chunks=_resolve_session_existing_chunks(request_model.session_id, request_model.existing_chunks),
         existing_metadata=request_model.metadata,
     )
+
+
+@router.post("/ies-report")
+async def ies_report(request: Request) -> JSONResponse:
+    try:
+        payload = await _read_json_payload(request)
+        request_model = IESReportRequest(**payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid IES report payload: {exc}") from exc
+
+    timeout = httpx.Timeout(settings.EXTERNAL_TIMEOUT_SECONDS)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.post(
+                IES_REPORT_API_URL,
+                json=request_model.model_dump(),
+                headers={"Accept": "application/json"},
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"IES report request failed: {exc}") from exc
+
+    try:
+        response_payload = response.json()
+    except ValueError:
+        response_payload = {"detail": response.text.strip() or "IES report request failed."}
+
+    return JSONResponse(status_code=response.status_code, content=response_payload)
 
 
 @router.post("/analyze-existing")

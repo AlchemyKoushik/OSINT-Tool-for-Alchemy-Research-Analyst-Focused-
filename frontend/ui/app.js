@@ -230,7 +230,7 @@ function sectionDescriptor(section) {
     return "Key players and other players separated into memo-ready company profiles, with recent developments from the last 2 to 3 years.";
   }
   if (section === "industry_earnings_snapshot") {
-    return "Choose a sector, industry, geography, and coverage level to build a focused earnings snapshot.";
+    return "Choose a sector, industry, country, and Top N to build a focused earnings snapshot.";
   }
   return "Observable patterns, shifts, and momentum lines across the landscape.";
 }
@@ -265,8 +265,8 @@ function buildIndustryEarningsSnapshotTopic({
   );
   const locationText = String(locationLabel || "").trim();
 
-  const titleParts = [sectorLabel, industryLabel].filter(Boolean);
-  const scopeParts = [coverageLabel, locationText].filter(Boolean);
+  const titleParts = [industryLabel || sectorLabel].filter(Boolean);
+  const scopeParts = [locationText, coverageLabel].filter(Boolean);
 
   if (!titleParts.length && !scopeParts.length) {
     return "Industry Earnings Snapshot";
@@ -274,6 +274,12 @@ function buildIndustryEarningsSnapshotTopic({
 
   const titleText = titleParts.length ? titleParts.join(" / ") : "Industry Earnings Snapshot";
   return scopeParts.length ? `${titleText} | ${scopeParts.join(" | ")}` : titleText;
+}
+
+function getIesReportTopN(snapshotCoverage) {
+  const normalized = String(snapshotCoverage || "").trim().toLowerCase();
+  const parsed = Number.parseInt(normalized.replace(/^top_/, ""), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 10;
 }
 
 function humanizePreference(preference) {
@@ -570,6 +576,161 @@ function normalizeResearchResponse(payload, fallbackSection = "trends") {
     major_players: normalizedMajorPlayers,
     emerging_players: normalizedEmergingPlayers,
     items: normalizedItems,
+  };
+}
+
+function isIesReportPayload(payload) {
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      Array.isArray(payload.companies) &&
+      payload.summary &&
+      payload.scatter_chart,
+  );
+}
+
+function toNumberOrNull(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeIesCompany(company) {
+  if (!company || typeof company !== "object") {
+    return null;
+  }
+
+  const normalized = {
+    canonical_company_id: String(company.canonical_company_id || "").trim(),
+    ticker: String(company.ticker || "").trim(),
+    company_name: String(company.company_name || "").trim(),
+    sector: String(company.sector || "").trim(),
+    industry: String(company.industry || "").trim(),
+    listing_country: String(company.listing_country || "").trim(),
+    listing_region: String(company.listing_region || "").trim(),
+    listing_exchange: String(company.listing_exchange || "").trim(),
+    company_country: String(company.company_country || "").trim(),
+    company_region: String(company.company_region || "").trim(),
+    company_exchange: String(company.company_exchange || "").trim(),
+    country: String(company.country || company.company_country || "").trim(),
+    region: String(company.region || company.company_region || "").trim(),
+    exchange: String(company.exchange || company.company_exchange || "").trim(),
+    currency: String(company.currency || "").trim(),
+    revenue_ttm: toNumberOrNull(company.revenue_ttm),
+    market_cap: toNumberOrNull(company.market_cap),
+    enterprise_value: toNumberOrNull(company.enterprise_value),
+    current_ev: toNumberOrNull(company.current_ev),
+    ebitda_ttm: toNumberOrNull(company.ebitda_ttm),
+    revenue_growth_lq_yoy: toNumberOrNull(company.revenue_growth_lq_yoy),
+    operating_margin: toNumberOrNull(company.operating_margin),
+    ebitda_margin: toNumberOrNull(company.ebitda_margin),
+    ev_to_revenue_ttm: toNumberOrNull(company.ev_to_revenue_ttm),
+    ev_to_ebitda_ttm: toNumberOrNull(company.ev_to_ebitda_ttm),
+    reported_eps: toNumberOrNull(company.reported_eps),
+    eps_estimate: toNumberOrNull(company.eps_estimate),
+    eps_surprise: toNumberOrNull(company.eps_surprise),
+    forward_pe: toNumberOrNull(company.forward_pe),
+    five_day_price_reaction: toNumberOrNull(company.five_day_price_reaction),
+    latest_earnings_date: String(company.latest_earnings_date || "").trim(),
+    earnings_reference_date: String(company.earnings_reference_date || "").trim(),
+    last_reported_earnings_date: String(company.last_reported_earnings_date || "").trim(),
+    last_reported_eps: toNumberOrNull(company.last_reported_eps),
+    last_reported_eps_estimate: toNumberOrNull(company.last_reported_eps_estimate),
+    last_reported_eps_surprise: toNumberOrNull(company.last_reported_eps_surprise),
+    next_earnings_date: String(company.next_earnings_date || "").trim(),
+    next_eps_estimate: toNumberOrNull(company.next_eps_estimate),
+    enrichment_status: String(company.enrichment_status || "").trim(),
+    enrichment_error: String(company.enrichment_error || "").trim(),
+    metric_sources: company.metric_sources && typeof company.metric_sources === "object" ? company.metric_sources : {},
+    validation_warnings: Array.isArray(company.validation_warnings)
+      ? company.validation_warnings.map((warning) => String(warning || "").trim()).filter(Boolean)
+      : [],
+    outlier_metrics: Array.isArray(company.outlier_metrics)
+      ? company.outlier_metrics.map((metric) => String(metric || "").trim()).filter(Boolean)
+      : [],
+    is_outlier: Boolean(company.is_outlier),
+  };
+
+  return normalized.ticker || normalized.company_name ? normalized : null;
+}
+
+function normalizeIesScatterPoint(point) {
+  if (!point || typeof point !== "object") {
+    return null;
+  }
+
+  const normalized = {
+    ticker: String(point.ticker || "").trim(),
+    company_name: String(point.company_name || "").trim(),
+    revenue_growth_lq_yoy: toNumberOrNull(point.revenue_growth_lq_yoy),
+    operating_margin: toNumberOrNull(point.operating_margin),
+    bubble_size: toNumberOrNull(point.bubble_size),
+    is_outlier: Boolean(point.is_outlier),
+  };
+
+  return normalized.ticker || normalized.company_name ? normalized : null;
+}
+
+function normalizeIesReportResponse(payload) {
+  if (!isIesReportPayload(payload)) {
+    return null;
+  }
+
+  const request = payload.request && typeof payload.request === "object" ? payload.request : {};
+  const summary = payload.summary && typeof payload.summary === "object" ? payload.summary : {};
+  const scatterChart = payload.scatter_chart && typeof payload.scatter_chart === "object" ? payload.scatter_chart : {};
+  const metadata = payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {};
+  const companies = Array.isArray(payload.companies) ? payload.companies.map(normalizeIesCompany).filter(Boolean) : [];
+  const scatterData = Array.isArray(scatterChart.data)
+    ? scatterChart.data.map(normalizeIesScatterPoint).filter(Boolean)
+    : [];
+  const industry = String(summary.industry || request.industry || "").trim();
+  const country = String(summary.country || request.country || "").trim();
+  const topN = toNumberOrNull(summary.requested_top_n || request.top_n);
+  const title = [industry, country].filter(Boolean).join(" | ") || "Industry Earnings Snapshot";
+  const locationLabel = country || "Country not selected";
+
+  return {
+    ...payload,
+    section: "industry_earnings_snapshot",
+    report_type: "ies_report",
+    title,
+    request: {
+      industry,
+      country,
+      top_n: Number.isFinite(topN) ? topN : toNumberOrNull(request.top_n),
+    },
+    summary: {
+      ...summary,
+      industry,
+      country,
+      requested_top_n: Number.isFinite(topN) ? topN : toNumberOrNull(summary.requested_top_n || request.top_n),
+    },
+    scatter_chart: {
+      title: String(scatterChart.title || "Revenue Growth vs Operating Margin").trim(),
+      x_label: String(scatterChart.x_label || "Revenue Growth (LQ YoY)").trim(),
+      y_label: String(scatterChart.y_label || "Operating Margin").trim(),
+      bubble_size_label: String(scatterChart.bubble_size_label || "Revenue TTM").trim(),
+      data: scatterData,
+    },
+    companies,
+    metadata: {
+      ...metadata,
+      note: String(metadata.note || "").trim(),
+    },
+    meta: {
+      topic: title,
+      location: {
+        preference: "country_specific",
+        scope: "country",
+        label: locationLabel,
+        value: country,
+        region: "",
+        strict: true,
+      },
+    },
   };
 }
 
@@ -939,6 +1100,9 @@ function buildErrorMessage(payload, fallbackMessage) {
     if (typeof payload.detail === "string" && payload.detail.trim()) {
       return payload.detail;
     }
+    if (Array.isArray(payload.detail) && payload.detail.length && typeof payload.detail[0]?.msg === "string") {
+      return payload.detail[0].msg;
+    }
     if (typeof payload.error === "string" && payload.error.trim()) {
       return payload.error;
     }
@@ -947,6 +1111,32 @@ function buildErrorMessage(payload, fallbackMessage) {
 }
 
 function buildCompletedJournal(result, debug, meta) {
+  if (isIesReportPayload(result)) {
+    const request = result.request || {};
+    const summary = result.summary || {};
+    const companiesReturned = Number(summary.companies_returned || result.companies?.length || 0);
+    const companiesEnriched = Number(summary.companies_enriched || 0);
+    const scatterCount = Array.isArray(result.scatter_chart?.data) ? result.scatter_chart.data.length : 0;
+    return [
+      {
+        id: "journal-scope",
+        message: `Scoped the report to ${request.industry || "the selected industry"} in ${request.country || "the selected country"} with Top ${request.top_n || 10}.`,
+      },
+      {
+        id: "journal-universe",
+        message: `Returned ${companiesReturned || "no"} companies after deduplication and filtering.`,
+      },
+      {
+        id: "journal-enrichment",
+        message: `${companiesEnriched || 0} companies completed enrichment for the final memo.`,
+      },
+      {
+        id: "journal-output",
+        message: `Rendered ${scatterCount || 0} scatter points and ${result.companies?.length || 0} company rows in the final canvas.`,
+      },
+    ];
+  }
+
   const queries = Array.isArray(debug?.queries) ? debug.queries : [];
   const selectedUrls = Array.isArray(debug?.selected_urls) ? debug.selected_urls : [];
   const sourceCount = Number(debug?.num_sources || selectedUrls.length || 0);
@@ -1591,12 +1781,12 @@ function CommandDeck({
           <${PanelHeader}
             eyebrow="Command Deck"
             title="Design the earnings snapshot"
-            subtitle="Choose a sector, industry, geography, and coverage level to build a focused earnings snapshot."
+            subtitle="Choose an industry, country, and Top N to build a focused earnings snapshot."
           />
 
           <form className="mt-6 grid gap-4" onSubmit=${onAnalyze}>
             <div className=${cx("atelier-panel-strong rounded-[26px] px-4 py-4", isProcessing && "ui-disabled-shell")}>
-              <div className="command-deck-grid grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(14rem,0.95fr)_minmax(10rem,0.72fr)_minmax(14.5rem,0.85fr)]">
+              <div className="command-deck-grid grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(10rem,0.72fr)_minmax(14.5rem,0.85fr)]">
                 <div className="command-deck-field">
                   <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotSector">
                     Sector
@@ -1636,21 +1826,8 @@ function CommandDeck({
                 </div>
 
                 <div className="command-deck-field">
-                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotLocation">
-                    Geography
-                  </label>
-                  <${ThemedSelect}
-                    id="snapshotLocation"
-                    options=${locations.preferences}
-                    value=${locationPreference}
-                    onChange=${onPreferenceChange}
-                    disabled=${isProcessing}
-                  />
-                </div>
-
-                <div className="command-deck-field">
                   <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotCoverage">
-                    Coverage
+                    Top N
                   </label>
                   <${ThemedSelect}
                     id="snapshotCoverage"
@@ -1658,7 +1835,7 @@ function CommandDeck({
                     value=${snapshotCoverage}
                     onChange=${onSnapshotCoverageChange}
                     disabled=${isProcessing || snapshotCatalogLoading}
-                    placeholderLabel="Select Coverage"
+                    placeholderLabel="Select Top N"
                   />
                 </div>
 
@@ -1669,133 +1846,36 @@ function CommandDeck({
             </div>
 
             <div className="atelier-panel-strong rounded-[24px] px-4 py-4">
+              <${CountrySelector}
+                countries=${filteredCountries}
+                allCountriesCount=${allCountriesCount}
+                searchValue=${countryQuery}
+                selectedValue=${locationValue}
+                disabled=${isProcessing}
+                onSearchChange=${onCountryQueryChange}
+                onSelect=${onLocationSelect}
+              />
+            </div>
+
+            <div className="atelier-panel-strong rounded-[24px] px-4 py-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
                     Applied Filter
                   </p>
                   <p className="mt-2 text-sm font-bold text-atelier-ink">
-                    ${locationPreference === "global"
-                      ? "Global"
-                      : locationValue
-                        ? `${humanizePreference(locationPreference)}: ${locationValue}`
-                        : humanizePreference(locationPreference)}
+                    ${locationValue || "Country not selected"}
                   </p>
                   <p className="mt-2 text-xs leading-5 text-atelier-moss">
-                    ${locationPreference === "global"
-                      ? "Global keeps the snapshot broad and unrestricted."
-                      : locationValue
-                        ? "The earnings snapshot is narrowed to the chosen geography. Use the edit control if you want to change it."
-                        : "Choose a region or country to activate a scoped earnings snapshot."}
+                    Country is the only supported geography for this API call right now.
                   </p>
                   <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-atelier-moss/72">
                     ${snapshotSector && snapshotIndustry ? `${snapshotSector.replace(/_/g, " ")} / ${snapshotIndustry.replace(/_/g, " ")}` : "Sector or industry not yet selected"}
                     ${snapshotCoverageLabel ? ` | ${snapshotCoverageLabel}` : ""}
                   </p>
                 </div>
-
-                ${scopedFilterActive && locationValue
-                  ? html`
-                      <div className="shrink-0">
-                        <${EditFilterButton}
-                          label=${`Edit ${selectedScopeLabel} Filter`}
-                          disabled=${isProcessing}
-                          onClick=${onOpenSecondaryFilter}
-                        />
-                      </div>
-                    `
-                  : null}
               </div>
             </div>
-
-            <${AnimatePresence} initial=${false} mode="wait">
-              ${locationPreference === "region_specific" && showSecondaryFilterPanel
-                ? html`
-                    <${motion.div}
-                      key="region-selector"
-                      initial=${{ opacity: 0, y: 10, scale: 0.985 }}
-                      animate=${{ opacity: 1, y: 0, scale: 1 }}
-                      exit=${{ opacity: 0, y: -8, scale: 0.985 }}
-                      transition=${TRANSITION}
-                      style=${MOTION_EXPAND_STYLE}
-                      className="overflow-hidden origin-top"
-                    >
-                      <div className="atelier-panel-strong rounded-[28px] px-4 py-4">
-                        <div className="mb-4 flex items-center justify-between gap-4">
-                          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
-                            Secondary Filter Panel
-                          </p>
-                          ${locationValue
-                            ? html`
-                                <button
-                                  type="button"
-                                  disabled=${isProcessing}
-                                  onClick=${onCloseSecondaryFilter}
-                                  aria-label="Close secondary filter panel"
-                                  className="filter-close-button"
-                                >
-                                  <${CloseIcon} />
-                                </button>
-                              `
-                            : null}
-                        </div>
-                        <${RegionSelector}
-                          regions=${filteredRegions}
-                          searchValue=${regionQuery}
-                          selectedValue=${locationValue}
-                          disabled=${isProcessing}
-                          onSearchChange=${onRegionQueryChange}
-                          onSelect=${onLocationSelect}
-                        />
-                      </div>
-                    </${motion.div}>
-                  `
-                : null}
-
-              ${locationPreference === "country_specific" && showSecondaryFilterPanel
-                ? html`
-                    <${motion.div}
-                      key="country-selector"
-                      initial=${{ opacity: 0, y: 10, scale: 0.985 }}
-                      animate=${{ opacity: 1, y: 0, scale: 1 }}
-                      exit=${{ opacity: 0, y: -8, scale: 0.985 }}
-                      transition=${TRANSITION}
-                      style=${MOTION_EXPAND_STYLE}
-                      className="overflow-hidden origin-top"
-                    >
-                      <div className="atelier-panel-strong rounded-[28px] px-4 py-4">
-                        <div className="mb-4 flex items-center justify-between gap-4">
-                          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
-                            Secondary Filter Panel
-                          </p>
-                          ${locationValue
-                            ? html`
-                                <button
-                                  type="button"
-                                  disabled=${isProcessing}
-                                  onClick=${onCloseSecondaryFilter}
-                                  aria-label="Close secondary filter panel"
-                                  className="filter-close-button"
-                                >
-                                  <${CloseIcon} />
-                                </button>
-                              `
-                            : null}
-                        </div>
-                        <${CountrySelector}
-                          countries=${filteredCountries}
-                          allCountriesCount=${allCountriesCount}
-                          searchValue=${countryQuery}
-                          selectedValue=${locationValue}
-                          disabled=${isProcessing}
-                          onSearchChange=${onCountryQueryChange}
-                          onSelect=${onLocationSelect}
-                        />
-                      </div>
-                    </${motion.div}>
-                  `
-                : null}
-            </${AnimatePresence}>
 
             ${analysisError
               ? html`
@@ -2106,6 +2186,61 @@ function MetricCard({ label, value, tone = "default" }) {
 }
 
 function JournalCompleted({ result, debug, meta }) {
+  if (isIesReportPayload(result)) {
+    const request = result.request || {};
+    const summary = result.summary || {};
+    const metadata = result.metadata || {};
+    return html`
+      <div className="atelier-panel-strong rounded-[26px] px-5 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
+              Report Summary
+            </p>
+            <h3 className="mt-3 font-display text-[1.95rem] font-semibold leading-none text-atelier-ink">
+              IES report complete
+            </h3>
+            <p className="mt-3 text-sm leading-7 text-atelier-moss">
+              ${request.industry || "Selected industry"} in ${request.country || "the selected country"} returned ${summary.companies_returned || 0} companies.
+            </p>
+          </div>
+          <p className="m-0 text-sm font-semibold text-atelier-goldDeep">
+            Top ${request.top_n || summary.requested_top_n || 10}
+          </p>
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <${MetricCard} label="Industry" value=${request.industry || summary.industry || "N/A"} tone="accent" />
+          <${MetricCard} label="Country" value=${request.country || summary.country || "N/A"} tone="gold" />
+          <${MetricCard} label="Top N" value=${String(request.top_n || summary.requested_top_n || 0)} />
+          <${MetricCard} label="Companies" value=${String(summary.companies_returned || result.companies?.length || 0)} />
+        </div>
+
+        <div className="editorial-rule mt-6"></div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <${MetricCard} label="Enriched" value=${String(summary.companies_enriched ?? metadata.total_companies_successfully_enriched ?? 0)} />
+          <${MetricCard} label="Median Revenue Growth" value=${formatIesPercent(summary.median_revenue_growth)} />
+          <${MetricCard} label="Median Operating Margin" value=${formatIesPercent(summary.median_operating_margin)} />
+          <${MetricCard} label="Median EBITDA Margin" value=${formatIesPercent(summary.median_ebitda_margin)} />
+          <${MetricCard} label="Median EV / Revenue" value=${formatIesRatio(summary.median_ev_to_revenue)} />
+          <${MetricCard} label="Median EV / EBITDA" value=${formatIesRatio(summary.median_ev_to_ebitda)} />
+          <${MetricCard} label="Median Forward P/E" value=${formatIesRatio(summary.median_forward_pe)} />
+          <${MetricCard} label="EPS Beat Rate" value=${formatIesPercent(summary.eps_beat_rate)} />
+          <${MetricCard} label="5-Day Reaction" value=${formatIesPercent(summary.median_five_day_price_reaction)} />
+        </div>
+
+        ${metadata.note
+          ? html`
+              <div className="mt-6 rounded-[22px] border border-atelier-line bg-white/80 px-4 py-4 text-sm leading-7 text-atelier-moss">
+                ${metadata.note}
+              </div>
+            `
+          : null}
+      </div>
+    `;
+  }
+
   const queries = Array.isArray(debug?.queries) ? debug.queries : [];
   const sourceScores = Array.isArray(debug?.source_scores) ? debug.source_scores : [];
   const executionTime = debug?.execution_time || {};
@@ -2227,6 +2362,306 @@ function JournalCompleted({ result, debug, meta }) {
               </div>
             `,
           )}
+        </div>
+      </div>
+    </div>
+  `; 
+}
+
+function formatIesPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "N/A";
+  }
+  return `${numeric.toFixed(1)}%`;
+}
+
+function formatIesRatio(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "N/A";
+  }
+  return `${numeric.toFixed(1)}x`;
+}
+
+function formatIesCompactNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "N/A";
+  }
+  const abs = Math.abs(numeric);
+  if (abs >= 1_000_000_000_000) {
+    return `${(numeric / 1_000_000_000_000).toFixed(1)}T`;
+  }
+  if (abs >= 1_000_000_000) {
+    return `${(numeric / 1_000_000_000).toFixed(1)}B`;
+  }
+  if (abs >= 1_000_000) {
+    return `${(numeric / 1_000_000).toFixed(1)}M`;
+  }
+  if (abs >= 1_000) {
+    return `${(numeric / 1_000).toFixed(1)}K`;
+  }
+  return numeric.toFixed(1);
+}
+
+function IesScatterChart({ chart }) {
+  const points = Array.isArray(chart?.data) ? chart.data.filter(Boolean) : [];
+  if (!points.length) {
+    return html`
+      <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-7 text-atelier-moss">
+        No scatter chart data was returned for this report.
+      </div>
+    `;
+  }
+
+  const numericPoints = points
+    .map((point) => ({
+      ...point,
+      x: Number(point.revenue_growth_lq_yoy),
+      y: Number(point.operating_margin),
+      bubble: Number(point.bubble_size),
+    }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  if (!numericPoints.length) {
+    return html`
+      <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-7 text-atelier-moss">
+        The report returned companies, but no usable scatter chart coordinates were available.
+      </div>
+    `;
+  }
+
+  const minX = Math.min(...numericPoints.map((point) => point.x));
+  const maxX = Math.max(...numericPoints.map((point) => point.x));
+  const minY = Math.min(...numericPoints.map((point) => point.y));
+  const maxY = Math.max(...numericPoints.map((point) => point.y));
+  const minBubble = Math.min(...numericPoints.map((point) => (Number.isFinite(point.bubble) ? point.bubble : 0)));
+  const maxBubble = Math.max(...numericPoints.map((point) => (Number.isFinite(point.bubble) ? point.bubble : 0)));
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  const spanBubble = maxBubble - minBubble || 1;
+
+  return html`
+    <div className="rounded-[28px] border border-atelier-line bg-white/78 px-5 py-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
+            Scatter Chart
+          </p>
+          <h4 className="mt-3 font-display text-[1.5rem] font-semibold leading-none text-atelier-ink">
+            ${chart?.title || "Revenue Growth vs Operating Margin"}
+          </h4>
+        </div>
+        <p className="m-0 text-sm font-semibold text-atelier-moss">
+          ${chart?.bubble_size_label || "Revenue TTM"} bubbles
+        </p>
+      </div>
+
+      <div className="mt-5 rounded-[24px] border border-atelier-line bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(250,245,235,0.92))] p-4">
+        <svg viewBox="0 0 100 100" className="block h-[24rem] w-full">
+          <defs>
+            <pattern id="ies-grid" width="10" height="10" patternUnits="userSpaceOnUse">
+              <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(24,35,33,0.08)" strokeWidth="0.5"></path>
+            </pattern>
+          </defs>
+          <rect x="0" y="0" width="100" height="100" fill="url(#ies-grid)"></rect>
+          ${numericPoints.map((point, index) => {
+            const x = 8 + ((point.x - minX) / spanX) * 84;
+            const y = 92 - ((point.y - minY) / spanY) * 78;
+            const bubble = 5 + ((Number.isFinite(point.bubble) ? point.bubble : minBubble) - minBubble) / spanBubble * 9;
+            const radius = Number.isFinite(bubble) ? Math.max(4, Math.min(12, bubble)) : 5;
+            return html`
+              <g key=${`${point.ticker || point.company_name || index}`} transform=${`translate(${x}, ${y})`}>
+                <circle
+                  r=${radius}
+                  fill=${point.is_outlier ? "rgba(159,111,47,0.22)" : "rgba(39,67,60,0.18)"}
+                  stroke=${point.is_outlier ? "rgba(159,111,47,0.92)" : "rgba(39,67,60,0.9)"}
+                  strokeWidth="0.8"
+                ></circle>
+                <text
+                  x="0"
+                  y="1.7"
+                  textAnchor="middle"
+                  fill="#182321"
+                  fontSize="2.6"
+                  fontWeight="700"
+                >
+                  ${point.ticker || point.company_name || ""}
+                </text>
+              </g>
+            `;
+          })}
+        </svg>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.18em] text-atelier-moss/72">
+        <span>${chart?.x_label || "Revenue Growth (LQ YoY)"}</span>
+        <span>${chart?.y_label || "Operating Margin"}</span>
+      </div>
+    </div>
+  `;
+}
+
+function IesCompanyCard({ company, index }) {
+  const warnings = Array.isArray(company.validation_warnings) ? company.validation_warnings : [];
+  const outlierMetrics = Array.isArray(company.outlier_metrics) ? company.outlier_metrics : [];
+  const sourceCount = company.metric_sources && typeof company.metric_sources === "object" ? Object.keys(company.metric_sources).length : 0;
+
+  return html`
+    <article className=${cx("rounded-[28px] border px-5 py-5", company.is_outlier ? "border-amber-300/70 bg-amber-50/60" : "border-atelier-line bg-white/80")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="m-0 text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
+            Company ${index + 1}
+          </p>
+          <h4 className="mt-2 font-display text-[1.7rem] font-semibold leading-none text-atelier-ink">
+            ${company.company_name || company.ticker || "Company"}
+          </h4>
+          <p className="mt-2 text-sm leading-7 text-atelier-moss">
+            ${company.ticker || "N/A"} ${company.exchange ? ` | ${company.exchange}` : ""} ${company.country ? ` | ${company.country}` : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          ${company.enrichment_status
+            ? html`<span className=${cx("rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em]", company.enrichment_status === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-700")}>
+                ${company.enrichment_status}
+              </span>`
+            : null}
+          ${company.is_outlier
+            ? html`<span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-900">
+                Outlier
+              </span>`
+            : null}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <${MetricCard} label="Revenue TTM" value=${formatIesCompactNumber(company.revenue_ttm)} />
+        <${MetricCard} label="Market Cap" value=${formatIesCompactNumber(company.market_cap)} />
+        <${MetricCard} label="EV / Revenue" value=${formatIesRatio(company.ev_to_revenue_ttm)} />
+        <${MetricCard} label="EV / EBITDA" value=${formatIesRatio(company.ev_to_ebitda_ttm)} />
+        <${MetricCard} label="Operating Margin" value=${formatIesPercent(company.operating_margin)} />
+        <${MetricCard} label="EBITDA Margin" value=${formatIesPercent(company.ebitda_margin)} />
+        <${MetricCard} label="Forward P/E" value=${formatIesRatio(company.forward_pe)} />
+        <${MetricCard} label="EPS Surprise" value=${formatIesPercent(company.eps_surprise)} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-moss/72">
+        ${sourceCount ? html`<span className="rounded-full border border-atelier-line bg-white/82 px-3 py-1">Sources ${sourceCount}</span>` : null}
+        ${outlierMetrics.length
+          ? html`<span className="rounded-full border border-amber-300/60 bg-amber-50 px-3 py-1 text-amber-900">
+              ${outlierMetrics.join(", ")}
+            </span>`
+          : null}
+        ${warnings.length
+          ? html`<span className="rounded-full border border-rose-200/70 bg-rose-50 px-3 py-1 text-rose-700">
+              ${warnings[0]}
+            </span>`
+          : null}
+      </div>
+
+      ${company.enrichment_error
+        ? html`
+            <p className="mt-4 rounded-[20px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-7 text-rose-800">
+              ${company.enrichment_error}
+            </p>
+          `
+        : null}
+    </article>
+  `;
+}
+
+function IesResultSection({ result, meta, onDownload, exportPending }) {
+  const request = result?.request || {};
+  const summary = result?.summary || {};
+  const companies = Array.isArray(result?.companies) ? result.companies : [];
+  const chart = result?.scatter_chart || {};
+  const topN = request.top_n || summary.requested_top_n || companies.length || 0;
+
+  return html`
+    <div className="paper-sheet flex w-full flex-col rounded-[30px] px-6 py-6 md:px-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.26em] text-atelier-moss/68">
+            Final Brief
+          </p>
+          <h3 className="mt-3 font-display text-[3rem] font-semibold leading-[0.92] text-atelier-ink">
+            ${result?.title || "Industry Earnings Snapshot"}
+          </h3>
+        </div>
+        <div className="text-right">
+          <p className="m-0 text-sm font-semibold text-atelier-ink">
+            ${meta?.location?.label || request.country || "Country"}
+          </p>
+          <p className="m-0 mt-1 text-xs uppercase tracking-[0.18em] text-atelier-moss/72">
+            Top ${topN}
+          </p>
+        </div>
+        <div className="shrink-0">
+          <${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />
+        </div>
+      </div>
+
+      <p className="mt-4 max-w-3xl text-sm leading-8 text-atelier-moss">
+        ${request.industry || summary.industry || "Industry"} ${request.country ? `in ${request.country}` : ""} is summarized below with a revenue-growth vs operating-margin view and memo-ready company rows.
+      </p>
+
+      <div className="mt-5 rounded-[24px] border border-atelier-line bg-white/72 px-5 py-4">
+        <${BriefMetaRow} meta=${meta} debug=${{ num_sources: companies.length }} section="industry_earnings_snapshot" />
+      </div>
+
+      <div className="editorial-rule mt-6"></div>
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <${MetricCard} label="Companies Returned" value=${String(summary.companies_returned || companies.length || 0)} tone="accent" />
+        <${MetricCard} label="Companies Enriched" value=${String(summary.companies_enriched ?? 0)} tone="gold" />
+        <${MetricCard} label="Outliers" value=${String(summary.outlier_count ?? 0)} />
+        <${MetricCard} label="Median Revenue Growth" value=${formatIesPercent(summary.median_revenue_growth)} />
+        <${MetricCard} label="Median Operating Margin" value=${formatIesPercent(summary.median_operating_margin)} />
+        <${MetricCard} label="Median EBITDA Margin" value=${formatIesPercent(summary.median_ebitda_margin)} />
+        <${MetricCard} label="Median EV / Revenue" value=${formatIesRatio(summary.median_ev_to_revenue)} />
+        <${MetricCard} label="Median EV / EBITDA" value=${formatIesRatio(summary.median_ev_to_ebitda)} />
+        <${MetricCard} label="Median Forward P/E" value=${formatIesRatio(summary.median_forward_pe)} />
+      </div>
+
+      <div className="mt-6">
+        <${IesScatterChart} chart=${chart} />
+      </div>
+
+      <div className="editorial-rule mt-6"></div>
+
+      <div className="mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
+              Company Memo
+            </p>
+            <p className="mt-2 text-sm leading-7 text-atelier-moss">
+              Ranked by the response payload and presented in the same memo shell as the other modules.
+            </p>
+          </div>
+          <p className="m-0 text-sm font-semibold text-atelier-ink">
+            ${companies.length} rows
+          </p>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          ${companies.length
+            ? companies.map(
+                (company, index) => html`
+                  <${IesCompanyCard}
+                    key=${`${company.ticker || company.company_name || index}-${index}`}
+                    company=${company}
+                    index=${index}
+                  />
+                `,
+              )
+            : html`
+                <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
+                  No companies were returned for this report.
+                </div>
+              `}
         </div>
       </div>
     </div>
@@ -3161,21 +3596,24 @@ function BriefCompleted({
   onFollowUpConfirm,
   onFollowUpEdit,
 }) {
+  const isIesReport = isIesReportPayload(result);
   return html`
     <div className="flex justify-center">
       <div className="flex w-full max-w-4xl flex-col gap-5">
-        <${ResultSection}
-          title=${result.title || sectionTitle(result.section)}
-          section=${result.section}
-          items=${result.items}
-          majorPlayers=${result.major_players}
-          emergingPlayers=${result.emerging_players}
-          meta=${meta}
-          debug=${debug}
-          aside=${html`<${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />`}
-        />
+        ${isIesReport
+          ? html`<${IesResultSection} result=${result} meta=${meta} onDownload=${onDownload} exportPending=${exportPending} />`
+          : html`<${ResultSection}
+              title=${result.title || sectionTitle(result.section)}
+              section=${result.section}
+              items=${result.items}
+              majorPlayers=${result.major_players}
+              emergingPlayers=${result.emerging_players}
+              meta=${meta}
+              debug=${debug}
+              aside=${html`<${DownloadResultsButton} onClick=${onDownload} exporting=${exportPending} disabled=${exportPending} />`}
+            />`}
 
-        ${followUpEnabled
+        ${followUpEnabled && !isIesReport
           ? html`
               <div className="flex items-center justify-start">
                 <${FollowUpTrigger} open=${followUpOpen} onClick=${onToggleFollowUp} disabled=${isProcessing} />
@@ -3192,7 +3630,7 @@ function BriefCompleted({
             `
           : null}
 
-        ${followUpEnabled && followUpPending?.status === "confirming"
+        ${followUpEnabled && !isIesReport && followUpPending?.status === "confirming"
           ? html`
               <${FollowUpConfirmationCard}
                 refinedQuery=${followUpPending.refined_query}
@@ -3206,11 +3644,11 @@ function BriefCompleted({
             `
           : null}
 
-        ${followUpEnabled && followUpPending?.status === "loading"
+        ${followUpEnabled && !isIesReport && followUpPending?.status === "loading"
           ? html`<${FollowUpCard} entry=${followUpPending} />`
           : null}
 
-        ${followUpEnabled && followUps.length
+        ${followUpEnabled && !isIesReport && followUps.length
           ? html`
               <div className="space-y-5">
                 ${followUps.map(
@@ -3570,7 +4008,9 @@ function App() {
       ? analysisMeta
       : {
           topic: isEarningsSnapshot ? snapshotTopicPreview : topic.trim(),
-          location: currentLocationMeta,
+          location: isEarningsSnapshot && locationValue
+            ? deriveLocationMeta("country_specific", locationValue, locations.countries)
+            : currentLocationMeta,
         };
 
   const showWorkspacePanels =
@@ -3903,7 +4343,7 @@ function App() {
       sector: snapshotSector,
       industry: snapshotIndustry,
       coverage: snapshotCoverage,
-      locationLabel: currentLocationMeta.label,
+      locationLabel: locationValue || currentLocationMeta.label,
     });
 
     if (isEarningsSnapshot) {
@@ -3947,23 +4387,30 @@ function App() {
         setAnalysisState("error");
         return;
       }
+      if (!locationValue) {
+        setAnalysisError("Choose a country before launching the earnings snapshot.");
+        setAnalysisState("error");
+        return;
+      }
     } else if (!trimmedTopic) {
       setAnalysisError("Enter a topic before running analysis.");
       setAnalysisState("error");
       return;
     }
 
-    if (locationPreference !== "global" && !locationValue) {
+    if (!isEarningsSnapshot && locationPreference !== "global" && !locationValue) {
       setAnalysisError("Select a region or country before launching a location-specific run.");
       setAnalysisState("error");
       return;
     }
 
-    const requestedLocation = deriveLocationMeta(
-      locationPreference,
-      locationValue,
-      locations.countries,
-    );
+    const requestedLocation = isEarningsSnapshot
+      ? deriveLocationMeta("country_specific", locationValue, locations.countries)
+      : deriveLocationMeta(
+          locationPreference,
+          locationValue,
+          locations.countries,
+        );
 
     flushSync(() => {
       setIsProcessing(true);
@@ -3992,6 +4439,50 @@ function App() {
     });
 
     try {
+      if (isEarningsSnapshot) {
+        const response = await fetch(apiUrl("/api/ies-report"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            industry: snapshotIndustry,
+            country: locationValue,
+            top_n: getIesReportTopN(snapshotCoverage),
+          }),
+        });
+
+        let responsePayload = null;
+        try {
+          responsePayload = await response.json();
+        } catch {
+          responsePayload = null;
+        }
+
+        if (!response.ok) {
+          throw new Error(buildErrorMessage(responsePayload, "IES report failed. Please try again."));
+        }
+
+        const normalizedPayload = normalizeIesReportResponse(responsePayload);
+        if (!normalizedPayload) {
+          throw new Error("IES report returned an unexpected response shape.");
+        }
+
+        startTransition(() => {
+          const responseMeta = {
+            topic: normalizedPayload?.meta?.topic || snapshotTopic,
+            location: normalizedPayload?.meta?.location || requestedLocation,
+          };
+          setAnalysisResult(normalizedPayload);
+          setAnalysisDebug(null);
+          setAnalysisMeta(responseMeta);
+          setProgressValue((current) => Math.max(current, 100));
+          setLiveJournal(buildCompletedJournal(normalizedPayload, null, responseMeta));
+          setAnalysisState("completed");
+        });
+        return;
+      }
+
       const response = await fetch(apiUrl("/api/research"), {
         method: "POST",
         headers: {

@@ -177,6 +177,35 @@ class AnalyzeExistingRequest(BaseModel):
         return _validate_existing_chunks(value)
 
 
+class IESReportRequest(BaseModel):
+    industry: str
+    country: str
+    top_n: int
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("industry")
+    @classmethod
+    def validate_industry(cls, value: str) -> str:
+        return _validate_non_empty_string(value, field_name="industry", max_length=256)
+
+    @field_validator("country")
+    @classmethod
+    def validate_country(cls, value: str) -> str:
+        return _validate_non_empty_string(value, field_name="country", max_length=256)
+
+    @field_validator("top_n")
+    @classmethod
+    def validate_top_n(cls, value: int) -> int:
+        try:
+            normalized = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("top_n must be an integer.") from exc
+        if normalized < 1:
+            raise ValueError("top_n must be at least 1.")
+        return normalized
+
+
 class PdfExportRequest(BaseModel):
     session_id: str | None = None
     result: Dict[str, Any] = {}
