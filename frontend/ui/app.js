@@ -3442,11 +3442,14 @@ function medianOfValues(values) {
 
 function IesCompanyRow({ company, index, selected, onSelect }) {
   const companyName = company.company_name || company.ticker || "Company";
+  const isDcmRow = String(company.ticker || "").toUpperCase() === "DCM.VN";
+  const contentSizeClass = isDcmRow ? "text-[11px] sm:text-[12px]" : "text-xs sm:text-sm";
+  const metricSizeClass = isDcmRow ? "text-[11px] sm:text-[12px]" : "text-xs sm:text-sm";
 
   return html`
     <tr
       className=${cx(
-        "ies-universe-row group cursor-pointer transition-all duration-150",
+        "ies-universe-row group cursor-pointer transition-colors duration-75",
         index % 2 === 1 ? "bg-white/40" : "bg-[#FAF7F2]/30",
         company.is_outlier ? "bg-amber-50/40" : "",
         selected ? "bg-amber-100/60 shadow-xs border-l-4 border-l-atelier-gold" : "hover:bg-[#F5EFE6]/80"
@@ -3462,49 +3465,39 @@ function IesCompanyRow({ company, index, selected, onSelect }) {
         }
       }}
     >
-      <td className="py-3 pl-3 pr-1 font-mono text-xs font-bold text-atelier-moss/60 align-middle text-center w-8">
+      <td className="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">
         ${String(index + 1).padStart(2, "0")}
       </td>
       <td className="py-3 px-2.5 align-middle">
         <div className="flex flex-col min-w-0">
-          <span className="font-display text-xs sm:text-sm font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight">
+          <span className=${cx("font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight", contentSizeClass)}>
             ${companyName}
           </span>
-          <div className="flex flex-wrap items-center gap-1 mt-0.5 text-[10px] text-atelier-moss/80 font-mono">
+          <div className=${cx("flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display", isDcmRow ? "text-[9px] sm:text-[10px]" : "text-[10px]")}>
             <span className="font-semibold text-atelier-ink">${company.ticker || "—"}</span>
             ${company.exchange ? html`<span>• ${company.exchange}</span>` : null}
             ${company.country ? html`<span>• ${company.country}</span>` : null}
           </div>
         </div>
       </td>
-      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs font-semibold text-atelier-ink align-middle">
+      <td className=${cx("py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle", metricSizeClass)}>
         ${formatIesCompactNumber(company.revenue_ttm, "—")}
       </td>
-      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs align-middle">
+      <td className=${cx("py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle", metricSizeClass)}>
         ${renderIesMetricValue(formatIesPercent(company.revenue_growth_lq_yoy, "—"), company.revenue_growth_lq_yoy)}
       </td>
-      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs align-middle">
+      <td className=${cx("py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle", metricSizeClass)}>
         ${renderIesMetricValue(formatIesPercent(company.operating_margin, "—"), company.operating_margin)}
       </td>
-      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs font-medium text-atelier-ink align-middle">
+      <td className=${cx("py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle", metricSizeClass)}>
         ${formatIesRatio(company.ev_to_revenue_ttm, "—")}
       </td>
-      <td className="py-3 px-2 text-right font-mono tabular-nums text-xs font-medium text-atelier-ink align-middle">
-        ${formatIesRatio(company.forward_pe, "—")}
-      </td>
-      <td className="py-3 pr-3 pl-1 text-right align-middle">
-        <div className="flex items-center justify-end gap-1">
-          ${company.is_outlier
-            ? html`<span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-800 uppercase tracking-wider">Outlier</span>`
-            : company.enrichment_status === "ok"
-              ? html`<span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 uppercase tracking-wider">Standard</span>`
-              : html`<span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-[9px] font-medium text-stone-600 uppercase tracking-wider">${company.enrichment_status || "—"}</span>`}
-        </div>
+      <td className=${cx("py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle", metricSizeClass)}>
+        ${formatIesRatio(company.ev_to_ebitda_ttm, "—")}
       </td>
     </tr>
   `;
 }
-
 function IesAnalystInsights({ result }) {
   const insightBundle = buildIesInsightRows(result);
 
@@ -3588,16 +3581,15 @@ function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompan
     <div className="overflow-hidden rounded-2xl border border-atelier-line/80 bg-white/80 shadow-[0_18px_48px_rgba(31,42,41,0.04)]">
       <div className="max-h-[38rem] overflow-y-auto panel-scroll">
         <table className="w-full text-left border-collapse">
-          <thead className="sticky top-0 z-10 bg-[#FAF6F0]/95 backdrop-blur-md border-b border-atelier-line/80 shadow-2xs">
+          <thead className="sticky top-0 z-20 isolate bg-[#FAF6F0]/98 backdrop-blur-md border-b border-atelier-line/80">
             <tr>
-              <th className="py-3 pl-3 pr-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70 w-8">#</th>
-              <th className="py-3 px-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Company & Ticker</th>
-              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue TTM</th>
-              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue Growth</th>
-              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Operating Margin (TTM)</th>
-              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / Revenue</th>
-              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Forward P/E</th>
-              <th className="py-3 pr-3 pl-1 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Signals</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 pl-3 pr-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70 w-8">#</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Company & Ticker</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue TTM</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue Growth</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Operating Margin (TTM)</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / Revenue</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / EBITDA</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-atelier-line/40">

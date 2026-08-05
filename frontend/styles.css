@@ -493,6 +493,8 @@ textarea:disabled {
   overflow-y: auto;
   overscroll-behavior-y: auto;
   overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: layout paint;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(39, 67, 60, 0.24) transparent;
