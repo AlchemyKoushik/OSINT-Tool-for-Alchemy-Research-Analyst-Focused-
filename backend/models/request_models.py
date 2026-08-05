@@ -8,6 +8,7 @@ from services.location_service import resolve_location_context
 
 ResearchSection = str
 LocationPreference = Literal["global", "region_specific", "country_specific"]
+IESFilterType = Literal["global", "region", "country"]
 
 
 def _validate_non_empty_string(value: str, *, field_name: str, max_length: int) -> str:
@@ -179,7 +180,9 @@ class AnalyzeExistingRequest(BaseModel):
 
 class IESReportRequest(BaseModel):
     industry: str
-    country: str
+    filter_type: str | None = None
+    filter_value: str | None = None
+    country: str | None = None
     top_n: int
 
     model_config = ConfigDict(extra="forbid")
@@ -189,10 +192,21 @@ class IESReportRequest(BaseModel):
     def validate_industry(cls, value: str) -> str:
         return _validate_non_empty_string(value, field_name="industry", max_length=256)
 
-    @field_validator("country")
+    @field_validator("filter_type")
     @classmethod
-    def validate_country(cls, value: str) -> str:
-        return _validate_non_empty_string(value, field_name="country", max_length=256)
+    def validate_filter_type(cls, value: str | None) -> str | None:
+        normalized = str(value or "").strip().lower()
+        if not normalized:
+            return None
+        if normalized not in {"global", "region", "country"}:
+            raise ValueError("filter_type must be one of: global, region, country.")
+        return normalized
+
+    @field_validator("filter_value", "country")
+    @classmethod
+    def validate_filter_value_or_country(cls, value: str | None) -> str | None:
+        normalized = str(value or "").strip()
+        return normalized or None
 
     @field_validator("top_n")
     @classmethod
@@ -204,6 +218,33 @@ class IESReportRequest(BaseModel):
         if normalized < 1:
             raise ValueError("top_n must be at least 1.")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_and_normalize_scope(self) -> "IESReportRequest":
+        if not self.filter_type:
+            if self.country:
+                self.filter_type = "country"
+                self.filter_value = self.filter_value or self.country
+            else:
+                raise ValueError("filter_type is required unless country is provided.")
+
+        if self.filter_type == "global":
+            self.filter_value = None
+            self.country = None
+            return self
+
+        if not self.filter_value:
+            self.filter_value = self.country
+
+        if not self.filter_value:
+            raise ValueError("filter_value is required when filter_type is region or country.")
+
+        if self.filter_type == "country":
+            self.country = self.filter_value
+        else:
+            self.country = None
+
+        return self
 
 
 class PdfExportRequest(BaseModel):

@@ -282,6 +282,36 @@ function getIesReportTopN(snapshotCoverage) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 10;
 }
 
+function getIesReportScope(preference, value) {
+  const normalizedPreference = String(preference || "").trim().toLowerCase();
+  const normalizedValue = String(value || "").trim();
+
+  if (normalizedPreference === "global") {
+    return {
+      filter_type: "global",
+      filter_value: null,
+      label: "Global",
+      scopeLabel: "Scope",
+    };
+  }
+
+  if (normalizedPreference === "region_specific") {
+    return {
+      filter_type: "region",
+      filter_value: normalizedValue || null,
+      label: normalizedValue || "Region not selected",
+      scopeLabel: "Region",
+    };
+  }
+
+  return {
+    filter_type: "country",
+    filter_value: normalizedValue || null,
+    label: normalizedValue || "Country not selected",
+    scopeLabel: "Country",
+  };
+}
+
 function humanizePreference(preference) {
   if (preference === "country_specific") {
     return "Country";
@@ -687,10 +717,21 @@ function normalizeIesReportResponse(payload) {
     ? scatterChart.data.map(normalizeIesScatterPoint).filter(Boolean)
     : [];
   const industry = String(summary.industry || request.industry || "").trim();
-  const country = String(summary.country || request.country || "").trim();
+  const normalizedFilterType = String(
+    summary.filter_type || request.filter_type || (request.country || summary.country ? "country" : ""),
+  )
+    .trim()
+    .toLowerCase();
+  const rawFilterValue = String(
+    summary.filter_value || request.filter_value || request.country || summary.country || "",
+  ).trim();
   const topN = toNumberOrNull(summary.requested_top_n || request.top_n);
-  const title = [industry, country].filter(Boolean).join(" | ") || "Industry Earnings Snapshot";
-  const locationLabel = country || "Country not selected";
+  const scopeInfo = getIesReportScope(
+    normalizedFilterType === "region" ? "region_specific" : normalizedFilterType === "global" ? "global" : "country_specific",
+    rawFilterValue,
+  );
+  const title = [industry, scopeInfo.label].filter(Boolean).join(" | ") || "Industry Earnings Snapshot";
+  const locationLabel = scopeInfo.label || "Global";
 
   return {
     ...payload,
@@ -699,13 +740,17 @@ function normalizeIesReportResponse(payload) {
     title,
     request: {
       industry,
-      country,
+      filter_type: scopeInfo.filter_type,
+      filter_value: scopeInfo.filter_value,
+      country: scopeInfo.filter_type === "country" ? scopeInfo.filter_value : "",
       top_n: Number.isFinite(topN) ? topN : toNumberOrNull(request.top_n),
     },
     summary: {
       ...summary,
       industry,
-      country,
+      filter_type: scopeInfo.filter_type,
+      filter_value: scopeInfo.filter_value,
+      country: scopeInfo.filter_type === "country" ? scopeInfo.filter_value : "",
       requested_top_n: Number.isFinite(topN) ? topN : toNumberOrNull(summary.requested_top_n || request.top_n),
     },
     scatter_chart: {
@@ -723,12 +768,17 @@ function normalizeIesReportResponse(payload) {
     meta: {
       topic: title,
       location: {
-        preference: "country_specific",
-        scope: "country",
+        preference:
+          scopeInfo.filter_type === "global"
+            ? "global"
+            : scopeInfo.filter_type === "region"
+              ? "region_specific"
+              : "country_specific",
+        scope: scopeInfo.filter_type,
         label: locationLabel,
-        value: country,
-        region: "",
-        strict: true,
+        value: scopeInfo.filter_value || "",
+        region: scopeInfo.filter_type === "region" ? scopeInfo.filter_value || "" : "",
+        strict: scopeInfo.filter_type !== "global",
       },
     },
   };
@@ -1117,10 +1167,18 @@ function buildCompletedJournal(result, debug, meta) {
     const companiesReturned = Number(summary.companies_returned || result.companies?.length || 0);
     const companiesEnriched = Number(summary.companies_enriched || 0);
     const scatterCount = Array.isArray(result.scatter_chart?.data) ? result.scatter_chart.data.length : 0;
+    const scopeInfo = getIesReportScope(
+      request.filter_type === "region"
+        ? "region_specific"
+        : request.filter_type === "global"
+          ? "global"
+          : "country_specific",
+      request.filter_value || request.country || summary.filter_value || summary.country || "",
+    );
     return [
       {
         id: "journal-scope",
-        message: `Scoped the report to ${request.industry || "the selected industry"} in ${request.country || "the selected country"} with Top ${request.top_n || 10}.`,
+        message: `Scoped the report to ${request.industry || "the selected industry"} in ${scopeInfo.label} with Top ${request.top_n || 10}.`,
       },
       {
         id: "journal-universe",
@@ -1778,15 +1836,15 @@ function CommandDeck({
         className="min-h-0"
       >
         <${PanelShell} className="atelier-panel-crisp overflow-hidden px-5 py-5 md:px-6 md:py-6">
-          <${PanelHeader}
-            eyebrow="Command Deck"
-            title="Design the earnings snapshot"
-            subtitle="Choose an industry, country, and Top N to build a focused earnings snapshot."
-          />
+        <${PanelHeader}
+          eyebrow="Command Deck"
+          title="Design the earnings snapshot"
+          subtitle="Choose an industry, then use the same global, region, or country filters as the other modules."
+        />
 
-          <form className="mt-6 grid gap-4" onSubmit=${onAnalyze}>
-            <div className=${cx("atelier-panel-strong rounded-[26px] px-4 py-4", isProcessing && "ui-disabled-shell")}>
-              <div className="command-deck-grid grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(10rem,0.72fr)_minmax(14.5rem,0.85fr)]">
+        <form className="mt-6 grid gap-4" onSubmit=${onAnalyze}>
+          <div className=${cx("atelier-panel-strong rounded-[26px] px-4 py-4", isProcessing && "ui-disabled-shell")}>
+            <div className="command-deck-grid grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(10rem,0.72fr)_minmax(14rem,0.82fr)_minmax(14.5rem,0.85fr)]">
                 <div className="command-deck-field">
                   <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotSector">
                     Sector
@@ -1839,22 +1897,23 @@ function CommandDeck({
                   />
                 </div>
 
+                <div className="command-deck-field">
+                  <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72" for="snapshotLocationPreference">
+                    Location Preference
+                  </label>
+                  <${ThemedSelect}
+                    id="snapshotLocationPreference"
+                    options=${locations.preferences}
+                    value=${locationPreference}
+                    onChange=${onPreferenceChange}
+                    disabled=${isProcessing}
+                  />
+                </div>
+
                 <div className="command-deck-action">
                   <${LaunchButton} disabled=${isProcessing || snapshotCatalogLoading || !snapshotReady} processing=${isProcessing} />
                 </div>
               </div>
-            </div>
-
-            <div className="atelier-panel-strong rounded-[24px] px-4 py-4">
-              <${CountrySelector}
-                countries=${filteredCountries}
-                allCountriesCount=${allCountriesCount}
-                searchValue=${countryQuery}
-                selectedValue=${locationValue}
-                disabled=${isProcessing}
-                onSearchChange=${onCountryQueryChange}
-                onSelect=${onLocationSelect}
-              />
             </div>
 
             <div className="atelier-panel-strong rounded-[24px] px-4 py-4">
@@ -1864,18 +1923,127 @@ function CommandDeck({
                     Applied Filter
                   </p>
                   <p className="mt-2 text-sm font-bold text-atelier-ink">
-                    ${locationValue || "Country not selected"}
+                    ${locationPreference === "global"
+                      ? "Global"
+                      : locationValue
+                        ? `${humanizePreference(locationPreference)}: ${locationValue}`
+                        : humanizePreference(locationPreference)}
                   </p>
                   <p className="mt-2 text-xs leading-5 text-atelier-moss">
-                    Country is the only supported geography for this API call right now.
+                    ${locationPreference === "global"
+                      ? "Global keeps the snapshot broad and unrestricted."
+                      : locationValue
+                        ? "The snapshot is narrowed to the chosen geography. Use the edit control if you want to change it."
+                        : "Choose a region or country to activate a scoped filter."}
                   </p>
                   <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-atelier-moss/72">
                     ${snapshotSector && snapshotIndustry ? `${snapshotSector.replace(/_/g, " ")} / ${snapshotIndustry.replace(/_/g, " ")}` : "Sector or industry not yet selected"}
                     ${snapshotCoverageLabel ? ` | ${snapshotCoverageLabel}` : ""}
                   </p>
                 </div>
+
+                ${scopedFilterActive && locationValue
+                  ? html`
+                      <div className="shrink-0">
+                        <${EditFilterButton}
+                          label=${`Edit ${selectedScopeLabel} Filter`}
+                          disabled=${isProcessing}
+                          onClick=${onOpenSecondaryFilter}
+                        />
+                      </div>
+                    `
+                  : null}
               </div>
             </div>
+
+            <${AnimatePresence} initial=${false} mode="wait">
+              ${locationPreference === "region_specific" && showSecondaryFilterPanel
+                ? html`
+                    <${motion.div}
+                      key="snapshot-region-selector"
+                      initial=${{ opacity: 0, y: 10, scale: 0.985 }}
+                      animate=${{ opacity: 1, y: 0, scale: 1 }}
+                      exit=${{ opacity: 0, y: -8, scale: 0.985 }}
+                      transition=${TRANSITION}
+                      style=${MOTION_EXPAND_STYLE}
+                      className="overflow-hidden origin-top"
+                    >
+                      <div className="atelier-panel-strong rounded-[28px] px-4 py-4">
+                        <div className="mb-4 flex items-center justify-between gap-4">
+                          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
+                            Secondary Filter Panel
+                          </p>
+                          ${locationValue
+                            ? html`
+                                <button
+                                  type="button"
+                                  disabled=${isProcessing}
+                                  onClick=${onCloseSecondaryFilter}
+                                  aria-label="Close secondary filter panel"
+                                  className="filter-close-button"
+                                >
+                                  <${CloseIcon} />
+                                </button>
+                              `
+                            : null}
+                        </div>
+                        <${RegionSelector}
+                          regions=${filteredRegions}
+                          searchValue=${regionQuery}
+                          selectedValue=${locationValue}
+                          disabled=${isProcessing}
+                          onSearchChange=${onRegionQueryChange}
+                          onSelect=${onLocationSelect}
+                        />
+                      </div>
+                    </${motion.div}>
+                  `
+                : null}
+
+              ${locationPreference === "country_specific" && showSecondaryFilterPanel
+                ? html`
+                    <${motion.div}
+                      key="snapshot-country-selector"
+                      initial=${{ opacity: 0, y: 10, scale: 0.985 }}
+                      animate=${{ opacity: 1, y: 0, scale: 1 }}
+                      exit=${{ opacity: 0, y: -8, scale: 0.985 }}
+                      transition=${TRANSITION}
+                      style=${MOTION_EXPAND_STYLE}
+                      className="overflow-hidden origin-top"
+                    >
+                      <div className="atelier-panel-strong rounded-[28px] px-4 py-4">
+                        <div className="mb-4 flex items-center justify-between gap-4">
+                          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
+                            Secondary Filter Panel
+                          </p>
+                          ${locationValue
+                            ? html`
+                                <button
+                                  type="button"
+                                  disabled=${isProcessing}
+                                  onClick=${onCloseSecondaryFilter}
+                                  aria-label="Close secondary filter panel"
+                                  className="filter-close-button"
+                                >
+                                  <${CloseIcon} />
+                                </button>
+                              `
+                            : null}
+                        </div>
+                        <${CountrySelector}
+                          countries=${filteredCountries}
+                          allCountriesCount=${allCountriesCount}
+                          searchValue=${countryQuery}
+                          selectedValue=${locationValue}
+                          disabled=${isProcessing}
+                          onSearchChange=${onCountryQueryChange}
+                          onSelect=${onLocationSelect}
+                        />
+                      </div>
+                    </${motion.div}>
+                  `
+                : null}
+            </${AnimatePresence}>
 
             ${analysisError
               ? html`
@@ -2210,6 +2378,7 @@ function buildIesInsightRows(result) {
   const companies = Array.isArray(result?.companies) ? result.companies.filter(Boolean) : [];
   const summary = result?.summary || {};
   const chartPoints = Array.isArray(result?.scatter_chart?.data) ? result.scatter_chart.data.filter(Boolean) : [];
+  const request = result?.request || {};
   const outliers = companies.filter((company) => company?.is_outlier);
 
   const highestGrowth = [...companies]
@@ -2240,6 +2409,14 @@ function buildIesInsightRows(result) {
   const valuationMax = valuationSeries.length ? Math.max(...valuationSeries) : null;
   const coverageCount = Number(summary.requested_top_n || companies.length || 0);
   const coveragePhrase = coverageCount ? `Top ${coverageCount}` : "focused";
+  const scopeInfo = getIesReportScope(
+    request.filter_type === "region"
+      ? "region_specific"
+      : request.filter_type === "global"
+        ? "global"
+        : "country_specific",
+    request.filter_value || request.country || summary.filter_value || summary.country || "",
+  );
 
   const highestGrowthLabel = highestGrowth
     ? `${highestGrowth.company_name || highestGrowth.ticker || "Company"} leads revenue growth at ${formatIesPercent(highestGrowth.revenue_growth_lq_yoy)}.`
@@ -2260,7 +2437,7 @@ function buildIesInsightRows(result) {
 
   return {
     summary:
-      `This memo covers ${summary.industry || "the selected industry"} in ${summary.country || "the selected country"} with ${coveragePhrase} coverage and ${chartPoints.length || companies.length || 0} plotted observations.`,
+      `This memo covers ${summary.industry || "the selected industry"} in ${scopeInfo.label} with ${coveragePhrase} coverage and ${chartPoints.length || companies.length || 0} plotted observations.`,
     rows: [
       {
         label: "Highest Growth",
@@ -2539,6 +2716,14 @@ function JournalCompleted({ result, debug, meta }) {
     const request = result.request || {};
     const summary = result.summary || {};
     const metadata = result.metadata || {};
+    const scopeInfo = getIesReportScope(
+      request.filter_type === "region"
+        ? "region_specific"
+        : request.filter_type === "global"
+          ? "global"
+          : "country_specific",
+      request.filter_value || request.country || summary.filter_value || summary.country || "",
+    );
     return html`
       <div className="atelier-panel-strong rounded-[22px] px-5 py-5 my-auto flex flex-col justify-center shadow-xs">
         <div className="flex flex-col items-center justify-center text-center gap-1.5">
@@ -2549,7 +2734,7 @@ function JournalCompleted({ result, debug, meta }) {
             IES report complete
           </h3>
           <p className="mt-1 font-display text-xs font-medium leading-relaxed text-atelier-moss/90 max-w-xs">
-            ${request.industry || "Selected industry"} in ${request.country || "the selected country"} returned ${summary.companies_returned || 0} companies.
+            ${request.industry || "Selected industry"} in ${scopeInfo.label} returned ${summary.companies_returned || 0} companies.
           </p>
           <div className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-atelier-goldDeep border border-amber-200/60">
             Top ${request.top_n || summary.requested_top_n || 10} Companies
@@ -2558,15 +2743,14 @@ function JournalCompleted({ result, debug, meta }) {
 
         <div className="mt-4 grid gap-2.5 grid-cols-2">
           <${MetricCard} label="Industry" value=${request.industry || summary.industry || "N/A"} tone="accent" />
-          <${MetricCard} label="Country" value=${request.country || summary.country || "N/A"} tone="gold" />
-          <${MetricCard} label="Top N" value=${String(request.top_n || summary.requested_top_n || 0)} />
+          <${MetricCard} label=${scopeInfo.scopeLabel} value=${scopeInfo.label} tone="gold" />
           <${MetricCard} label="Companies" value=${String(summary.companies_returned || result.companies?.length || 0)} />
+          <${MetricCard} label="Enriched" value=${String(summary.companies_enriched ?? metadata.total_companies_successfully_enriched ?? 0)} />
         </div>
 
         <div className="editorial-rule mt-4"></div>
 
         <div className="mt-4 grid gap-2.5 grid-cols-2">
-          <${MetricCard} label="Enriched" value=${String(summary.companies_enriched ?? metadata.total_companies_successfully_enriched ?? 0)} />
           <${MetricCard} label="Revenue Growth" value=${formatIesPercent(summary.median_revenue_growth)} />
           <${MetricCard} label="Operating Margin" value=${formatIesPercent(summary.median_operating_margin)} />
           <${MetricCard} label="EBITDA Margin" value=${formatIesPercent(summary.median_ebitda_margin)} />
@@ -2576,14 +2760,6 @@ function JournalCompleted({ result, debug, meta }) {
           <${MetricCard} label="EPS Beat Rate" value=${formatIesPercent(summary.eps_beat_rate)} />
           <${MetricCard} label="5-Day Reaction" value=${formatIesPercent(summary.median_five_day_price_reaction)} />
         </div>
-
-        ${metadata.note
-          ? html`
-              <div className="mt-4 rounded-[18px] border border-atelier-line bg-white/80 px-3.5 py-3 text-xs leading-relaxed text-atelier-moss text-center font-display font-medium">
-                ${metadata.note}
-              </div>
-            `
-          : null}
       </div>
     `;
   }
@@ -3476,9 +3652,18 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
   const [selectedCompanyKey, setSelectedCompanyKey] = useState("");
   const selectedCompany = companies.find((company, index) => getIesDisplayCompanyKey(company, index) === selectedCompanyKey) || null;
   const displayIndustry = request.industry || summary.industry || "Industry";
-  const displayCountry = request.country || summary.country || meta?.location?.label || "Country";
+  const displayScope = request.filter_type || summary.filter_type || "country";
+  const displayScopeValue =
+    request.filter_value ||
+    summary.filter_value ||
+    request.country ||
+    summary.country ||
+    meta?.location?.label ||
+    "Global";
   const preparedDate = formatDate();
   const coverageLabel = `Top ${topN || 0} Companies`;
+  const scopeLabel = displayScope === "region" ? "Region" : displayScope === "global" ? "Scope" : "Country";
+  const scopeValue = displayScope === "global" ? "Global" : displayScopeValue;
 
   const executiveMetrics = [
     { label: "Companies Returned", value: String(summary.companies_returned || companies.length || 0) },
@@ -3515,8 +3700,8 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
                 ${displayIndustry}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
-                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Region:</span>
-                ${displayCountry}
+                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">${scopeLabel}:</span>
+                ${scopeValue}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
                 <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Coverage:</span>
@@ -3538,13 +3723,6 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
           </div>
         </div>
 
-        ${metadata.note
-          ? html`
-              <div className="mt-5 rounded-[22px] border border-atelier-line/80 bg-white/70 px-5 py-4 text-sm leading-7 text-atelier-moss">
-                ${metadata.note}
-              </div>
-            `
-          : null}
       </section>
 
       <!-- 2. Executive KPI Strip (Horizontal Ribbon) -->
@@ -4957,9 +5135,7 @@ function App() {
       ? analysisMeta
       : {
           topic: isEarningsSnapshot ? snapshotTopicPreview : topic.trim(),
-          location: isEarningsSnapshot && locationValue
-            ? deriveLocationMeta("country_specific", locationValue, locations.countries)
-            : currentLocationMeta,
+          location: currentLocationMeta,
         };
 
   const showWorkspacePanels =
@@ -5336,8 +5512,8 @@ function App() {
         setAnalysisState("error");
         return;
       }
-      if (!locationValue) {
-        setAnalysisError("Choose a country before launching the earnings snapshot.");
+      if (locationPreference !== "global" && !locationValue) {
+        setAnalysisError("Choose a region or country before launching the earnings snapshot.");
         setAnalysisState("error");
         return;
       }
@@ -5353,13 +5529,11 @@ function App() {
       return;
     }
 
-    const requestedLocation = isEarningsSnapshot
-      ? deriveLocationMeta("country_specific", locationValue, locations.countries)
-      : deriveLocationMeta(
-          locationPreference,
-          locationValue,
-          locations.countries,
-        );
+    const requestedLocation = deriveLocationMeta(
+      locationPreference,
+      locationValue,
+      locations.countries,
+    );
 
     flushSync(() => {
       setIsProcessing(true);
@@ -5389,6 +5563,7 @@ function App() {
 
     try {
       if (isEarningsSnapshot) {
+        const snapshotScope = getIesReportScope(locationPreference, locationValue);
         const response = await fetch(apiUrl("/api/ies-report"), {
           method: "POST",
           headers: {
@@ -5396,7 +5571,8 @@ function App() {
           },
           body: JSON.stringify({
             industry: snapshotIndustry,
-            country: locationValue,
+            filter_type: snapshotScope.filter_type,
+            filter_value: snapshotScope.filter_value,
             top_n: getIesReportTopN(snapshotCoverage),
           }),
         });

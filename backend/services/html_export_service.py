@@ -36,6 +36,27 @@ def _build_filename(result: Dict[str, Any], meta: Dict[str, Any]) -> str:
     return f"{topic}-{section}-{scope}-{prepared}.html"
 
 
+def _resolve_ies_scope(request: Dict[str, Any], summary: Dict[str, Any]) -> Tuple[str, str]:
+    filter_type = _safe_text(request.get("filter_type") or summary.get("filter_type"), "").lower()
+    filter_value = _safe_text(
+        request.get("filter_value")
+        or summary.get("filter_value")
+        or request.get("country")
+        or summary.get("country"),
+        "",
+    )
+
+    if filter_type == "global":
+        return "Scope", "Global"
+    if filter_type == "region":
+        return "Region", filter_value or "N/A"
+    if filter_type == "country":
+        return "Country", filter_value or "N/A"
+    if filter_value:
+        return "Country", filter_value
+    return "Scope", "Global"
+
+
 def _count_sources(items: Sequence[Dict[str, Any]]) -> int:
     total = 0
     for item in items:
@@ -48,9 +69,10 @@ def _count_competitive_landscape_sources(result: Dict[str, Any]) -> int:
 
 
 def _render_ies_metric_cards(summary: Dict[str, Any], metadata: Dict[str, Any], request: Dict[str, Any], company_count: int) -> str:
+    scope_label, scope_value = _resolve_ies_scope(request, summary)
     cards = [
         ("Industry", _escape(request.get("industry") or summary.get("industry") or "N/A")),
-        ("Country", _escape(request.get("country") or summary.get("country") or "N/A")),
+        (scope_label, _escape(scope_value)),
         ("Top N", _escape(request.get("top_n") or summary.get("requested_top_n") or "N/A")),
         ("Companies", html.escape(str(summary.get("companies_returned") or company_count or 0))),
         ("Enriched", html.escape(str(summary.get("companies_enriched") or metadata.get("total_companies_successfully_enriched") or 0))),
@@ -187,6 +209,7 @@ def _render_ies_section(result: Dict[str, Any], meta: Dict[str, Any], *, title_o
     title = _escape(title_override or result.get("title"), "Industry Earnings Snapshot")
     scope = _escape(meta.get("location", {}).get("label"), "Country")
     top_n = _escape(request.get("top_n") or summary.get("requested_top_n") or len(companies) or "N/A")
+    scope_label, scope_value = _resolve_ies_scope(request, summary)
     company_cards = "".join(_render_ies_company_card(company, index) for index, company in enumerate(companies, start=1))
     company_cards_html = company_cards or '<div class="memo-empty-state">No companies were returned for this report.</div>'
     note = _safe_text(metadata.get("note"))
@@ -198,9 +221,9 @@ def _render_ies_section(result: Dict[str, Any], meta: Dict[str, Any], *, title_o
         "<div>"
         "<div class=\"memo-eyebrow\">Final Brief</div>"
         f"<h1>{title}</h1>"
-        f"<p class=\"memo-topic\">{html.escape(_safe_text(request.get('industry') or summary.get('industry'), 'Industry'))} | {html.escape(_safe_text(request.get('country') or summary.get('country'), 'Country'))} | Top {top_n}</p>"
+        f"<p class=\"memo-topic\">{html.escape(_safe_text(request.get('industry') or summary.get('industry'), 'Industry'))} | {html.escape(scope_label)}: {html.escape(scope_value)} | Top {top_n}</p>"
         "<p class=\"memo-description\">"
-        "A country-scoped earnings snapshot with summary metrics, a revenue-growth vs operating-margin chart, and memo-ready company rows."
+        "A geography-scoped earnings snapshot with summary metrics, a revenue-growth vs operating-margin chart, and memo-ready company rows."
         "</p>"
         "</div>"
         f"<div class=\"memo-scope\">{scope} | {title}</div>"

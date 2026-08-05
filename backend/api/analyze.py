@@ -58,6 +58,7 @@ MAX_WEB_SCRAPE_URLS = 100
 INITIAL_INSIGHT_LIMIT = 10
 FOLLOW_UP_INSIGHT_LIMIT = 5
 IES_REPORT_API_URL = "https://ies-api.alchemy-research.com/v1/reports/ies"
+IES_REPORT_TIMEOUT_SECONDS = max(settings.EXTERNAL_TIMEOUT_SECONDS, 90)
 
 
 def _sanitize_for_log(value: str, limit: int = 120) -> str:
@@ -526,12 +527,24 @@ async def ies_report(request: Request) -> JSONResponse:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid IES report payload: {exc}") from exc
 
-    timeout = httpx.Timeout(settings.EXTERNAL_TIMEOUT_SECONDS)
+    timeout = httpx.Timeout(
+        connect=min(10.0, float(IES_REPORT_TIMEOUT_SECONDS)),
+        read=float(IES_REPORT_TIMEOUT_SECONDS),
+        write=float(IES_REPORT_TIMEOUT_SECONDS),
+        pool=float(IES_REPORT_TIMEOUT_SECONDS),
+    )
+    upstream_payload = {
+        "industry": request_model.industry,
+        "filter_type": request_model.filter_type,
+        "top_n": request_model.top_n,
+    }
+    if request_model.filter_value is not None:
+        upstream_payload["filter_value"] = request_model.filter_value
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.post(
                 IES_REPORT_API_URL,
-                json=request_model.model_dump(),
+                json=upstream_payload,
                 headers={"Accept": "application/json"},
             )
     except httpx.HTTPError as exc:
