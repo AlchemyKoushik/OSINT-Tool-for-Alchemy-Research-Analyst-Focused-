@@ -3678,7 +3678,7 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
   }, [result?.title]);
 
   return html`
-    <div className="paper-sheet flex w-full flex-col rounded-[32px] px-6 py-6 md:px-10 md:py-10 space-y-9">
+    <div className="paper-sheet ies-result-sheet flex w-full flex-col rounded-[32px] px-6 py-6 md:px-10 md:py-10 space-y-9">
       <!-- 1. Industry Header -->
       <section className="ies-hero">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">

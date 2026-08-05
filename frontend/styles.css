@@ -159,6 +159,11 @@ textarea:disabled {
   box-shadow: var(--paper-shadow);
 }
 
+.ies-result-sheet {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 248, 242, 0.96));
+}
+
 .paper-sheet::before {
   content: "";
   position: absolute;
@@ -562,15 +567,6 @@ textarea:disabled {
 
 .ies-hero {
   position: relative;
-}
-
-.ies-hero::before {
-  content: "";
-  position: absolute;
-  inset: -0.35rem -0.25rem auto -0.25rem;
-  height: 0.65rem;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(39, 67, 60, 0.2), rgba(184, 140, 82, 0.3), rgba(39, 67, 60, 0.08));
 }
 
 .ies-insights-shell {
@@ -1270,9 +1266,6 @@ textarea:disabled {
     align-self: flex-end;
   }
 
-  .ies-hero::before {
-    inset-inline: 0;
-  }
 }
 
 @media (max-width: 768px) {
