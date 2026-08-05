@@ -2347,7 +2347,7 @@ function MetricCard({ label, value, tone = "default" }) {
 
   return html`
     <div className=${cx("metric-card-shell flex h-full flex-col items-center justify-center text-center rounded-[18px] px-3 py-3 min-w-0", toneClass)}>
-      <p className="m-0 font-display text-[10px] md:text-[11px] font-medium uppercase tracking-wider text-atelier-moss/70 text-center truncate w-full" title=${label}>${label}</p>
+      <p className="m-0 font-display text-[9px] md:text-[10px] font-medium uppercase tracking-wider text-atelier-moss/70 text-center truncate w-full" title=${label}>${label}</p>
       <p className="mt-1.5 font-display text-base md:text-lg font-semibold tracking-tight text-atelier-ink text-center truncate w-full" title=${value}>
         ${value}
       </p>
@@ -2379,7 +2379,6 @@ function buildIesInsightRows(result) {
   const summary = result?.summary || {};
   const chartPoints = Array.isArray(result?.scatter_chart?.data) ? result.scatter_chart.data.filter(Boolean) : [];
   const request = result?.request || {};
-  const outliers = companies.filter((company) => company?.is_outlier);
 
   const highestGrowth = [...companies]
     .filter((company) => Number.isFinite(Number(company?.revenue_growth_lq_yoy)))
@@ -2389,24 +2388,16 @@ function buildIesInsightRows(result) {
     .filter((company) => Number.isFinite(Number(company?.operating_margin)))
     .sort((a, b) => Number(b.operating_margin) - Number(a.operating_margin))[0];
 
-  const largestCompany = [...companies]
-    .filter((company) => Number.isFinite(Number(company?.market_cap)) || Number.isFinite(Number(company?.revenue_ttm)))
-    .sort((a, b) => {
-      const aPrimary = Number.isFinite(Number(a?.market_cap)) ? Number(a.market_cap) : Number(a?.revenue_ttm);
-      const bPrimary = Number.isFinite(Number(b?.market_cap)) ? Number(b.market_cap) : Number(b?.revenue_ttm);
-      return bPrimary - aPrimary;
-    })[0];
-
-  const valuationCandidates = companies
+  const valuationRevenueCandidates = companies
     .map((company) => Number(company?.ev_to_revenue_ttm))
     .filter((value) => Number.isFinite(value));
-  const valuationFallbackCandidates = companies
-    .map((company) => Number(company?.forward_pe))
+  const valuationEbitdaCandidates = companies
+    .map((company) => Number(company?.ev_to_ebitda_ttm))
     .filter((value) => Number.isFinite(value));
-  const valuationSeries = valuationCandidates.length ? valuationCandidates : valuationFallbackCandidates;
-  const valuationLabel = valuationCandidates.length ? "EV / Revenue" : "Forward P/E";
-  const valuationMin = valuationSeries.length ? Math.min(...valuationSeries) : null;
-  const valuationMax = valuationSeries.length ? Math.max(...valuationSeries) : null;
+  const valuationRevenueMin = valuationRevenueCandidates.length ? Math.min(...valuationRevenueCandidates) : null;
+  const valuationRevenueMax = valuationRevenueCandidates.length ? Math.max(...valuationRevenueCandidates) : null;
+  const valuationEbitdaMin = valuationEbitdaCandidates.length ? Math.min(...valuationEbitdaCandidates) : null;
+  const valuationEbitdaMax = valuationEbitdaCandidates.length ? Math.max(...valuationEbitdaCandidates) : null;
   const coverageCount = Number(summary.requested_top_n || companies.length || 0);
   const coveragePhrase = coverageCount ? `Top ${coverageCount}` : "focused";
   const scopeInfo = getIesReportScope(
@@ -2424,16 +2415,14 @@ function buildIesInsightRows(result) {
   const highestMarginLabel = highestMargin
     ? `${highestMargin.company_name || highestMargin.ticker || "Company"} shows the highest operating margin at ${formatIesPercent(highestMargin.operating_margin)}.`
     : "Operating margin leadership is not available in the current universe.";
-  const largestCompanyLabel = largestCompany
-    ? `${largestCompany.company_name || largestCompany.ticker || "Company"} is the largest company in the universe at ${formatIesCompactNumber(largestCompany.market_cap || largestCompany.revenue_ttm)}.`
-    : "A clear largest company could not be isolated from the current data.";
-  const outlierLabel = outliers.length
-    ? `${outliers.slice(0, 3).map((company) => company.company_name || company.ticker).filter(Boolean).join(", ")} ${outliers.length === 1 ? "is" : "are"} flagged as outliers.`
-    : "No companies were flagged as outliers in the current universe.";
-  const valuationLabelText =
-    valuationMin !== null && valuationMax !== null
-      ? `${valuationLabel} spans ${formatIesRatio(valuationMin)} to ${formatIesRatio(valuationMax)} across the universe.`
-      : "A stable valuation range could not be derived from the available companies.";
+  const valuationLabelText = [
+    valuationRevenueMin !== null && valuationRevenueMax !== null
+      ? `EV / Revenue spans ${formatIesRatio(valuationRevenueMin)} to ${formatIesRatio(valuationRevenueMax)} across the universe.`
+      : "EV / Revenue could not be derived from the available companies.",
+    valuationEbitdaMin !== null && valuationEbitdaMax !== null
+      ? `EV / EBITDA spans ${formatIesRatio(valuationEbitdaMin)} to ${formatIesRatio(valuationEbitdaMax)} across the universe.`
+      : "EV / EBITDA could not be derived from the available companies.",
+  ].join(" ");
 
   return {
     summary:
@@ -2450,18 +2439,6 @@ function buildIesInsightRows(result) {
         body: highestMarginLabel,
         tone: "gold",
         icon: html`<svg className="w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>`,
-      },
-      {
-        label: "Largest Company",
-        body: largestCompanyLabel,
-        tone: "forest",
-        icon: html`<svg className="w-4 h-4 text-atelier-forest" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01" /></svg>`,
-      },
-      {
-        label: "Notable Outliers",
-        body: outlierLabel,
-        tone: "outlier",
-        icon: html`<svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>`,
       },
       {
         label: "Valuation Range",
@@ -2515,10 +2492,10 @@ function IesCompanyDrawerSection({ title, fields }) {
   return html`
     <section className="ies-drawer__section">
       <div className="flex items-end justify-between gap-3">
-        <h5 className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
+        <h5 className="m-0 text-[9px] font-bold uppercase tracking-[0.24em] text-atelier-moss/72">
           ${title}
         </h5>
-        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/50">
+        <span className="text-[8px] font-bold uppercase tracking-[0.18em] text-atelier-moss/50">
           ${normalizedFields.length} fields
         </span>
       </div>
@@ -2628,9 +2605,9 @@ function IesCompanyDrawer({ company, open, onClose }) {
                         { label: "Enterprise Value", value: formatIesCompactNumber(renderedCompany.enterprise_value) },
                         { label: "Current EV", value: formatIesCompactNumber(renderedCompany.current_ev) },
                         { label: "EBITDA TTM", value: formatIesCompactNumber(renderedCompany.ebitda_ttm) },
-                        { label: "Revenue Growth", value: formatIesPercent(renderedCompany.revenue_growth_lq_yoy) },
-                        { label: "Operating Margin", value: formatIesPercent(renderedCompany.operating_margin) },
-                        { label: "EBITDA Margin", value: formatIesPercent(renderedCompany.ebitda_margin) },
+                        { label: "Median Rev. Growth (LQ YoY)", value: formatIesPercent(renderedCompany.revenue_growth_lq_yoy) },
+                        { label: "Median Op. Margin (TTM)", value: formatIesPercent(renderedCompany.operating_margin) },
+                        { label: "Median EBITDA Margin (TTM)", value: formatIesPercent(renderedCompany.ebitda_margin) },
                       ]}
                     />
 
@@ -2751,13 +2728,13 @@ function JournalCompleted({ result, debug, meta }) {
         <div className="editorial-rule mt-4"></div>
 
         <div className="mt-4 grid gap-2.5 grid-cols-2">
-          <${MetricCard} label="Revenue Growth" value=${formatIesPercent(summary.median_revenue_growth)} />
-          <${MetricCard} label="Operating Margin" value=${formatIesPercent(summary.median_operating_margin)} />
-          <${MetricCard} label="EBITDA Margin" value=${formatIesPercent(summary.median_ebitda_margin)} />
+          <${MetricCard} label="Median Rev. Growth (LQ YoY)" value=${formatIesPercent(summary.median_revenue_growth)} />
+          <${MetricCard} label="Median Op. Margin (TTM)" value=${formatIesPercent(summary.median_operating_margin)} />
+          <${MetricCard} label="Median EBITDA Margin (TTM)" value=${formatIesPercent(summary.median_ebitda_margin)} />
           <${MetricCard} label="EV / Revenue" value=${formatIesRatio(summary.median_ev_to_revenue)} />
           <${MetricCard} label="EV / EBITDA" value=${formatIesRatio(summary.median_ev_to_ebitda)} />
           <${MetricCard} label="Forward P/E" value=${formatIesRatio(summary.median_forward_pe)} />
-          <${MetricCard} label="EPS Beat Rate" value=${formatIesPercent(summary.eps_beat_rate)} />
+          <${MetricCard} label="EPS Beat Rate (LQ)" value=${formatIesPercent(summary.eps_beat_rate)} />
           <${MetricCard} label="5-Day Reaction" value=${formatIesPercent(summary.median_five_day_price_reaction)} />
         </div>
       </div>
@@ -3585,7 +3562,7 @@ function IesInsightCard({ label, body, tone = "default", icon }) {
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs">
           ${icon || html`<svg className="w-4 h-4 text-atelier-forest" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>`}
         </div>
-        <p className="m-0 font-display text-sm font-semibold text-atelier-ink">
+        <p className="m-0 font-display text-[12px] font-semibold text-atelier-ink">
           ${label}
         </p>
       </div>
@@ -3616,8 +3593,8 @@ function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompan
               <th className="py-3 pl-3 pr-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70 w-8">#</th>
               <th className="py-3 px-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Company & Ticker</th>
               <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue TTM</th>
-              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Growth</th>
-              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Margin</th>
+              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue Growth</th>
+              <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Operating Margin (TTM)</th>
               <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / Revenue</th>
               <th className="py-3 px-2 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Forward P/E</th>
               <th className="py-3 pr-3 pl-1 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Signals</th>
@@ -3666,11 +3643,12 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
   const scopeValue = displayScope === "global" ? "Global" : displayScopeValue;
 
   const executiveMetrics = [
-    { label: "Companies Returned", value: String(summary.companies_returned || companies.length || 0) },
-    { label: "Companies Enriched", value: String(summary.companies_enriched ?? 0) },
-    { label: "Median Revenue Growth", value: formatIesPercent(summary.median_revenue_growth), trend: Number(summary.median_revenue_growth) > 0 ? "up" : Number(summary.median_revenue_growth) < 0 ? "down" : null },
-    { label: "Median Operating Margin", value: formatIesPercent(summary.median_operating_margin), trend: Number(summary.median_operating_margin) > 0 ? "up" : Number(summary.median_operating_margin) < 0 ? "down" : null },
+    { label: "Companies Scanned", value: String(summary.companies_returned || companies.length || 0) },
+    { label: "Companies Fetched", value: String(summary.companies_enriched ?? 0) },
+    { label: "Median Rev. Growth (LQ YoY)", value: formatIesPercent(summary.median_revenue_growth), trend: Number(summary.median_revenue_growth) > 0 ? "up" : Number(summary.median_revenue_growth) < 0 ? "down" : null },
+    { label: "Median Op. Margin (TTM)", value: formatIesPercent(summary.median_operating_margin), trend: Number(summary.median_operating_margin) > 0 ? "up" : Number(summary.median_operating_margin) < 0 ? "down" : null },
     { label: "Median EV / Revenue", value: formatIesRatio(summary.median_ev_to_revenue) },
+    { label: "Median EV / EBITDA", value: formatIesRatio(summary.median_ev_to_ebitda) },
   ];
 
   useEffect(() => {
@@ -3708,7 +3686,7 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
                 ${coverageLabel}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
-                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Last Updated:</span>
+                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Generated On:</span>
                 ${preparedDate}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
@@ -3727,11 +3705,11 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
 
       <!-- 2. Executive KPI Strip (Horizontal Ribbon) -->
       <section>
-        <div className="rounded-2xl border border-atelier-line/80 bg-white/75 backdrop-blur-md shadow-sm p-3 md:p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-atelier-line/50">
+        <div className="rounded-2xl border border-atelier-line/80 bg-white/75 backdrop-blur-md shadow-sm p-3 md:p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-atelier-line/50">
           ${executiveMetrics.map(
             (metric) => html`
               <div key=${metric.label} className="p-3 md:px-5 md:py-2 flex flex-col justify-center">
-                <span className="font-display text-[10px] font-medium uppercase tracking-[0.2em] text-atelier-moss/70">
+                <span className="font-display text-[8px] md:text-[9px] font-medium uppercase tracking-[0.14em] text-atelier-moss/70">
                   ${metric.label}
                 </span>
                 <div className="mt-1.5 flex items-baseline gap-2">

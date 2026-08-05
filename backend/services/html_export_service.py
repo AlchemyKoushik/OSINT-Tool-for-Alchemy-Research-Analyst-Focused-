@@ -74,15 +74,15 @@ def _render_ies_metric_cards(summary: Dict[str, Any], metadata: Dict[str, Any], 
         ("Industry", _escape(request.get("industry") or summary.get("industry") or "N/A")),
         (scope_label, _escape(scope_value)),
         ("Top N", _escape(request.get("top_n") or summary.get("requested_top_n") or "N/A")),
-        ("Companies", html.escape(str(summary.get("companies_returned") or company_count or 0))),
-        ("Enriched", html.escape(str(summary.get("companies_enriched") or metadata.get("total_companies_successfully_enriched") or 0))),
-        ("Median Revenue Growth", _escape(_format_ies_percent(summary.get("median_revenue_growth")))),
-        ("Median Operating Margin", _escape(_format_ies_percent(summary.get("median_operating_margin")))),
-        ("Median EBITDA Margin", _escape(_format_ies_percent(summary.get("median_ebitda_margin")))),
+        ("Companies Scanned", html.escape(str(summary.get("companies_returned") or company_count or 0))),
+        ("Companies Fetched", html.escape(str(summary.get("companies_enriched") or metadata.get("total_companies_successfully_enriched") or 0))),
+        ("Median Rev. Growth (LQ YoY)", _escape(_format_ies_percent(summary.get("median_revenue_growth")))),
+        ("Median Op. Margin (TTM)", _escape(_format_ies_percent(summary.get("median_operating_margin")))),
+        ("Median EBITDA Margin (TTM)", _escape(_format_ies_percent(summary.get("median_ebitda_margin")))),
         ("Median EV / Revenue", _escape(_format_ies_ratio(summary.get("median_ev_to_revenue")))),
         ("Median EV / EBITDA", _escape(_format_ies_ratio(summary.get("median_ev_to_ebitda")))),
         ("Median Forward P/E", _escape(_format_ies_ratio(summary.get("median_forward_pe")))),
-        ("EPS Beat Rate", _escape(_format_ies_percent(summary.get("eps_beat_rate")))),
+        ("EPS Beat Rate (LQ)", _escape(_format_ies_percent(summary.get("eps_beat_rate")))),
         ("5-Day Reaction", _escape(_format_ies_percent(summary.get("median_five_day_price_reaction")))),
     ]
     return "".join(
@@ -131,7 +131,7 @@ def _render_ies_scatter_chart(scatter_chart: Dict[str, Any]) -> str:
         "</div>"
         "<div class=\"ies-chart-table\">"
         "<div class=\"ies-chart-row ies-chart-row--header\">"
-        "<div>Ticker</div><div>Company</div><div>Growth</div><div>Margin</div><div>Bubble</div><div>Status</div>"
+        "<div>Ticker</div><div>Company</div><div>Revenue Growth</div><div>Operating Margin (TTM)</div><div>Bubble</div><div>Status</div>"
         "</div>"
         f"{''.join(rows)}"
         "</div>"
@@ -189,8 +189,9 @@ def _render_ies_company_card(company: Dict[str, Any], index: int) -> str:
         f"<div class=\"summary-card\"><span>Market Cap</span><strong>{_escape(_format_ies_compact_number(company.get('market_cap')))}</strong></div>"
         f"<div class=\"summary-card\"><span>EV / Revenue</span><strong>{_escape(_format_ies_ratio(company.get('ev_to_revenue_ttm')))}</strong></div>"
         f"<div class=\"summary-card\"><span>EV / EBITDA</span><strong>{_escape(_format_ies_ratio(company.get('ev_to_ebitda_ttm')))}</strong></div>"
-        f"<div class=\"summary-card\"><span>Operating Margin</span><strong>{_escape(_format_ies_percent(company.get('operating_margin')))}</strong></div>"
-        f"<div class=\"summary-card\"><span>EBITDA Margin</span><strong>{_escape(_format_ies_percent(company.get('ebitda_margin')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>Median Rev. Growth (LQ YoY)</span><strong>{_escape(_format_ies_percent(company.get('revenue_growth_lq_yoy')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>Median Op. Margin (TTM)</span><strong>{_escape(_format_ies_percent(company.get('operating_margin')))}</strong></div>"
+        f"<div class=\"summary-card\"><span>Median EBITDA Margin (TTM)</span><strong>{_escape(_format_ies_percent(company.get('ebitda_margin')))}</strong></div>"
         f"<div class=\"summary-card\"><span>Forward P/E</span><strong>{_escape(_format_ies_ratio(company.get('forward_pe')))}</strong></div>"
         f"<div class=\"summary-card\"><span>EPS Surprise</span><strong>{_escape(_format_ies_percent(company.get('eps_surprise')))}</strong></div>"
         "</div>"
@@ -712,8 +713,8 @@ def build_html_export(
     .summary-card span {{
       display: block;
       margin-bottom: 8px;
-      font: 700 11px/1.4 Arial, sans-serif;
-      letter-spacing: 0.18em;
+      font: 700 9px/1.4 Arial, sans-serif;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
       color: var(--muted);
     }}
