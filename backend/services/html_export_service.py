@@ -553,7 +553,10 @@ def _render_ies_scatter_svg(chart: Dict[str, Any]) -> str:
 
     chart_title = "Peer Positioning"
     x_label = html.escape(_safe_text(chart.get("x_label"), "Revenue Growth (LQ YoY)"))
-    y_label = html.escape(_safe_text(chart.get("y_label"), "Operating Margin (TTM)"))
+    raw_y = _safe_text(chart.get("y_label"), "Operating Margin (TTM)")
+    if raw_y == "Operating Margin":
+        raw_y = "Operating Margin (TTM)"
+    y_label = html.escape(raw_y)
     bubble_label = html.escape(_safe_text(chart.get("bubble_size_label"), "Revenue TTM"))
 
     return f"""
@@ -926,8 +929,8 @@ def _render_ies_export_document(result: Dict[str, Any], meta: Dict[str, Any]) ->
     }}
 
     .memo-shell {{
-      width: min(1120px, calc(100% - 32px));
-      margin: 32px auto 48px;
+      width: min(1320px, calc(100% - 24px));
+      margin: 24px auto 48px;
       display: grid;
       gap: 28px;
     }}
