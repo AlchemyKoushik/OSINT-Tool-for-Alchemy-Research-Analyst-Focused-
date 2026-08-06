@@ -2410,16 +2410,7 @@ function buildIesInsightRows(result) {
   const valuationRevenueMax = valuationRevenueCandidates.length ? Math.max(...valuationRevenueCandidates) : null;
   const valuationEbitdaMin = valuationEbitdaCandidates.length ? Math.min(...valuationEbitdaCandidates) : null;
   const valuationEbitdaMax = valuationEbitdaCandidates.length ? Math.max(...valuationEbitdaCandidates) : null;
-  const coverageCount = Number(summary.requested_top_n || companies.length || 0);
-  const coveragePhrase = coverageCount ? `Top ${coverageCount}` : "focused";
-  const scopeInfo = getIesReportScope(
-    request.filter_type === "region"
-      ? "region_specific"
-      : request.filter_type === "global"
-        ? "global"
-        : "country_specific",
-    request.filter_value || request.country || summary.filter_value || summary.country || "",
-  );
+
 
   const highestGrowthLabel = highestGrowth
     ? `${highestGrowth.company_name || highestGrowth.ticker || "Company"} leads revenue growth at ${formatIesPercent(highestGrowth.revenue_growth_lq_yoy)}.`
@@ -2438,7 +2429,7 @@ function buildIesInsightRows(result) {
 
   return {
     summary:
-      `This memo covers ${summary.industry || "the selected industry"} in ${scopeInfo.label} with ${coveragePhrase} coverage and ${chartPoints.length || companies.length || 0} plotted observations.`,
+      "This memo presents peer data for the selected companies to support industry analysis and comparison.",
     rows: [
       {
         label: "Highest Growth",

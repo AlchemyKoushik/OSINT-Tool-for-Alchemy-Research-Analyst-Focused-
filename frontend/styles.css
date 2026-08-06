@@ -1215,9 +1215,6 @@ textarea:disabled {
 
 .module-selector-bar {
   margin-bottom: 0;
-  box-shadow: none;
-  border-bottom-color: transparent;
-  border-bottom-width: 0;
   position: relative;
   z-index: 2;
   background-clip: padding-box;
