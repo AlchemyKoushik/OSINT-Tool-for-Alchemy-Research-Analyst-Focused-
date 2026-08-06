@@ -3424,7 +3424,7 @@ function medianOfValues(values) {
   return (numericValues[middle - 1] + numericValues[middle]) / 2;
 }
 
-function IesCompanyRow({ company, index, selected, onSelect }) {
+function IesCompanyRow({ company, index }) {
   const companyName = company.company_name || company.ticker || "Company";
   const isDcmRow = String(company.ticker || "").toUpperCase() === "DCM.VN";
   const contentSizeClass = isDcmRow ? "text-[11px] sm:text-[12px]" : "text-xs sm:text-sm";
@@ -3433,28 +3433,17 @@ function IesCompanyRow({ company, index, selected, onSelect }) {
   return html`
     <tr
       className=${cx(
-    "ies-universe-row group cursor-pointer transition-colors duration-75",
+    "ies-universe-row transition-colors duration-75",
     index % 2 === 1 ? "bg-white/40" : "bg-[#FAF7F2]/30",
-    company.is_outlier ? "bg-amber-50/40" : "",
-    selected ? "bg-amber-100/60 shadow-xs border-l-4 border-l-atelier-gold" : "hover:bg-[#F5EFE6]/80"
+    company.is_outlier ? "bg-amber-50/40" : ""
   )}
-      onClick=${onSelect}
-      role="button"
-      tabIndex="0"
-      aria-selected=${selected ? "true" : "false"}
-      onKeyDown=${(event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        onSelect(event);
-      }
-    }}
     >
       <td className="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">
         ${String(index + 1).padStart(2, "0")}
       </td>
       <td className="py-3 px-2.5 align-middle">
         <div className="flex flex-col min-w-0">
-          <span className=${cx("font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight", contentSizeClass)}>
+          <span className=${cx("font-display font-bold text-atelier-ink break-words whitespace-normal leading-tight", contentSizeClass)}>
             ${companyName}
           </span>
           <div className=${cx("flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display", isDcmRow ? "text-[9px] sm:text-[10px]" : "text-[10px]")}>
@@ -3544,7 +3533,7 @@ function IesInsightCard({ label, body, tone = "default", icon }) {
   `;
 }
 
-function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompany }) {
+function IesCompanyUniverseTable({ companies }) {
   const normalizedCompanies = Array.isArray(companies) ? companies.filter(Boolean) : [];
 
   if (!normalizedCompanies.length) {
@@ -3577,8 +3566,6 @@ function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompan
                   key=${`${getIesDisplayCompanyKey(company, index)}-${index}`}
                   company=${company}
                   index=${index}
-                  selected=${selectedCompanyKey === getIesDisplayCompanyKey(company, index)}
-                  onSelect=${() => onSelectCompany(getIesDisplayCompanyKey(company, index))}
                 />
               `,
   )}
@@ -3690,16 +3677,8 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
 
         <${IesCompanyUniverseTable}
           companies=${companies}
-          selectedCompanyKey=${selectedCompanyKey}
-          onSelectCompany=${(key) => setSelectedCompanyKey((current) => (current === key ? "" : key))}
         />
       </section>
-
-      <${IesCompanyDrawer}
-        company=${selectedCompany}
-        open=${Boolean(selectedCompany)}
-        onClose=${() => setSelectedCompanyKey("")}
-      />
     </div>
   `;
 }
