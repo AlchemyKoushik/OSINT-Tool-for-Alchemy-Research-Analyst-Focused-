@@ -3741,8 +3741,8 @@ function FieldNotesPane({
   reducedMotion,
 }) {
   return html`
-    <${PanelShell} className="workspace-pane flex min-h-0 flex-col overflow-hidden px-4 py-4 md:px-5 md:py-5">
-      <div className="workspace-pane-body mt-4 min-h-0 flex-1 flex flex-col justify-center overflow-hidden">
+    <${PanelShell} className="workspace-pane flex min-h-0 flex-col overflow-hidden px-5 py-5 md:px-6 md:py-6">
+      <div className="workspace-pane-body my-auto min-h-0 flex-1 flex flex-col justify-center overflow-hidden">
         <${AnimatePresence} initial=${false} mode="wait">
           ${analysisState === "completed"
       ? html`<${JournalCompleted} key="journal-completed" result=${result} debug=${debug} meta=${meta} />`
@@ -4754,7 +4754,7 @@ function BriefingCanvas({
 }) {
   return html`
     <${PanelShell} className="workspace-pane flex min-h-0 flex-col overflow-hidden px-5 py-5 md:px-6 md:py-6">
-      <div className="workspace-pane-body mt-5 min-h-0 flex-1 overflow-hidden">
+      <div className="workspace-pane-body my-auto min-h-0 flex-1 flex flex-col justify-center overflow-hidden">
         <${AnimatePresence} initial=${false} mode="wait">
           ${analysisState === "completed"
       ? html`
