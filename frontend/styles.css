@@ -1316,3 +1316,30 @@ svg circle:focus-visible {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Optimized Table Scroll Performance & Hidden Scrollbar */
+.ies-universe-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 48px;
+}
+
+.panel-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.panel-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Tooltip Real Frosted Glass Blur */
+.ies-scatter-tooltip > div {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* Loading Select State */
+.command-select.is-loading {
+  opacity: 0.85;
+}

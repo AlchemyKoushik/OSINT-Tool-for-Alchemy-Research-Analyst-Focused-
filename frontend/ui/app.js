@@ -1278,6 +1278,7 @@ function ThemedSelect({
   triggerClassName = COMMAND_SELECT_CLASS,
   placeholderLabel = "None",
   disabled = false,
+  loading = false,
 }) {
   const rootRef = useRef(null);
   const triggerRef = useRef(null);
@@ -1411,15 +1412,24 @@ function ThemedSelect({
         id=${id}
         ref=${triggerRef}
         type="button"
-        className=${triggerClassName}
+        className=${cx(triggerClassName, loading && "is-loading")}
         aria-expanded=${open ? "true" : "false"}
         aria-haspopup="listbox"
         aria-controls=${listboxId}
-        disabled=${disabled}
+        disabled=${disabled || loading}
         onClick=${toggleOpen}
         onKeyDown=${handleTriggerKeyDown}
       >
-        <span className="command-select__value">${selectedOption ? selectedOption.label : placeholderLabel}</span>
+        <span className="command-select__value inline-flex items-center gap-2">
+          ${loading
+            ? html`
+                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-atelier-forest border-t-transparent shrink-0"></span>
+                <span className="text-atelier-moss/70 font-medium">${placeholderLabel}</span>
+              `
+            : selectedOption
+              ? selectedOption.label
+              : placeholderLabel}
+        </span>
         <${SelectChevron} open=${open} />
       </button>
 
@@ -1855,8 +1865,9 @@ function CommandDeck({
                     value=${snapshotSector}
                     onChange=${onSnapshotSectorChange}
                     disabled=${isProcessing || snapshotCatalogLoading || !snapshotSectorOptions.length}
+                    loading=${snapshotCatalogLoading}
                     placeholderLabel=${snapshotCatalogLoading
-        ? "Loading Sectors"
+        ? "Loading Sectors..."
         : snapshotSectorOptions.length
           ? "Select Sector"
           : "No Sectors Found"}
@@ -1873,8 +1884,9 @@ function CommandDeck({
                     value=${snapshotIndustry}
                     onChange=${onSnapshotIndustryChange}
                     disabled=${isProcessing || snapshotCatalogLoading || !snapshotSector || !snapshotIndustryOptions.length}
+                    loading=${snapshotCatalogLoading}
                     placeholderLabel=${snapshotCatalogLoading
-        ? "Loading Industries"
+        ? "Loading Industries..."
         : snapshotSector
           ? snapshotIndustryOptions.length
             ? "Select Industry"
@@ -2422,7 +2434,7 @@ function buildIesInsightRows(result) {
     valuationEbitdaMin !== null && valuationEbitdaMax !== null
       ? `EV / EBITDA spans ${formatIesRatio(valuationEbitdaMin)} to ${formatIesRatio(valuationEbitdaMax)} across the universe.`
       : "EV / EBITDA could not be derived from the available companies.",
-  ].join(" ");
+  ].join("\n");
 
   return {
     summary:
@@ -2710,12 +2722,6 @@ function JournalCompleted({ result, debug, meta }) {
           <h3 className="m-0 font-display text-xl md:text-2xl font-semibold leading-tight text-atelier-ink">
             Industry Earnings Snapshot
           </h3>
-          <p className="mt-1 font-display text-xs font-medium leading-relaxed text-atelier-moss/90 max-w-xs">
-            ${request.industry || "Selected industry"} in ${scopeInfo.label} returned ${summary.companies_returned || 0} companies.
-          </p>
-          <div className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-atelier-goldDeep border border-amber-200/60">
-            Top ${request.top_n || summary.requested_top_n || 10} Companies
-          </div>
         </div>
 
         <div className="mt-4 grid gap-2.5 grid-cols-2">
@@ -2908,18 +2914,18 @@ function formatIesCompactNumber(value, fallback = "—") {
 
 function renderIesMetricValue(formattedValue, rawValue) {
   if (formattedValue === "—" || formattedValue === "N/A") {
-    return html`<span className="text-atelier-moss/40 font-mono">—</span>`;
+    return html`<span className="text-atelier-moss/40 font-display tabular-nums">—</span>`;
   }
   const numeric = Number(rawValue);
   if (Number.isFinite(numeric)) {
     if (numeric > 0) {
-      return html`<span className="text-emerald-700 font-mono font-semibold">${formattedValue}</span>`;
+      return html`<span className="text-emerald-700 font-display tabular-nums font-semibold">${formattedValue}</span>`;
     }
     if (numeric < 0) {
-      return html`<span className="text-rose-700 font-mono font-semibold">${formattedValue}</span>`;
+      return html`<span className="text-rose-700 font-display tabular-nums font-semibold">${formattedValue}</span>`;
     }
   }
-  return html`<span className="text-atelier-ink font-mono font-medium">${formattedValue}</span>`;
+  return html`<span className="text-atelier-ink font-display tabular-nums font-semibold">${formattedValue}</span>`;
 }
 
 function IesScatterChart({ chart }) {
@@ -2971,9 +2977,9 @@ function IesScatterChart({ chart }) {
     acc[point.ticker || point.company_name || String(point.index)] = point;
     return acc;
   }, {});
-  const chartTitle = String(chart?.title || "Peer Positioning").trim();
+  const chartTitle = "Peer Positioning";
   const xLabel = String(chart?.x_label || "Revenue Growth (LQ YoY)").trim();
-  const yLabel = String(chart?.y_label || "Operating Margin").trim();
+  const yLabel = "Operating Margin (TTM)";
   const bubbleLabel = String(chart?.bubble_size_label || "Revenue TTM").trim();
 
   function getPointKey(point) {
@@ -2987,23 +2993,14 @@ function IesScatterChart({ chart }) {
     return clamp(scaled, 9, 29);
   }
 
-  function getChartMetrics() {
-    const node = stageRef.current;
-    if (!node) {
-      return { width: 1040, height: 580 };
-    }
-    const bounds = node.getBoundingClientRect();
-    const width = Math.max(780, bounds.width || 1040);
-    return { width, height: Math.max(520, Math.min(620, width * 0.52)) };
-  }
-
   function getPlotFrame() {
-    const { width, height } = getChartMetrics();
+    const width = 1000;
+    const height = 560;
     const margin = {
       top: 42,
       right: 48,
       bottom: 76,
-      left: 92,
+      left: 104,
     };
     const plotWidth = Math.max(0, width - margin.left - margin.right);
     const plotHeight = Math.max(0, height - margin.top - margin.bottom);
@@ -3069,8 +3066,8 @@ function IesScatterChart({ chart }) {
       return;
     }
     const rect = container.getBoundingClientRect();
-    const pointerX = event?.clientX ? event.clientX - rect.left : xScale(point.x);
-    const pointerY = event?.clientY ? event.clientY - rect.top : yScale(point.y);
+    const pointerX = event && Number.isFinite(event.clientX) ? event.clientX - rect.left : (xScale(point.x) / 1000) * rect.width;
+    const pointerY = event && Number.isFinite(event.clientY) ? event.clientY - rect.top : (yScale(point.y) / 560) * rect.height;
     setTooltipState({
       visible: true,
       x: clamp(pointerX, 16, rect.width - 16),
@@ -3183,14 +3180,8 @@ function IesScatterChart({ chart }) {
     <div className="rounded-[28px] border border-atelier-line/80 bg-white/80 p-5 md:p-7 shadow-[0_20px_50px_rgba(31,42,41,0.05)]">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-atelier-line/60 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-atelier-forest"></span>
-            <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/70">
-              Interactive Scatter Visualization
-            </p>
-          </div>
-          <h4 className="mt-1 font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">
-            ${chartTitle}
+          <h4 className="m-0 font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">
+            Peer Positioning
           </h4>
         </div>
 
@@ -3203,9 +3194,12 @@ function IesScatterChart({ chart }) {
             <div className="flex h-2.5 w-6 rounded-full bg-gradient-to-r from-[#D96B60] via-[#C5BEB5] to-[#4E8764]"></div>
             <span>Color: <strong className="text-atelier-forest">${yLabel}</strong></span>
           </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-atelier-forest/8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-forest">
+          <div className="group relative inline-flex items-center gap-1.5 rounded-full bg-atelier-forest/8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-forest cursor-help">
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            View Details
+            <span>View Details</span>
+            <div className="pointer-events-none absolute right-0 top-full mt-2 hidden w-72 rounded-xl border border-atelier-line/90 bg-[#1F2A29] p-3 text-xs normal-case leading-relaxed font-normal text-white shadow-xl group-hover:block z-40">
+              The chart compares latest-quarter year-on-year revenue growth with TTM operating margins, showing how each peer balances current growth momentum with underlying profitability.
+            </div>
           </div>
         </div>
       </div>
@@ -3378,7 +3372,7 @@ function IesScatterChart({ chart }) {
         <div
           ref=${tooltipRef}
           className=${cx(
-      "ies-scatter-tooltip pointer-events-none absolute z-30 transition-all duration-180 ease-out",
+      "ies-scatter-tooltip pointer-events-none absolute z-30 transition-all duration-75 ease-out",
       tooltipState.visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-2 pointer-events-none"
     )}
           aria-hidden=${tooltipState.visible ? "false" : "true"}
@@ -3386,10 +3380,9 @@ function IesScatterChart({ chart }) {
       left: `${tooltipState.x}px`,
       top: `${tooltipState.y}px`,
       transform: "translate(-50%, -100%) translateY(-14px)",
-      transition: "opacity 180ms ease-out, transform 180ms ease-out, left 100ms ease-out, top 100ms ease-out",
     }}
         >
-          <div className="w-[19rem] md:w-[22rem] rounded-2xl border border-atelier-line/90 bg-white/94 p-4 shadow-[0_24px_50px_rgba(31,42,41,0.18)] backdrop-blur-md">
+          <div className="w-[19rem] md:w-[22rem] rounded-2xl border border-atelier-line/80 bg-[#FFFDF9]/62 p-4 shadow-[0_24px_50px_rgba(31,42,41,0.15)] backdrop-blur-xl">
             <div className="flex items-center justify-between gap-3 border-b border-atelier-line/50 pb-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-atelier-forest/10 font-mono text-xs font-bold text-atelier-forest">
@@ -3503,14 +3496,8 @@ function IesAnalystInsights({ result }) {
 
   return html`
     <section className="ies-insights-shell rounded-[28px] border border-atelier-line/80 bg-white/80 p-6 md:p-8 shadow-[0_20px_50px_rgba(31,42,41,0.04)]">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-atelier-gold"></span>
-          <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/70">
-            Analyst Insights
-          </p>
-        </div>
-        <h4 className="font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">
+      <div className="flex flex-col gap-1.5">
+        <h4 className="m-0 font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">
           Editorial Readout & Market Structure
         </h4>
         <p className="mt-1 font-display text-xs md:text-sm font-medium leading-relaxed text-atelier-moss">
@@ -3559,7 +3546,7 @@ function IesInsightCard({ label, body, tone = "default", icon }) {
           ${label}
         </p>
       </div>
-      <p className="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium">
+      <p className="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium whitespace-pre-line">
         ${body}
       </p>
     </div>
@@ -3578,18 +3565,18 @@ function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompan
   }
 
   return html`
-    <div className="overflow-hidden rounded-2xl border border-atelier-line/80 bg-white/80 shadow-[0_18px_48px_rgba(31,42,41,0.04)]">
+    <div className="overflow-hidden rounded-2xl border border-atelier-line/80 bg-white/80 shadow-[0_18px_48px_rgba(31,42,41,0.04)]" style=${{ contain: "content" }}>
       <div className="max-h-[38rem] overflow-y-auto panel-scroll">
         <table className="w-full text-left border-collapse">
-          <thead className="sticky top-0 z-20 isolate bg-[#FAF6F0]/98 backdrop-blur-md border-b border-atelier-line/80">
+          <thead className="sticky top-0 z-20 isolate bg-[#FAF6F0] border-b border-atelier-line/80">
             <tr>
-              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 pl-3 pr-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70 w-8">#</th>
-              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Company & Ticker</th>
-              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue TTM</th>
-              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue Growth</th>
-              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Operating Margin (TTM)</th>
-              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / Revenue</th>
-              <th className="sticky top-0 z-20 bg-[#FAF6F0]/98 py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / EBITDA</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0] py-3 pl-3 pr-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70 w-8">#</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Company & Ticker</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue (TTM)</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Rev. Growth (LQ YoY)</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Op. Margin (TTM)</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / Revenue</th>
+              <th className="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / EBITDA</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-atelier-line/40">
@@ -3648,44 +3635,14 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
   }, [result?.title]);
 
   return html`
-    <div className="paper-sheet ies-result-sheet flex w-full flex-col rounded-[32px] px-6 py-6 md:px-10 md:py-10 space-y-9">
+    <div className="paper-sheet ies-result-sheet flex w-full flex-col rounded-[32px] px-6 py-6 md:px-10 md:py-10 space-y-9 my-auto justify-center">
       <!-- 1. Industry Header -->
       <section className="ies-hero">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="w-full space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-atelier-gold animate-pulse"></span>
-              <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-atelier-moss/70">
-                Executive Analytics • Equity Research
-              </p>
-            </div>
+          <div className="w-full space-y-2">
             <h3 className="font-display text-4xl sm:text-5xl font-semibold leading-[0.95] tracking-tight text-atelier-ink">
               ${result?.title || "Industry Earnings Snapshot"}
             </h3>
-            
-            <!-- Subtle Metadata Chips -->
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
-                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Industry:</span>
-                ${displayIndustry}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
-                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">${scopeLabel}:</span>
-                ${scopeValue}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
-                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Coverage:</span>
-                ${coverageLabel}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
-                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Generated On:</span>
-                ${preparedDate}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-atelier-line/80 bg-white/80 px-3.5 py-1.5 text-xs font-semibold text-atelier-ink shadow-2xs">
-                <span className="text-[10px] uppercase tracking-wider text-atelier-moss/60">Reporting Period:</span>
-                LQ YoY / TTM
-              </span>
-            </div>
           </div>
 
           <div className="flex flex-col items-start gap-2.5 lg:items-end shrink-0">
@@ -3734,18 +3691,9 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
       <section>
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-atelier-forest"></span>
-              <p className="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/70">
-                Universe Ranking
-              </p>
-            </div>
-            <h4 className="mt-1 font-display text-2xl font-semibold leading-tight text-atelier-ink">
+            <h4 className="m-0 font-display text-2xl font-semibold leading-tight text-atelier-ink">
               Company Ranking Table
             </h4>
-          </div>
-          <div className="rounded-full bg-stone-100 px-3.5 py-1 text-xs font-bold text-atelier-ink">
-            ${companies.length} Companies Tracked
           </div>
         </div>
 
