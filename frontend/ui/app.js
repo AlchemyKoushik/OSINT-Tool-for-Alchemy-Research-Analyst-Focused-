@@ -1839,7 +1839,7 @@ function CommandDeck({
         <${PanelHeader}
           eyebrow="Command Deck"
           title="Design the earnings snapshot"
-          subtitle="Choose an industry, then use the same global, region, or country filters as the other modules."
+          subtitle="Create an earnings snapshot by sector, industry and geography."
         />
 
         <form className="mt-6 grid gap-4" onSubmit=${onAnalyze}>
@@ -3794,12 +3794,6 @@ function FieldNotesPane({
 }) {
   return html`
     <${PanelShell} className="workspace-pane flex min-h-0 flex-col overflow-hidden px-4 py-4 md:px-5 md:py-5">
-      <${PanelHeader}
-        eyebrow="Field Notes"
-        title="Evidence, workflow, and analyst memory"
-        subtitle="This rail keeps the run honest: how the brief was shaped, where it looked, what it kept, and the timing behind the result."
-      />
-
       <div className="workspace-pane-body mt-4 min-h-0 flex-1 flex flex-col justify-center overflow-hidden">
         <${AnimatePresence} initial=${false} mode="wait">
           ${analysisState === "completed"
@@ -3831,9 +3825,6 @@ function BriefIdle({ meta }) {
   return html`
     <div className="flex min-h-[24rem] items-center justify-center">
       <div className="paper-sheet w-full max-w-3xl rounded-[30px] px-8 py-10 text-center">
-        <p className="m-0 text-[11px] font-bold uppercase tracking-[0.26em] text-atelier-moss/68">
-          Briefing Canvas
-        </p>
         <h3 className="mt-5 font-display text-[2.7rem] font-semibold leading-none text-atelier-ink">
           Ready for the next intelligence brief
         </h3>
@@ -3917,9 +3908,6 @@ function WorkspaceTransitionShell() {
     >
       <${PanelShell} className="workspace-pane pointer-events-none flex min-h-0 flex-col overflow-hidden px-5 py-5 md:px-6 md:py-6">
         <div className="atelier-panel-strong rounded-[26px] px-5 py-5">
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.24em] text-atelier-moss/68">
-            Field Notes
-          </p>
           <div className="skeleton-wash mt-4 h-10 w-3/4 rounded-full"></div>
           <div className="skeleton-wash mt-4 h-3 w-full rounded-full"></div>
           <div className="skeleton-wash mt-3 h-3 w-[88%] rounded-full"></div>
@@ -4818,12 +4806,6 @@ function BriefingCanvas({
 }) {
   return html`
     <${PanelShell} className="workspace-pane flex min-h-0 flex-col overflow-hidden px-5 py-5 md:px-6 md:py-6">
-      <${PanelHeader}
-        eyebrow="Briefing Canvas"
-        title="Structured output, designed like a finished memo"
-        subtitle="The right pane stays focused on the deliverable: a polished brief with context, scope, and clear reading rhythm."
-      />
-
       <div className="workspace-pane-body mt-5 min-h-0 flex-1 overflow-hidden">
         <${AnimatePresence} initial=${false} mode="wait">
           ${analysisState === "completed"
