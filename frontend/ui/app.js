@@ -28,13 +28,13 @@ const API_URL =
   typeof window !== "undefined" && typeof window.OSINT_API_URL === "string" && window.OSINT_API_URL.trim()
     ? window.OSINT_API_URL.trim().replace(/\/+$/, "")
     : (
-        typeof window !== "undefined" &&
+      typeof window !== "undefined" &&
         window.location &&
         window.location.hostname !== "127.0.0.1" &&
         window.location.hostname !== "localhost"
-          ? window.location.origin.replace(/\/+$/, "")
-          : DEFAULT_API_CANDIDATES[0]
-      );
+        ? window.location.origin.replace(/\/+$/, "")
+        : DEFAULT_API_CANDIDATES[0]
+    );
 const STATIC_ASSET_VERSION =
   typeof window !== "undefined" && typeof window.__STATIC_ASSET_VERSION__ === "string"
     ? window.__STATIC_ASSET_VERSION__
@@ -436,20 +436,20 @@ function normalizeResearchItem(item) {
 
   const examples = Array.isArray(item.examples)
     ? item.examples
-        .map((example) => {
-          if (!example || typeof example !== "object") {
-            return null;
-          }
-          const text = String(
-            example.text || example.description || example.body || example.example || "",
-          ).trim();
-          const year = String(example.year || example.date || "").trim();
-          if (!text) {
-            return null;
-          }
-          return { text, year };
-        })
-        .filter(Boolean)
+      .map((example) => {
+        if (!example || typeof example !== "object") {
+          return null;
+        }
+        const text = String(
+          example.text || example.description || example.body || example.example || "",
+        ).trim();
+        const year = String(example.year || example.date || "").trim();
+        if (!text) {
+          return null;
+        }
+        return { text, year };
+      })
+      .filter(Boolean)
     : [];
 
   return {
@@ -459,9 +459,9 @@ function normalizeResearchItem(item) {
     market_role: String(item.market_role || item.role || item.company_role || "").trim(),
     key_company_facts: Array.isArray(item.key_company_facts || item.key_facts || item.company_facts)
       ? (item.key_company_facts || item.key_facts || item.company_facts)
-          .map((fact) => String(fact || "").trim())
-          .filter((fact, index, facts) => fact && facts.indexOf(fact) === index)
-          .slice(0, 7)
+        .map((fact) => String(fact || "").trim())
+        .filter((fact, index, facts) => fact && facts.indexOf(fact) === index)
+        .slice(0, 7)
       : [],
     competitive_positioning: String(
       item.competitive_positioning || item.competitive_implication || item.positioning_implication || "",
@@ -470,8 +470,8 @@ function normalizeResearchItem(item) {
     sources: normalizeSourceList(item.sources || item.references || item.evidence),
     source_ids: Array.isArray(item.source_ids)
       ? item.source_ids
-          .map((sourceId) => Number.parseInt(sourceId, 10))
-          .filter((sourceId, index, values) => Number.isInteger(sourceId) && sourceId > 0 && values.indexOf(sourceId) === index)
+        .map((sourceId) => Number.parseInt(sourceId, 10))
+        .filter((sourceId, index, values) => Number.isInteger(sourceId) && sourceId > 0 && values.indexOf(sourceId) === index)
       : [],
   };
 }
@@ -567,9 +567,9 @@ function normalizeResearchResponse(payload, fallbackSection = "trends") {
 
   const inferredSection =
     payload.section === "trends" ||
-    payload.section === "drivers" ||
-    payload.section === "competitive_landscape" ||
-    payload.section === "industry_earnings_snapshot"
+      payload.section === "drivers" ||
+      payload.section === "competitive_landscape" ||
+      payload.section === "industry_earnings_snapshot"
       ? payload.section
       : Array.isArray(payload.drivers)
         ? "drivers"
@@ -577,9 +577,9 @@ function normalizeResearchResponse(payload, fallbackSection = "trends") {
           ? "competitive_landscape"
           : Array.isArray(payload.industry_earnings_snapshot)
             ? "industry_earnings_snapshot"
-          : Array.isArray(payload.trends)
-            ? "trends"
-            : fallbackSection;
+            : Array.isArray(payload.trends)
+              ? "trends"
+              : fallbackSection;
   const normalizedMajorPlayers =
     inferredSection === "competitive_landscape" && Array.isArray(payload.major_players)
       ? payload.major_players.map(normalizeResearchItem).filter(Boolean)
@@ -612,10 +612,10 @@ function normalizeResearchResponse(payload, fallbackSection = "trends") {
 function isIesReportPayload(payload) {
   return Boolean(
     payload &&
-      typeof payload === "object" &&
-      Array.isArray(payload.companies) &&
-      payload.summary &&
-      payload.scatter_chart,
+    typeof payload === "object" &&
+    Array.isArray(payload.companies) &&
+    payload.summary &&
+    payload.scatter_chart,
   );
 }
 
@@ -754,7 +754,7 @@ function normalizeIesReportResponse(payload) {
       requested_top_n: Number.isFinite(topN) ? topN : toNumberOrNull(summary.requested_top_n || request.top_n),
     },
     scatter_chart: {
-      title: String(scatterChart.title || "Revenue Growth vs Operating Margin").trim(),
+      title: String(scatterChart.title || "Peer Positioning").trim(),
       x_label: String(scatterChart.x_label || "Revenue Growth (LQ YoY)").trim(),
       y_label: String(scatterChart.y_label || "Operating Margin").trim(),
       bubble_size_label: String(scatterChart.bubble_size_label || "Revenue TTM").trim(),
@@ -829,9 +829,9 @@ function buildExportItem(item) {
     market_role: String(normalizedItem?.market_role || "").trim(),
     key_company_facts: Array.isArray(normalizedItem?.key_company_facts)
       ? normalizedItem.key_company_facts
-          .map((fact) => String(fact || "").trim())
-          .filter(Boolean)
-          .slice(0, 5)
+        .map((fact) => String(fact || "").trim())
+        .filter(Boolean)
+        .slice(0, 5)
       : [],
     competitive_positioning: String(normalizedItem?.competitive_positioning || "").trim(),
     examples: buildExportExamples(normalizedItem?.examples),
@@ -872,17 +872,17 @@ async function triggerResultsDownload(result, meta, followUps = []) {
 
   const completedFollowUps = Array.isArray(followUps)
     ? followUps
-        .filter((entry) => entry?.status === "completed")
-        .map((entry) => ({
-          title: entry?.title,
-          section: entry?.section || result?.section,
-          ...buildExportResultPayload(
-            Array.isArray(entry?.results)
-              ? { section: entry?.section || result?.section, items: entry.results }
-              : entry?.result,
-          ),
-          meta: entry?.meta || meta,
-        }))
+      .filter((entry) => entry?.status === "completed")
+      .map((entry) => ({
+        title: entry?.title,
+        section: entry?.section || result?.section,
+        ...buildExportResultPayload(
+          Array.isArray(entry?.results)
+            ? { section: entry?.section || result?.section, items: entry.results }
+            : entry?.result,
+        ),
+        meta: entry?.meta || meta,
+      }))
     : [];
   const payload = {
     result: buildExportResultPayload(result),
@@ -1424,8 +1424,8 @@ function ThemedSelect({
       </button>
 
       ${open && menuPosition && getFloatingLayerRoot()
-        ? createPortal(
-            html`
+      ? createPortal(
+        html`
               <${motion.div}
                 key=${`${id}-menu`}
                 id=${listboxId}
@@ -1436,11 +1436,11 @@ function ThemedSelect({
                 animate=${{ opacity: 1, y: 0, scale: 1 }}
                 transition=${{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                 style=${{
-                  ...MOTION_SMOOTH_STYLE,
-                  top: `${menuPosition.top}px`,
-                  left: `${menuPosition.left}px`,
-                  width: `${menuPosition.width}px`,
-                }}
+            ...MOTION_SMOOTH_STYLE,
+            top: `${menuPosition.top}px`,
+            left: `${menuPosition.left}px`,
+            width: `${menuPosition.width}px`,
+          }}
                 className="command-select__menu"
               >
                 <div
@@ -1448,35 +1448,35 @@ function ThemedSelect({
                   style=${{ maxHeight: `${menuPosition.maxHeight}px` }}
                 >
                   ${options.map(
-                    (option) => html`
+            (option) => html`
                       <button
                         key=${option.value}
                         type="button"
                         role="option"
                         aria-selected=${option.value === value ? "true" : "false"}
                         className=${cx(
-                          "command-select__option",
-                          option.value === value && "command-select__option--selected",
-                        )}
+              "command-select__option",
+              option.value === value && "command-select__option--selected",
+            )}
                         onClick=${() => handleSelect(option.value)}
                       >
                         <span className="command-select__option-label">${option.label}</span>
                         <span
                           className=${cx(
-                            "command-select__option-mark",
-                            option.value === value && "command-select__option-mark--selected",
-                          )}
+              "command-select__option-mark",
+              option.value === value && "command-select__option-mark--selected",
+            )}
                           aria-hidden="true"
                         ></span>
                       </button>
                     `,
-                  )}
+          )}
                 </div>
               </${motion.div}>
             `,
-            getFloatingLayerRoot(),
-          )
-        : null}
+        getFloatingLayerRoot(),
+      )
+      : null}
     </div>
   `;
 }
@@ -1534,8 +1534,8 @@ function PanelHeader({ eyebrow, title, subtitle, action }) {
           ${title}
         </h2>
         ${subtitle
-          ? html`<p className="mt-2 max-w-2xl text-sm leading-6 text-atelier-moss">${subtitle}</p>`
-          : null}
+      ? html`<p className="mt-2 max-w-2xl text-sm leading-6 text-atelier-moss">${subtitle}</p>`
+      : null}
       </div>
       ${action || null}
     </div>
@@ -1554,8 +1554,8 @@ function DownloadResultsButton({ onClick, disabled = false, exporting = false })
     >
       <span className="download-results-button__icon-shell" aria-hidden="true">
         ${exporting
-          ? html`<span className="download-results-button__spinner"></span>`
-          : html`
+      ? html`<span className="download-results-button__spinner"></span>`
+      : html`
               <svg
                 className="download-results-button__icon"
                 xmlns="http://www.w3.org/2000/svg"
@@ -1673,19 +1673,19 @@ function RegionSelector({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         ${regions.length
-          ? regions.map(
-              (region) => html`
+      ? regions.map(
+        (region) => html`
                 <button
                   key=${region}
                   type="button"
                   disabled=${disabled}
                   onClick=${() => onSelect(region)}
                   className=${cx(
-                    "lift-on-hover rounded-[24px] border px-4 py-4 text-left",
-                    selectedValue === region
-                      ? "bg-atelier-sage/10 border-atelier-sage/28 text-atelier-ink shadow-[0_14px_30px_rgba(39,67,60,0.08)]"
-                      : "bg-white/72 border-atelier-line text-atelier-moss",
-                  )}
+          "lift-on-hover rounded-[24px] border px-4 py-4 text-left",
+          selectedValue === region
+            ? "bg-atelier-sage/10 border-atelier-sage/28 text-atelier-ink shadow-[0_14px_30px_rgba(39,67,60,0.08)]"
+            : "bg-white/72 border-atelier-line text-atelier-moss",
+        )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -1695,13 +1695,13 @@ function RegionSelector({
                       </p>
                     </div>
                     ${selectedValue === region
-                      ? html`<span className="rounded-full bg-atelier-sage/14 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-forest">Selected</span>`
-                      : null}
+            ? html`<span className="rounded-full bg-atelier-sage/14 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-forest">Selected</span>`
+            : null}
                   </div>
                 </button>
               `,
-            )
-          : html`
+      )
+      : html`
               <div className="rounded-[24px] border border-dashed border-atelier-line bg-white/64 px-4 py-5 text-sm text-atelier-moss">
                 No regions match that search.
               </div>
@@ -1743,19 +1743,19 @@ function CountrySelector({
       <div className="atelier-panel-strong rounded-[24px] p-2">
         <div className="panel-scroll max-h-[16rem] space-y-2 pr-1">
           ${countries.length
-            ? countries.map(
-                (country) => html`
+      ? countries.map(
+        (country) => html`
                   <button
                     key=${country.name}
                     type="button"
                     disabled=${disabled}
                     onClick=${() => onSelect(country.name)}
                     className=${cx(
-                      "lift-on-hover flex w-full items-center justify-between gap-4 rounded-[20px] border px-4 py-3 text-left",
-                      selectedValue === country.name
-                        ? "bg-atelier-sage/10 border-atelier-sage/26 text-atelier-ink"
-                        : "bg-white/70 border-atelier-line text-atelier-moss",
-                    )}
+          "lift-on-hover flex w-full items-center justify-between gap-4 rounded-[20px] border px-4 py-3 text-left",
+          selectedValue === country.name
+            ? "bg-atelier-sage/10 border-atelier-sage/26 text-atelier-ink"
+            : "bg-white/70 border-atelier-line text-atelier-moss",
+        )}
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-bold text-atelier-ink">${country.name}</span>
@@ -1764,16 +1764,16 @@ function CountrySelector({
                       </span>
                     </span>
                     ${selectedValue === country.name
-                      ? html`<span className="text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-forest">Selected</span>`
-                      : null}
+            ? html`<span className="text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-forest">Selected</span>`
+            : null}
                   </button>
                 `,
-              )
-            : html`
+      )
+      : html`
                 <div className="rounded-[22px] border border-dashed border-atelier-line bg-white/70 px-4 py-5 text-sm text-atelier-moss">
                   ${allCountriesCount
-                    ? "No countries match that search."
-                    : "Countries are temporarily unavailable. The last location refresh did not return a usable country list."}
+          ? "No countries match that search."
+          : "Countries are temporarily unavailable. The last location refresh did not return a usable country list."}
                 </div>
               `}
         </div>
@@ -1856,10 +1856,10 @@ function CommandDeck({
                     onChange=${onSnapshotSectorChange}
                     disabled=${isProcessing || snapshotCatalogLoading || !snapshotSectorOptions.length}
                     placeholderLabel=${snapshotCatalogLoading
-                      ? "Loading Sectors"
-                      : snapshotSectorOptions.length
-                        ? "Select Sector"
-                        : "No Sectors Found"}
+        ? "Loading Sectors"
+        : snapshotSectorOptions.length
+          ? "Select Sector"
+          : "No Sectors Found"}
                   />
                 </div>
 
@@ -1874,12 +1874,12 @@ function CommandDeck({
                     onChange=${onSnapshotIndustryChange}
                     disabled=${isProcessing || snapshotCatalogLoading || !snapshotSector || !snapshotIndustryOptions.length}
                     placeholderLabel=${snapshotCatalogLoading
-                      ? "Loading Industries"
-                      : snapshotSector
-                        ? snapshotIndustryOptions.length
-                          ? "Select Industry"
-                          : "No Industries Found"
-                        : "Choose Sector First"}
+        ? "Loading Industries"
+        : snapshotSector
+          ? snapshotIndustryOptions.length
+            ? "Select Industry"
+            : "No Industries Found"
+          : "Choose Sector First"}
                   />
                 </div>
 
@@ -1924,17 +1924,17 @@ function CommandDeck({
                   </p>
                   <p className="mt-2 text-sm font-bold text-atelier-ink">
                     ${locationPreference === "global"
-                      ? "Global"
-                      : locationValue
-                        ? `${humanizePreference(locationPreference)}: ${locationValue}`
-                        : humanizePreference(locationPreference)}
+        ? "Global"
+        : locationValue
+          ? `${humanizePreference(locationPreference)}: ${locationValue}`
+          : humanizePreference(locationPreference)}
                   </p>
                   <p className="mt-2 text-xs leading-5 text-atelier-moss">
                     ${locationPreference === "global"
-                      ? "Global keeps the snapshot broad and unrestricted."
-                      : locationValue
-                        ? "The snapshot is narrowed to the chosen geography. Use the edit control if you want to change it."
-                        : "Choose a region or country to activate a scoped filter."}
+        ? "Global keeps the snapshot broad and unrestricted."
+        : locationValue
+          ? "The snapshot is narrowed to the chosen geography. Use the edit control if you want to change it."
+          : "Choose a region or country to activate a scoped filter."}
                   </p>
                   <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-atelier-moss/72">
                     ${snapshotSector && snapshotIndustry ? `${snapshotSector.replace(/_/g, " ")} / ${snapshotIndustry.replace(/_/g, " ")}` : "Sector or industry not yet selected"}
@@ -1943,7 +1943,7 @@ function CommandDeck({
                 </div>
 
                 ${scopedFilterActive && locationValue
-                  ? html`
+        ? html`
                       <div className="shrink-0">
                         <${EditFilterButton}
                           label=${`Edit ${selectedScopeLabel} Filter`}
@@ -1952,13 +1952,13 @@ function CommandDeck({
                         />
                       </div>
                     `
-                  : null}
+        : null}
               </div>
             </div>
 
             <${AnimatePresence} initial=${false} mode="wait">
               ${locationPreference === "region_specific" && showSecondaryFilterPanel
-                ? html`
+        ? html`
                     <${motion.div}
                       key="snapshot-region-selector"
                       initial=${{ opacity: 0, y: 10, scale: 0.985 }}
@@ -1974,7 +1974,7 @@ function CommandDeck({
                             Secondary Filter Panel
                           </p>
                           ${locationValue
-                            ? html`
+            ? html`
                                 <button
                                   type="button"
                                   disabled=${isProcessing}
@@ -1985,7 +1985,7 @@ function CommandDeck({
                                   <${CloseIcon} />
                                 </button>
                               `
-                            : null}
+            : null}
                         </div>
                         <${RegionSelector}
                           regions=${filteredRegions}
@@ -1998,10 +1998,10 @@ function CommandDeck({
                       </div>
                     </${motion.div}>
                   `
-                : null}
+        : null}
 
               ${locationPreference === "country_specific" && showSecondaryFilterPanel
-                ? html`
+        ? html`
                     <${motion.div}
                       key="snapshot-country-selector"
                       initial=${{ opacity: 0, y: 10, scale: 0.985 }}
@@ -2017,7 +2017,7 @@ function CommandDeck({
                             Secondary Filter Panel
                           </p>
                           ${locationValue
-                            ? html`
+            ? html`
                                 <button
                                   type="button"
                                   disabled=${isProcessing}
@@ -2028,7 +2028,7 @@ function CommandDeck({
                                   <${CloseIcon} />
                                 </button>
                               `
-                            : null}
+            : null}
                         </div>
                         <${CountrySelector}
                           countries=${filteredCountries}
@@ -2042,24 +2042,24 @@ function CommandDeck({
                       </div>
                     </${motion.div}>
                   `
-                : null}
+        : null}
             </${AnimatePresence}>
 
             ${analysisError
-              ? html`
+        ? html`
                   <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-4 text-sm leading-7 text-rose-700">
                     ${analysisError}
                   </div>
                 `
-              : null}
+        : null}
 
             ${locationLoadError
-              ? html`
+        ? html`
                   <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
                     ${locationLoadError}
                   </div>
                 `
-              : null}
+        : null}
           </form>
         </${PanelShell}>
       </${motion.div}>
@@ -2130,22 +2130,22 @@ function CommandDeck({
                 </p>
                 <p className="mt-2 text-sm font-bold text-atelier-ink">
                   ${locationPreference === "global"
-                    ? "Global"
-                    : locationValue
-                      ? `${humanizePreference(locationPreference)}: ${locationValue}`
-                      : humanizePreference(locationPreference)}
+      ? "Global"
+      : locationValue
+        ? `${humanizePreference(locationPreference)}: ${locationValue}`
+        : humanizePreference(locationPreference)}
                 </p>
                 <p className="mt-2 text-xs leading-5 text-atelier-moss">
                   ${locationPreference === "global"
-                    ? "Global keeps the run wide and unrestricted."
-                    : locationValue
-                      ? "The run is narrowed to the chosen geography. Use the edit control if you want to change it."
-                      : "Choose a region or country to activate a scoped filter."}
+      ? "Global keeps the run wide and unrestricted."
+      : locationValue
+        ? "The run is narrowed to the chosen geography. Use the edit control if you want to change it."
+        : "Choose a region or country to activate a scoped filter."}
                 </p>
               </div>
 
               ${scopedFilterActive && locationValue
-                ? html`
+      ? html`
                     <div className="shrink-0">
                       <${EditFilterButton}
                         label=${`Edit ${selectedScopeLabel} Filter`}
@@ -2154,13 +2154,13 @@ function CommandDeck({
                       />
                     </div>
                   `
-                : null}
+      : null}
             </div>
           </div>
 
           <${AnimatePresence} initial=${false} mode="wait">
             ${locationPreference === "region_specific" && showSecondaryFilterPanel
-              ? html`
+      ? html`
                   <${motion.div}
                     key="region-selector"
                     initial=${{ opacity: 0, y: 10, scale: 0.985 }}
@@ -2176,7 +2176,7 @@ function CommandDeck({
                           Secondary Filter Panel
                         </p>
                         ${locationValue
-                          ? html`
+          ? html`
                               <button
                                 type="button"
                                 disabled=${isProcessing}
@@ -2187,7 +2187,7 @@ function CommandDeck({
                                 <${CloseIcon} />
                               </button>
                             `
-                          : null}
+          : null}
                       </div>
                       <${RegionSelector}
                         regions=${filteredRegions}
@@ -2200,10 +2200,10 @@ function CommandDeck({
                     </div>
                   </${motion.div}>
                 `
-              : null}
+      : null}
 
             ${locationPreference === "country_specific" && showSecondaryFilterPanel
-              ? html`
+      ? html`
                   <${motion.div}
                     key="country-selector"
                     initial=${{ opacity: 0, y: 10, scale: 0.985 }}
@@ -2219,7 +2219,7 @@ function CommandDeck({
                           Secondary Filter Panel
                         </p>
                         ${locationValue
-                          ? html`
+          ? html`
                               <button
                                 type="button"
                                 disabled=${isProcessing}
@@ -2230,7 +2230,7 @@ function CommandDeck({
                                 <${CloseIcon} />
                               </button>
                             `
-                          : null}
+          : null}
                       </div>
                       <${CountrySelector}
                         countries=${filteredCountries}
@@ -2244,24 +2244,24 @@ function CommandDeck({
                     </div>
                   </${motion.div}>
                 `
-              : null}
+      : null}
           </${AnimatePresence}>
 
           ${analysisError
-            ? html`
+      ? html`
                 <div className="rounded-[24px] border border-rose-200 bg-rose-50 px-4 py-4 text-sm leading-7 text-rose-700">
                   ${analysisError}
                 </div>
               `
-            : null}
+      : null}
 
           ${locationLoadError
-            ? html`
+      ? html`
                 <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-7 text-amber-900">
                   ${locationLoadError}
                 </div>
               `
-            : null}
+      : null}
         </form>
       </${PanelShell}>
     </${motion.div}>
@@ -2322,7 +2322,7 @@ function JournalAnalyzing({ progressValue, liveJournal, reducedMotion }) {
         </p>
         <div className="mt-4 space-y-3">
           ${liveJournal.map(
-            (entry) => html`
+    (entry) => html`
               <div
                 key=${entry.id}
                 className="rounded-[20px] border border-atelier-line bg-white/74 px-4 py-3 text-sm leading-7 text-atelier-moss"
@@ -2330,7 +2330,7 @@ function JournalAnalyzing({ progressValue, liveJournal, reducedMotion }) {
                 ${entry.message}
               </div>
             `,
-          )}
+  )}
         </div>
       </div>
     </div>
@@ -2453,11 +2453,11 @@ function buildIesInsightRows(result) {
 function IesFieldGrid({ fields = [] }) {
   const normalizedFields = Array.isArray(fields)
     ? fields
-        .map((field) => ({
-          label: String(field?.label || "").trim(),
-          value: String(field?.value || "").trim(),
-        }))
-        .filter((field) => field.label)
+      .map((field) => ({
+        label: String(field?.label || "").trim(),
+        value: String(field?.value || "").trim(),
+      }))
+      .filter((field) => field.label)
     : [];
 
   if (!normalizedFields.length) {
@@ -2467,7 +2467,7 @@ function IesFieldGrid({ fields = [] }) {
   return html`
     <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       ${normalizedFields.map(
-        (field) => html`
+    (field) => html`
           <div className="rounded-[20px] border border-atelier-line bg-white/78 px-4 py-4">
             <dt className="text-[10px] font-bold uppercase tracking-[0.22em] text-atelier-moss/64">
               ${field.label}
@@ -2477,7 +2477,7 @@ function IesFieldGrid({ fields = [] }) {
             </dd>
           </div>
         `,
-      )}
+  )}
     </dl>
   `;
 }
@@ -2540,7 +2540,7 @@ function IesCompanyDrawer({ company, open, onClose }) {
     html`
       <${AnimatePresence} initial=${false}>
         ${open && renderedCompany
-          ? html`
+        ? html`
               <${motion.div}
                 key="ies-company-drawer"
                 className="ies-drawer fixed inset-0 z-[190] flex items-stretch justify-end"
@@ -2600,88 +2600,88 @@ function IesCompanyDrawer({ company, open, onClose }) {
                     <${IesCompanyDrawerSection}
                       title="Financial Performance"
                       fields=${[
-                        { label: "Revenue TTM", value: formatIesCompactNumber(renderedCompany.revenue_ttm) },
-                        { label: "Market Cap", value: formatIesCompactNumber(renderedCompany.market_cap) },
-                        { label: "Enterprise Value", value: formatIesCompactNumber(renderedCompany.enterprise_value) },
-                        { label: "Current EV", value: formatIesCompactNumber(renderedCompany.current_ev) },
-                        { label: "EBITDA TTM", value: formatIesCompactNumber(renderedCompany.ebitda_ttm) },
-                        { label: "Median Rev. Growth (LQ YoY)", value: formatIesPercent(renderedCompany.revenue_growth_lq_yoy) },
-                        { label: "Median Op. Margin (TTM)", value: formatIesPercent(renderedCompany.operating_margin) },
-                        { label: "Median EBITDA Margin (TTM)", value: formatIesPercent(renderedCompany.ebitda_margin) },
-                      ]}
+            { label: "Revenue TTM", value: formatIesCompactNumber(renderedCompany.revenue_ttm) },
+            { label: "Market Cap", value: formatIesCompactNumber(renderedCompany.market_cap) },
+            { label: "Enterprise Value", value: formatIesCompactNumber(renderedCompany.enterprise_value) },
+            { label: "Current EV", value: formatIesCompactNumber(renderedCompany.current_ev) },
+            { label: "EBITDA TTM", value: formatIesCompactNumber(renderedCompany.ebitda_ttm) },
+            { label: "Median Rev. Growth (LQ YoY)", value: formatIesPercent(renderedCompany.revenue_growth_lq_yoy) },
+            { label: "Median Op. Margin (TTM)", value: formatIesPercent(renderedCompany.operating_margin) },
+            { label: "Median EBITDA Margin (TTM)", value: formatIesPercent(renderedCompany.ebitda_margin) },
+          ]}
                     />
 
                     <${IesCompanyDrawerSection}
                       title="Valuation"
                       fields=${[
-                        { label: "EV / Revenue", value: formatIesRatio(renderedCompany.ev_to_revenue_ttm) },
-                        { label: "EV / EBITDA", value: formatIesRatio(renderedCompany.ev_to_ebitda_ttm) },
-                        { label: "Forward P/E", value: formatIesRatio(renderedCompany.forward_pe) },
-                      ]}
+            { label: "EV / Revenue", value: formatIesRatio(renderedCompany.ev_to_revenue_ttm) },
+            { label: "EV / EBITDA", value: formatIesRatio(renderedCompany.ev_to_ebitda_ttm) },
+            { label: "Forward P/E", value: formatIesRatio(renderedCompany.forward_pe) },
+          ]}
                     />
 
                     <${IesCompanyDrawerSection}
                       title="Earnings"
                       fields=${[
-                        { label: "Reported EPS", value: formatIesLabel(Number.isFinite(renderedCompany.reported_eps) ? renderedCompany.reported_eps.toFixed(2) : "") },
-                        { label: "EPS Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.eps_estimate) ? renderedCompany.eps_estimate.toFixed(2) : "") },
-                        { label: "EPS Surprise", value: formatIesPercent(renderedCompany.eps_surprise) },
-                        { label: "Last Reported EPS", value: formatIesLabel(Number.isFinite(renderedCompany.last_reported_eps) ? renderedCompany.last_reported_eps.toFixed(2) : "") },
-                        { label: "Last Reported Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.last_reported_eps_estimate) ? renderedCompany.last_reported_eps_estimate.toFixed(2) : "") },
-                        { label: "Last Reported Surprise", value: formatIesPercent(renderedCompany.last_reported_eps_surprise) },
-                        { label: "Latest Earnings Date", value: formatIesDateLabel(renderedCompany.latest_earnings_date) },
-                        { label: "Last Reported Earnings Date", value: formatIesDateLabel(renderedCompany.last_reported_earnings_date) },
-                        { label: "Next Earnings Date", value: formatIesDateLabel(renderedCompany.next_earnings_date) },
-                        { label: "Next EPS Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.next_eps_estimate) ? renderedCompany.next_eps_estimate.toFixed(2) : "") },
-                        { label: "5-Day Reaction", value: formatIesPercent(renderedCompany.five_day_price_reaction) },
-                      ]}
+            { label: "Reported EPS", value: formatIesLabel(Number.isFinite(renderedCompany.reported_eps) ? renderedCompany.reported_eps.toFixed(2) : "") },
+            { label: "EPS Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.eps_estimate) ? renderedCompany.eps_estimate.toFixed(2) : "") },
+            { label: "EPS Surprise", value: formatIesPercent(renderedCompany.eps_surprise) },
+            { label: "Last Reported EPS", value: formatIesLabel(Number.isFinite(renderedCompany.last_reported_eps) ? renderedCompany.last_reported_eps.toFixed(2) : "") },
+            { label: "Last Reported Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.last_reported_eps_estimate) ? renderedCompany.last_reported_eps_estimate.toFixed(2) : "") },
+            { label: "Last Reported Surprise", value: formatIesPercent(renderedCompany.last_reported_eps_surprise) },
+            { label: "Latest Earnings Date", value: formatIesDateLabel(renderedCompany.latest_earnings_date) },
+            { label: "Last Reported Earnings Date", value: formatIesDateLabel(renderedCompany.last_reported_earnings_date) },
+            { label: "Next Earnings Date", value: formatIesDateLabel(renderedCompany.next_earnings_date) },
+            { label: "Next EPS Estimate", value: formatIesLabel(Number.isFinite(renderedCompany.next_eps_estimate) ? renderedCompany.next_eps_estimate.toFixed(2) : "") },
+            { label: "5-Day Reaction", value: formatIesPercent(renderedCompany.five_day_price_reaction) },
+          ]}
                     />
 
                     <${IesCompanyDrawerSection}
                       title="Flags"
                       fields=${[
-                        { label: "Enrichment Status", value: formatIesLabel(renderedCompany.enrichment_status) },
-                        { label: "Outlier", value: renderedCompany.is_outlier ? "Yes" : "No" },
-                        { label: "Outlier Metrics", value: outlierMetrics.length ? outlierMetrics.join(", ") : "None" },
-                        { label: "Validation Warnings", value: warnings.length ? warnings.join(" • ") : "None" },
-                        { label: "Enrichment Error", value: formatIesLabel(renderedCompany.enrichment_error) },
-                      ]}
+            { label: "Enrichment Status", value: formatIesLabel(renderedCompany.enrichment_status) },
+            { label: "Outlier", value: renderedCompany.is_outlier ? "Yes" : "No" },
+            { label: "Outlier Metrics", value: outlierMetrics.length ? outlierMetrics.join(", ") : "None" },
+            { label: "Validation Warnings", value: warnings.length ? warnings.join(" • ") : "None" },
+            { label: "Enrichment Error", value: formatIesLabel(renderedCompany.enrichment_error) },
+          ]}
                     />
 
                     <${IesCompanyDrawerSection}
                       title="Sources"
                       fields=${[
-                        { label: "Metric Source Count", value: sourceCount ? String(sourceCount) : "0" },
-                        ...sourceEntries.map(([key, value]) => ({
-                          label: key,
-                          value: typeof value === "object" ? JSON.stringify(value) : formatIesLabel(value),
-                        })),
-                      ]}
+            { label: "Metric Source Count", value: sourceCount ? String(sourceCount) : "0" },
+            ...sourceEntries.map(([key, value]) => ({
+              label: key,
+              value: typeof value === "object" ? JSON.stringify(value) : formatIesLabel(value),
+            })),
+          ]}
                     />
 
                     <${IesCompanyDrawerSection}
                       title="Notes"
                       fields=${[
-                        { label: "Canonical Company ID", value: formatIesLabel(renderedCompany.canonical_company_id) },
-                        { label: "Sector", value: formatIesLabel(renderedCompany.sector) },
-                        { label: "Industry", value: formatIesLabel(renderedCompany.industry) },
-                        { label: "Country", value: formatIesLabel(renderedCompany.country) },
-                        { label: "Region", value: formatIesLabel(renderedCompany.region) },
-                        { label: "Exchange", value: formatIesLabel(renderedCompany.exchange) },
-                        { label: "Currency", value: formatIesLabel(renderedCompany.currency) },
-                        { label: "Listing Country", value: formatIesLabel(renderedCompany.listing_country) },
-                        { label: "Listing Region", value: formatIesLabel(renderedCompany.listing_region) },
-                        { label: "Listing Exchange", value: formatIesLabel(renderedCompany.listing_exchange) },
-                        { label: "Company Country", value: formatIesLabel(renderedCompany.company_country) },
-                        { label: "Company Region", value: formatIesLabel(renderedCompany.company_region) },
-                        { label: "Company Exchange", value: formatIesLabel(renderedCompany.company_exchange) },
-                      ]}
+            { label: "Canonical Company ID", value: formatIesLabel(renderedCompany.canonical_company_id) },
+            { label: "Sector", value: formatIesLabel(renderedCompany.sector) },
+            { label: "Industry", value: formatIesLabel(renderedCompany.industry) },
+            { label: "Country", value: formatIesLabel(renderedCompany.country) },
+            { label: "Region", value: formatIesLabel(renderedCompany.region) },
+            { label: "Exchange", value: formatIesLabel(renderedCompany.exchange) },
+            { label: "Currency", value: formatIesLabel(renderedCompany.currency) },
+            { label: "Listing Country", value: formatIesLabel(renderedCompany.listing_country) },
+            { label: "Listing Region", value: formatIesLabel(renderedCompany.listing_region) },
+            { label: "Listing Exchange", value: formatIesLabel(renderedCompany.listing_exchange) },
+            { label: "Company Country", value: formatIesLabel(renderedCompany.company_country) },
+            { label: "Company Region", value: formatIesLabel(renderedCompany.company_region) },
+            { label: "Company Exchange", value: formatIesLabel(renderedCompany.company_exchange) },
+          ]}
                     />
                   </div>
                 </${motion.aside}>
               </${motion.div}>
             `
-          : null}
+        : null}
       </${AnimatePresence}>
     `,
     portalRoot,
@@ -2708,7 +2708,7 @@ function JournalCompleted({ result, debug, meta }) {
             Report Summary
           </p>
           <h3 className="m-0 font-display text-xl md:text-2xl font-semibold leading-tight text-atelier-ink">
-            IES report complete
+            Industry Earnings Snapshot
           </h3>
           <p className="mt-1 font-display text-xs font-medium leading-relaxed text-atelier-moss/90 max-w-xs">
             ${request.industry || "Selected industry"} in ${scopeInfo.label} returned ${summary.companies_returned || 0} companies.
@@ -2784,8 +2784,8 @@ function JournalCompleted({ result, debug, meta }) {
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           ${queries.length
-            ? queries.map(
-                (query) => html`
+      ? queries.map(
+        (query) => html`
                   <span
                     key=${query}
                     className="rounded-full border border-atelier-line bg-white/84 px-3 py-2 text-xs leading-6 text-atelier-moss"
@@ -2793,8 +2793,8 @@ function JournalCompleted({ result, debug, meta }) {
                     ${query}
                   </span>
                 `,
-              )
-            : html`<p className="m-0 text-sm leading-7 text-atelier-moss">No query metadata was returned for this run.</p>`}
+      )
+      : html`<p className="m-0 text-sm leading-7 text-atelier-moss">No query metadata was returned for this run.</p>`}
         </div>
       </div>
 
@@ -2811,8 +2811,8 @@ function JournalCompleted({ result, debug, meta }) {
         </div>
         <div className="mt-4 space-y-3">
           ${sourceScores.length
-            ? sourceScores.slice(0, 6).map(
-                (source) => html`
+      ? sourceScores.slice(0, 6).map(
+        (source) => html`
                   <div
                     key=${source.url}
                     className="rounded-[22px] border border-atelier-line bg-white/80 px-4 py-4"
@@ -2826,17 +2826,17 @@ function JournalCompleted({ result, debug, meta }) {
                         </p>
                       </div>
                       ${source.years?.length
-                        ? html`
+            ? html`
                             <span className="rounded-full bg-atelier-forest/6 px-3 py-1 text-[11px] text-atelier-moss">
                               ${source.years.join(", ")}
                             </span>
                           `
-                        : null}
+            : null}
                     </div>
                   </div>
                 `,
-              )
-            : html`<p className="m-0 text-sm leading-7 text-atelier-moss">Source-level scoring metadata was not available.</p>`}
+      )
+      : html`<p className="m-0 text-sm leading-7 text-atelier-moss">Source-level scoring metadata was not available.</p>`}
         </div>
       </div>
 
@@ -2853,7 +2853,7 @@ function JournalCompleted({ result, debug, meta }) {
         </div>
         <div className="mt-4 space-y-3">
           ${buildCompletedJournal(result, debug, meta).map(
-            (entry) => html`
+        (entry) => html`
               <div
                 key=${entry.id}
                 className="rounded-[20px] border border-atelier-line bg-white/76 px-4 py-3 text-sm leading-7 text-atelier-moss"
@@ -2861,11 +2861,11 @@ function JournalCompleted({ result, debug, meta }) {
                 ${entry.message}
               </div>
             `,
-          )}
+      )}
         </div>
       </div>
     </div>
-  `; 
+  `;
 }
 
 function formatIesPercent(value, fallback = "—") {
@@ -2971,7 +2971,7 @@ function IesScatterChart({ chart }) {
     acc[point.ticker || point.company_name || String(point.index)] = point;
     return acc;
   }, {});
-  const chartTitle = String(chart?.title || "Revenue Growth vs Operating Margin").trim();
+  const chartTitle = String(chart?.title || "Peer Positioning").trim();
   const xLabel = String(chart?.x_label || "Revenue Growth (LQ YoY)").trim();
   const yLabel = String(chart?.y_label || "Operating Margin").trim();
   const bubbleLabel = String(chart?.bubble_size_label || "Revenue TTM").trim();
@@ -3214,10 +3214,10 @@ function IesScatterChart({ chart }) {
         ref=${stageRef}
         className="ies-chart-stage mt-6 rounded-[24px] border border-atelier-line/60 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#FFFDF8] via-white to-[#F9F5EC] p-4 md:p-6 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),0_20px_50px_rgba(31,42,41,0.04)]"
         style=${{
-          position: "relative",
-          overflow: "visible",
-          minHeight: "35rem",
-        }}
+      position: "relative",
+      overflow: "visible",
+      minHeight: "35rem",
+    }}
         onPointerLeave=${handleStagePointerLeave}
         onClick=${handleStageClick}
       >
@@ -3256,8 +3256,8 @@ function IesScatterChart({ chart }) {
 
           <!-- Grid Lines -->
           ${yTicks.map((tick, index) => {
-            const y = topAxisY + plotHeight - ((tick - axisYMin) / Math.max(1, axisYMax - axisYMin)) * plotHeight;
-            return html`
+      const y = topAxisY + plotHeight - ((tick - axisYMin) / Math.max(1, axisYMax - axisYMin)) * plotHeight;
+      return html`
               <g key=${`y-grid-${index}`}>
                 <line x1=${leftAxisX} y1=${y} x2=${rightAxisX} y2=${y} stroke="rgba(104,117,113,0.06)" strokeWidth="0.8" />
                 <text x=${leftAxisX - 14} y=${y + 4} textAnchor="end" fontSize="11" fontFamily="Manrope, sans-serif" fontWeight="600" fill="#65706A">
@@ -3265,11 +3265,11 @@ function IesScatterChart({ chart }) {
                 </text>
               </g>
             `;
-          })}
+    })}
 
           ${xTicks.map((tick, index) => {
-            const x = leftAxisX + ((tick - axisXMin) / Math.max(1, axisXMax - axisXMin)) * plotWidth;
-            return html`
+      const x = leftAxisX + ((tick - axisXMin) / Math.max(1, axisXMax - axisXMin)) * plotWidth;
+      return html`
               <g key=${`x-grid-${index}`}>
                 <line x1=${x} y1=${topAxisY} x2=${x} y2=${bottomAxisY} stroke="rgba(104,117,113,0.06)" strokeWidth="0.8" />
                 <text x=${x} y=${bottomAxisY + 20} textAnchor="middle" fontSize="11" fontFamily="Manrope, sans-serif" fontWeight="600" fill="#65706A">
@@ -3277,7 +3277,7 @@ function IesScatterChart({ chart }) {
                 </text>
               </g>
             `;
-          })}
+    })}
 
           <!-- Median Lines -->
           <line x1=${leftAxisX} y1=${medianY} x2=${rightAxisX} y2=${medianY} stroke="rgba(88,104,101,0.25)" strokeWidth="1.2" strokeDasharray="5 5" />
@@ -3297,21 +3297,21 @@ function IesScatterChart({ chart }) {
 
           <!-- Bubbles -->
           ${sortedPoints.map((point) => {
-            const pointKey = getPointKey(point);
-            const isActive = activeTicker === pointKey;
-            const isSelected = selectedTicker === pointKey;
-            const showLabel = isActive || isSelected;
-            const x = xScale(point.x);
-            const y = yScale(point.y);
-            const radius = getPointRadius(point);
-            const displayRadius = isActive || isSelected ? radius * 1.15 : radius;
-            const opacity = isActive || isSelected ? 1 : 0.86;
-            const bubbleFill = getBubbleGradientId(point.y);
-            const labelY = y - (isActive || isSelected ? 12 : 10);
-            const labelAnchor = x > width * 0.64 ? "end" : "start";
-            const labelOffset = x > width * 0.64 ? -12 : 12;
+      const pointKey = getPointKey(point);
+      const isActive = activeTicker === pointKey;
+      const isSelected = selectedTicker === pointKey;
+      const showLabel = isActive || isSelected;
+      const x = xScale(point.x);
+      const y = yScale(point.y);
+      const radius = getPointRadius(point);
+      const displayRadius = isActive || isSelected ? radius * 1.15 : radius;
+      const opacity = isActive || isSelected ? 1 : 0.86;
+      const bubbleFill = getBubbleGradientId(point.y);
+      const labelY = y - (isActive || isSelected ? 12 : 10);
+      const labelAnchor = x > width * 0.64 ? "end" : "start";
+      const labelOffset = x > width * 0.64 ? -12 : 12;
 
-            return html`
+      return html`
               <g
                 key=${pointKey}
                 className="ies-scatter-point-group outline-none focus:outline-none focus-visible:outline-none focus:ring-0"
@@ -3328,7 +3328,7 @@ function IesScatterChart({ chart }) {
                 tabIndex="0"
               >
                 ${isSelected
-                  ? html`
+          ? html`
                       <circle
                         r=${displayRadius + 6}
                         fill="none"
@@ -3338,7 +3338,7 @@ function IesScatterChart({ chart }) {
                         className="animate-spin-slow"
                       />
                     `
-                  : null}
+          : null}
                 <circle
                   className="ies-scatter-point outline-none focus:outline-none"
                   r=${displayRadius}
@@ -3348,14 +3348,14 @@ function IesScatterChart({ chart }) {
                   strokeWidth="2"
                   filter=${isActive || isSelected ? "url(#ies-bubble-glow)" : "url(#ies-bubble-shadow)"}
                   style=${{
-                    outline: "none",
-                    boxShadow: "none",
-                    transition: "transform 200ms ease-out, r 200ms ease-out, opacity 200ms ease-out",
-                  }}
+          outline: "none",
+          boxShadow: "none",
+          transition: "transform 200ms ease-out, r 200ms ease-out, opacity 200ms ease-out",
+        }}
                 />
               </g>
             `;
-          })}
+    })}
 
           <!-- Axis Titles -->
           <text x=${(leftAxisX + rightAxisX) / 2} y=${height - 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#41504A">
@@ -3378,16 +3378,16 @@ function IesScatterChart({ chart }) {
         <div
           ref=${tooltipRef}
           className=${cx(
-            "ies-scatter-tooltip pointer-events-none absolute z-30 transition-all duration-180 ease-out",
-            tooltipState.visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-2 pointer-events-none"
-          )}
+      "ies-scatter-tooltip pointer-events-none absolute z-30 transition-all duration-180 ease-out",
+      tooltipState.visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-2 pointer-events-none"
+    )}
           aria-hidden=${tooltipState.visible ? "false" : "true"}
           style=${{
-            left: `${tooltipState.x}px`,
-            top: `${tooltipState.y}px`,
-            transform: "translate(-50%, -100%) translateY(-14px)",
-            transition: "opacity 180ms ease-out, transform 180ms ease-out, left 100ms ease-out, top 100ms ease-out",
-          }}
+      left: `${tooltipState.x}px`,
+      top: `${tooltipState.y}px`,
+      transform: "translate(-50%, -100%) translateY(-14px)",
+      transition: "opacity 180ms ease-out, transform 180ms ease-out, left 100ms ease-out, top 100ms ease-out",
+    }}
         >
           <div className="w-[19rem] md:w-[22rem] rounded-2xl border border-atelier-line/90 bg-white/94 p-4 shadow-[0_24px_50px_rgba(31,42,41,0.18)] backdrop-blur-md">
             <div className="flex items-center justify-between gap-3 border-b border-atelier-line/50 pb-3">
@@ -3409,7 +3409,7 @@ function IesScatterChart({ chart }) {
 
             <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
               ${tooltipState.fields.map(
-                (field) => html`
+      (field) => html`
                   <div key=${field.label} className="flex flex-col min-w-0">
                     <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-atelier-moss/65">${field.label}</span>
                     <span className="mt-0.5 text-xs font-mono font-semibold text-atelier-ink truncate">
@@ -3417,7 +3417,7 @@ function IesScatterChart({ chart }) {
                     </span>
                   </div>
                 `,
-              )}
+    )}
             </div>
           </div>
         </div>
@@ -3449,21 +3449,21 @@ function IesCompanyRow({ company, index, selected, onSelect }) {
   return html`
     <tr
       className=${cx(
-        "ies-universe-row group cursor-pointer transition-colors duration-75",
-        index % 2 === 1 ? "bg-white/40" : "bg-[#FAF7F2]/30",
-        company.is_outlier ? "bg-amber-50/40" : "",
-        selected ? "bg-amber-100/60 shadow-xs border-l-4 border-l-atelier-gold" : "hover:bg-[#F5EFE6]/80"
-      )}
+    "ies-universe-row group cursor-pointer transition-colors duration-75",
+    index % 2 === 1 ? "bg-white/40" : "bg-[#FAF7F2]/30",
+    company.is_outlier ? "bg-amber-50/40" : "",
+    selected ? "bg-amber-100/60 shadow-xs border-l-4 border-l-atelier-gold" : "hover:bg-[#F5EFE6]/80"
+  )}
       onClick=${onSelect}
       role="button"
       tabIndex="0"
       aria-selected=${selected ? "true" : "false"}
       onKeyDown=${(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect(event);
-        }
-      }}
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onSelect(event);
+      }
+    }}
     >
       <td className="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">
         ${String(index + 1).padStart(2, "0")}
@@ -3520,7 +3520,7 @@ function IesAnalystInsights({ result }) {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         ${insightBundle.rows.map(
-          (row, index) => html`
+    (row, index) => html`
             <${motion.div}
               key=${`${row.label}-${index}`}
               initial=${{ opacity: 0, y: 10 }}
@@ -3531,7 +3531,7 @@ function IesAnalystInsights({ result }) {
               <${IesInsightCard} label=${row.label} body=${row.body} tone=${row.tone} icon=${row.icon} />
             </${motion.div}>
           `,
-        )}
+  )}
       </div>
     </section>
   `;
@@ -3594,7 +3594,7 @@ function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompan
           </thead>
           <tbody className="divide-y divide-atelier-line/40">
             ${normalizedCompanies.map(
-              (company, index) => html`
+    (company, index) => html`
                 <${IesCompanyRow}
                   key=${`${getIesDisplayCompanyKey(company, index)}-${index}`}
                   company=${company}
@@ -3603,7 +3603,7 @@ function IesCompanyUniverseTable({ companies, selectedCompanyKey, onSelectCompan
                   onSelect=${() => onSelectCompany(getIesDisplayCompanyKey(company, index))}
                 />
               `,
-            )}
+  )}
           </tbody>
         </table>
       </div>
@@ -3699,7 +3699,7 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
       <section>
         <div className="rounded-2xl border border-atelier-line/80 bg-white/75 backdrop-blur-md shadow-sm p-3 md:p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-atelier-line/50">
           ${executiveMetrics.map(
-            (metric) => html`
+    (metric) => html`
               <div key=${metric.label} className="p-3 md:px-5 md:py-2 flex flex-col justify-center">
                 <span className="font-display text-[8px] md:text-[9px] font-medium uppercase tracking-[0.14em] text-atelier-moss/70">
                   ${metric.label}
@@ -3709,14 +3709,14 @@ function IesResultSection({ result, meta, onDownload, exportPending }) {
                     ${metric.value}
                   </span>
                   ${metric.trend === "up"
-                    ? html`<span className="text-xs font-bold text-emerald-700">↑</span>`
-                    : metric.trend === "down"
-                      ? html`<span className="text-xs font-bold text-rose-700">↓</span>`
-                      : null}
+        ? html`<span className="text-xs font-bold text-emerald-700">↑</span>`
+        : metric.trend === "down"
+          ? html`<span className="text-xs font-bold text-rose-700">↓</span>`
+          : null}
                 </div>
               </div>
             `,
-          )}
+  )}
         </div>
       </section>
 
@@ -3797,10 +3797,10 @@ function FieldNotesPane({
       <div className="workspace-pane-body mt-4 min-h-0 flex-1 flex flex-col justify-center overflow-hidden">
         <${AnimatePresence} initial=${false} mode="wait">
           ${analysisState === "completed"
-            ? html`<${JournalCompleted} key="journal-completed" result=${result} debug=${debug} meta=${meta} />`
-            : null}
+      ? html`<${JournalCompleted} key="journal-completed" result=${result} debug=${debug} meta=${meta} />`
+      : null}
           ${analysisState === "analyzing"
-            ? html`
+      ? html`
                 <${JournalAnalyzing}
                   key="journal-analyzing"
                   progressValue=${progressValue}
@@ -3808,13 +3808,13 @@ function FieldNotesPane({
                   reducedMotion=${reducedMotion}
                 />
               `
-            : null}
+      : null}
           ${analysisState === "error"
-            ? html`<${JournalError} key="journal-error" message=${analysisError} />`
-            : null}
+      ? html`<${JournalError} key="journal-error" message=${analysisError} />`
+      : null}
           ${analysisState === "idle"
-            ? html`<${JournalIdle} key="journal-idle" meta=${meta} />`
-            : null}
+      ? html`<${JournalIdle} key="journal-idle" meta=${meta} />`
+      : null}
         </${AnimatePresence}>
       </div>
     </${PanelShell}>
@@ -3880,7 +3880,7 @@ function BriefAnalyzing({ progressValue, onLoaderReady, loaderFrameId }) {
         </div>
         <div className="mt-7 space-y-5">
           ${[0, 1, 2, 3].map(
-            (index) => html`
+    (index) => html`
               <div key=${index} className="rounded-[24px] border border-atelier-line bg-white/76 px-5 py-5">
                 <div className="skeleton-wash h-3 w-16 rounded-full"></div>
                 <div className="skeleton-wash mt-4 h-7 w-3/4 rounded-full"></div>
@@ -3889,7 +3889,7 @@ function BriefAnalyzing({ progressValue, onLoaderReady, loaderFrameId }) {
                 <div className="skeleton-wash mt-3 h-3 w-[80%] rounded-full"></div>
               </div>
             `,
-          )}
+  )}
         </div>
       </div>
     </div>
@@ -3922,14 +3922,14 @@ function WorkspaceTransitionShell() {
           </div>
           <div className="mt-6 space-y-3">
             ${[0, 1, 2].map(
-              (index) => html`
+    (index) => html`
                 <div key=${index} className="rounded-[22px] border border-atelier-line bg-white/74 px-4 py-4">
                   <div className="skeleton-wash h-3 w-24 rounded-full"></div>
                   <div className="skeleton-wash mt-4 h-3 w-full rounded-full"></div>
                   <div className="skeleton-wash mt-3 h-3 w-[84%] rounded-full"></div>
                 </div>
               `,
-            )}
+  )}
           </div>
         </div>
       </${PanelShell}>
@@ -3946,7 +3946,7 @@ function WorkspaceTransitionShell() {
           <div className="editorial-rule mt-6"></div>
           <div className="mt-8 flex-1 space-y-5">
             ${[0, 1, 2, 3].map(
-              (index) => html`
+    (index) => html`
                 <div key=${index} className="rounded-[24px] border border-atelier-line bg-white/76 px-5 py-5">
                   <div className="skeleton-wash h-3 w-16 rounded-full"></div>
                   <div className="skeleton-wash mt-4 h-7 w-3/4 rounded-full"></div>
@@ -3955,7 +3955,7 @@ function WorkspaceTransitionShell() {
                   <div className="skeleton-wash mt-3 h-3 w-[80%] rounded-full"></div>
                 </div>
               `,
-            )}
+  )}
           </div>
         </div>
       </${PanelShell}>
@@ -4017,7 +4017,7 @@ function FollowUpInput({
   return html`
     <${AnimatePresence} initial=${false}>
       ${isOpen
-        ? html`
+      ? html`
             <${motion.div}
               key="followup-input"
               initial=${{ opacity: 0, y: 10, scale: 0.99 }}
@@ -4054,7 +4054,7 @@ function FollowUpInput({
               </form>
             </${motion.div}>
           `
-        : null}
+      : null}
     </${AnimatePresence}>
   `;
 }
@@ -4134,11 +4134,11 @@ function FollowUpCard({ entry }) {
           </p>
           <p className="mt-2 text-sm font-semibold text-atelier-ink">${entry.query}</p>
           ${entry.refined_query
-            ? html`<p className="mt-2 text-sm leading-7 text-atelier-moss">Refined to: ${entry.refined_query}</p>`
-            : null}
+      ? html`<p className="mt-2 text-sm leading-7 text-atelier-moss">Refined to: ${entry.refined_query}</p>`
+      : null}
         </div>
         ${entry.decision
-          ? html`
+      ? html`
               <div className="flex flex-wrap items-center gap-2">
                 <span className=${cx("rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em]", tagTone)}>
                   ${tagLabel}
@@ -4148,21 +4148,21 @@ function FollowUpCard({ entry }) {
                 </span>
               </div>
             `
-          : null}
+      : null}
       </div>
 
       ${isLoading
-        ? html`
+      ? html`
             <div className="mt-4 flex items-center gap-3 rounded-[18px] border border-atelier-line bg-white/76 px-4 py-3 text-sm text-atelier-moss">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-atelier-forest/20 border-t-atelier-forest"></span>
               <span>${entry.loading_message || "Analyzing existing research..."}</span>
             </div>
           `
-        : null}
+      : null}
 
       ${entry.reason && !isLoading
-        ? html`<p className="mt-4 text-sm leading-7 text-atelier-moss">${entry.reason}</p>`
-        : null}
+      ? html`<p className="mt-4 text-sm leading-7 text-atelier-moss">${entry.reason}</p>`
+      : null}
     </div>
   `;
 }
@@ -4177,9 +4177,9 @@ function SourceList({ sources }) {
   return html`
     <div className="space-y-3">
       ${normalizedSources.map(
-        (source, index) => html`
+    (source, index) => html`
           ${source.url
-            ? html`<a
+        ? html`<a
                 key=${`${source.url || source.title}-${index}`}
                 href=${source.url}
                 target="_blank"
@@ -4187,7 +4187,7 @@ function SourceList({ sources }) {
                 className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3 no-underline transition-colors duration-200 hover:border-atelier-forest/24 hover:bg-white"
               >
                 ${source.image_url
-                  ? html`<div className="mb-3 overflow-hidden rounded-[14px] border border-atelier-line bg-atelier-paper/70">
+            ? html`<div className="mb-3 overflow-hidden rounded-[14px] border border-atelier-line bg-atelier-paper/70">
                       <img
                         src=${source.image_url}
                         alt=${source.title || source.url || `Source ${index + 1}`}
@@ -4196,7 +4196,7 @@ function SourceList({ sources }) {
                         className="block h-40 w-full object-cover"
                       />
                     </div>`
-                  : null}
+            : null}
                 <p className="m-0 text-sm font-bold text-atelier-ink">
                   ${source.title || source.url || `Source ${index + 1}`}
                 </p>
@@ -4207,7 +4207,7 @@ function SourceList({ sources }) {
                   ${source.url}
                 </p>
               </a>`
-            : html`<div
+        : html`<div
                 key=${`${source.title || "source"}-${index}`}
                 className="block rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3"
               >
@@ -4222,7 +4222,7 @@ function SourceList({ sources }) {
                 </p>
               </div>`}
         `,
-      )}
+  )}
     </div>
   `;
 }
@@ -4253,7 +4253,7 @@ function SourceDisclosure({ sources }) {
 
       <${AnimatePresence} initial=${false}>
         ${open
-          ? html`
+      ? html`
               <${motion.div}
                 key="competitive-sources-panel"
                 initial=${{ opacity: 0, y: 8, scale: 0.99 }}
@@ -4268,7 +4268,7 @@ function SourceDisclosure({ sources }) {
                 </div>
               </${motion.div}>
             `
-          : null}
+      : null}
       </${AnimatePresence}>
     </div>
   `;
@@ -4306,7 +4306,7 @@ function ExamplesAndSourcesDisclosure({ examples, sources }) {
 
       <${AnimatePresence} initial=${false}>
         ${open
-          ? html`
+      ? html`
               <${motion.div}
                 key="sources-panel"
                 initial=${{ opacity: 0, y: 8, scale: 0.99 }}
@@ -4327,10 +4327,10 @@ function ExamplesAndSourcesDisclosure({ examples, sources }) {
                       </p>
                     </div>
                     ${normalizedExamples.length
-                      ? html`
+          ? html`
                           <div className="space-y-3">
                             ${normalizedExamples.map(
-                              (example, index) => html`
+            (example, index) => html`
                                 <div
                                   key=${`${example.text}-${index}`}
                                   className="rounded-[18px] border border-atelier-line bg-white/84 px-4 py-3"
@@ -4340,19 +4340,19 @@ function ExamplesAndSourcesDisclosure({ examples, sources }) {
                                       ${example.text}
                                     </p>
                                     ${example.year
-                                      ? html`
+                ? html`
                                           <span className="inline-flex flex-none items-center rounded-full border border-atelier-forest/12 bg-atelier-forest/[0.05] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-atelier-forest">
                                             ${example.year}
                                           </span>
                                         `
-                                      : null}
+                : null}
                                   </div>
                                 </div>
                               `,
-                            )}
+          )}
                           </div>
                         `
-                      : html`
+          : html`
                           <div className="rounded-[18px] border border-dashed border-atelier-line bg-white/70 px-4 py-3">
                             <p className="m-0 text-sm leading-7 text-atelier-moss">
                               No explicit recent examples were generated for this insight from the current evidence set.
@@ -4362,7 +4362,7 @@ function ExamplesAndSourcesDisclosure({ examples, sources }) {
                   </div>
 
                   ${normalizedSources.length
-                    ? html`
+          ? html`
                         <div className="space-y-3">
                           <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-atelier-moss/70">
                             Sources
@@ -4370,11 +4370,11 @@ function ExamplesAndSourcesDisclosure({ examples, sources }) {
                           <${SourceList} sources=${normalizedSources} />
                         </div>
                       `
-                    : null}
+          : null}
                 </div>
               </${motion.div}>
             `
-          : null}
+      : null}
       </${AnimatePresence}>
     </div>
   `;
@@ -4393,17 +4393,17 @@ function CompetitiveLandscapeDevelopments({ examples = [] }) {
       </p>
       <ol className="mt-3 list-decimal space-y-3 pl-6 text-sm leading-7 text-atelier-moss">
         ${normalizedExamples.map(
-          (example, index) => html`
+    (example, index) => html`
             <li key=${`${example.text}-${index}`} className="pl-1">
               <span className="text-atelier-ink">${example.text}</span>
               ${example.year
-                ? html`<span className="ml-2 text-xs font-bold uppercase tracking-[0.16em] text-atelier-goldDeep">
+        ? html`<span className="ml-2 text-xs font-bold uppercase tracking-[0.16em] text-atelier-goldDeep">
                     ${example.year}
                   </span>`
-                : null}
+        : null}
             </li>
           `,
-        )}
+  )}
       </ol>
     </section>
   `;
@@ -4422,12 +4422,12 @@ function CompetitiveLandscapeFacts({ facts = [] }) {
       </p>
       <ul className="mt-3 space-y-3 pl-5 text-sm leading-7 text-atelier-moss">
         ${normalizedFacts.map(
-          (fact, index) => html`
+    (fact, index) => html`
             <li key=${`${fact}-${index}`} className="pl-1 text-atelier-ink">
               ${fact}
             </li>
           `,
-        )}
+  )}
       </ul>
     </section>
   `;
@@ -4463,22 +4463,22 @@ function CompetitiveLandscapeGroupTabs({ title, majorPlayers = [], emergingPlaye
     <div className="mt-6 space-y-5">
       <div className="flex flex-wrap gap-3">
         ${tabs.map(
-          (tab) => html`
+    (tab) => html`
             <button
               key=${tab.id}
               type="button"
               onClick=${() => setActiveTab(tab.id)}
               className=${cx(
-                "rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] transition-colors duration-200",
-                activeGroup.id === tab.id
-                  ? "border-atelier-forest bg-atelier-forest text-white"
-                  : "border-atelier-line bg-white/80 text-atelier-moss hover:border-atelier-forest/30",
-              )}
+      "rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] transition-colors duration-200",
+      activeGroup.id === tab.id
+        ? "border-atelier-forest bg-atelier-forest text-white"
+        : "border-atelier-line bg-white/80 text-atelier-moss hover:border-atelier-forest/30",
+    )}
             >
               ${`${tab.label} (${tab.items.length})`}
             </button>
           `,
-        )}
+  )}
       </div>
 
       <div className="rounded-[24px] border border-atelier-line bg-white/54 px-4 py-4 md:px-5">
@@ -4493,8 +4493,8 @@ function CompetitiveLandscapeGroupTabs({ title, majorPlayers = [], emergingPlaye
 
         <div className="space-y-4">
           ${activeGroup.items.length
-            ? activeGroup.items.map(
-                (item, index) => html`
+      ? activeGroup.items.map(
+        (item, index) => html`
                   <${BriefItemCard}
                     item=${item}
                     index=${index}
@@ -4502,8 +4502,8 @@ function CompetitiveLandscapeGroupTabs({ title, majorPlayers = [], emergingPlaye
                     title=${`${title}-${activeGroup.id}`}
                   />
                 `,
-              )
-            : html`
+      )
+      : html`
                 <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
                   No strong company profiles found.
                 </div>
@@ -4531,12 +4531,12 @@ function BriefItemCard({ item, index, section, title }) {
           </div>
           <div className="min-w-0 flex-1">
             ${item.market_role
-              ? html`
+        ? html`
                   <p className="m-0 text-[11px] font-bold uppercase tracking-[0.22em] text-atelier-goldDeep">
                     ${item.market_role}
                   </p>
                 `
-              : null}
+        : null}
             <h4 className="mt-3 font-display text-[2rem] font-semibold leading-[1.02] text-atelier-ink">
               ${item.heading}
             </h4>
@@ -4630,18 +4630,18 @@ function ResultSection({
       <div className="editorial-rule mt-6"></div>
 
       ${section === "competitive_landscape"
-        ? html`
+      ? html`
             <${CompetitiveLandscapeGroupTabs}
               title=${title}
               majorPlayers=${majorPlayers}
               emergingPlayers=${emergingPlayers}
             />
           `
-        : html`
+      : html`
             <div className="mt-6 space-y-4">
               ${normalizedItems.length
-                ? normalizedItems.map(
-                    (item, index) => html`
+          ? normalizedItems.map(
+            (item, index) => html`
                       <${BriefItemCard}
                         item=${item}
                         index=${index}
@@ -4649,8 +4649,8 @@ function ResultSection({
                         title=${title}
                       />
                     `,
-                  )
-                : html`
+          )
+          : html`
                     <div className="rounded-[26px] border border-dashed border-atelier-line bg-white/76 px-5 py-6 text-sm leading-8 text-atelier-moss">
                       No strong insights found.
                     </div>
@@ -4686,8 +4686,8 @@ function BriefCompleted({
     <div className="flex w-full justify-center">
       <div className="flex w-full flex-col gap-5">
         ${isIesReport
-          ? html`<${IesResultSection} result=${result} meta=${meta} onDownload=${onDownload} exportPending=${exportPending} />`
-          : html`<${ResultSection}
+      ? html`<${IesResultSection} result=${result} meta=${meta} onDownload=${onDownload} exportPending=${exportPending} />`
+      : html`<${ResultSection}
               title=${result.title || sectionTitle(result.section)}
               section=${result.section}
               items=${result.items}
@@ -4699,7 +4699,7 @@ function BriefCompleted({
             />`}
 
         ${followUpEnabled && !isIesReport
-          ? html`
+      ? html`
               <div className="flex items-center justify-start">
                 <${FollowUpTrigger} open=${followUpOpen} onClick=${onToggleFollowUp} disabled=${isProcessing} />
               </div>
@@ -4713,10 +4713,10 @@ function BriefCompleted({
                 onSubmit=${onFollowUpSubmit}
               />
             `
-          : null}
+      : null}
 
         ${followUpEnabled && !isIesReport && followUpPending?.status === "confirming"
-          ? html`
+      ? html`
               <${FollowUpConfirmationCard}
                 refinedQuery=${followUpPending.refined_query}
                 draftValue=${followUpDraft}
@@ -4727,17 +4727,17 @@ function BriefCompleted({
                 onEdit=${onFollowUpEdit}
               />
             `
-          : null}
+      : null}
 
         ${followUpEnabled && !isIesReport && followUpPending?.status === "loading"
-          ? html`<${FollowUpCard} entry=${followUpPending} />`
-          : null}
+      ? html`<${FollowUpCard} entry=${followUpPending} />`
+      : null}
 
         ${followUpEnabled && !isIesReport && followUps.length
-          ? html`
+      ? html`
               <div className="space-y-5">
                 ${followUps.map(
-                  (entry, index) => html`
+        (entry, index) => html`
                     <div key=${entry.id || `${entry.query}-${index}`} className="space-y-4">
                       <${FollowUpCard} entry=${entry} />
                       <${ResultSection}
@@ -4752,10 +4752,10 @@ function BriefCompleted({
                       />
                     </div>
                   `,
-                )}
+      )}
               </div>
             `
-          : null}
+      : null}
       </div>
     </div>
   `;
@@ -4809,7 +4809,7 @@ function BriefingCanvas({
       <div className="workspace-pane-body mt-5 min-h-0 flex-1 overflow-hidden">
         <${AnimatePresence} initial=${false} mode="wait">
           ${analysisState === "completed"
-            ? html`
+      ? html`
                 <${BriefCompleted}
                   key="brief-completed"
                   result=${result}
@@ -4832,9 +4832,9 @@ function BriefingCanvas({
                   onFollowUpEdit=${onFollowUpEdit}
                 />
               `
-            : null}
+      : null}
           ${analysisState === "analyzing"
-            ? html`
+      ? html`
                 <${BriefAnalyzing}
                   key="brief-analyzing"
                   progressValue=${progressValue}
@@ -4842,13 +4842,13 @@ function BriefingCanvas({
                   loaderFrameId=${loaderFrameId}
                 />
               `
-            : null}
+      : null}
           ${analysisState === "error"
-            ? html`<${BriefError} key="brief-error" message=${analysisError} />`
-            : null}
+      ? html`<${BriefError} key="brief-error" message=${analysisError} />`
+      : null}
           ${analysisState === "idle"
-            ? html`<${BriefIdle} key="brief-idle" meta=${meta} />`
-            : null}
+      ? html`<${BriefIdle} key="brief-idle" meta=${meta} />`
+      : null}
         </${AnimatePresence}>
       </div>
     </${PanelShell}>
@@ -4979,8 +4979,8 @@ function App() {
 
   useEffect(() => {
     // Warm the exact iframe assets so the loader appears immediately on first run.
-    fetch(withStaticAssetVersion("/ui/pencil-loader.css"), { cache: "force-cache" }).catch(() => {});
-    fetch(withStaticAssetVersion("/ui/pencil-loader.html"), { cache: "force-cache" }).catch(() => {});
+    fetch(withStaticAssetVersion("/ui/pencil-loader.css"), { cache: "force-cache" }).catch(() => { });
+    fetch(withStaticAssetVersion("/ui/pencil-loader.html"), { cache: "force-cache" }).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -5086,9 +5086,9 @@ function App() {
     analysisState === "completed"
       ? analysisMeta
       : {
-          topic: isEarningsSnapshot ? snapshotTopicPreview : topic.trim(),
-          location: currentLocationMeta,
-        };
+        topic: isEarningsSnapshot ? snapshotTopicPreview : topic.trim(),
+        location: currentLocationMeta,
+      };
 
   const showWorkspacePanels =
     analysisState !== "idle" || workspaceSurfaceState !== "hidden";
@@ -5233,11 +5233,11 @@ function App() {
     setFollowUpPending((current) =>
       current
         ? {
-            ...current,
-            status: "loading",
-            refined_query: payload.refined_query,
-            loading_message: loadingMessage,
-          }
+          ...current,
+          status: "loading",
+          refined_query: payload.refined_query,
+          loading_message: loadingMessage,
+        }
         : current,
     );
     setIsProcessing(true);
@@ -5299,11 +5299,11 @@ function App() {
           setFollowUpPending((current) =>
             current
               ? {
-                  ...current,
-                  status: "loading",
-                  loading_message: buildJobProgressMessage(jobPayload, resultSection),
-                  progress_percentage: Number(jobPayload?.progress_percentage || 0),
-                }
+                ...current,
+                status: "loading",
+                loading_message: buildJobProgressMessage(jobPayload, resultSection),
+                progress_percentage: Number(jobPayload?.progress_percentage || 0),
+              }
               : current,
           );
         });
@@ -5363,9 +5363,9 @@ function App() {
     setFollowUpPending((current) =>
       current
         ? {
-            ...current,
-            refined_query: String(followUpDraft || current.refined_query || "").trim() || current.refined_query,
-          }
+          ...current,
+          refined_query: String(followUpDraft || current.refined_query || "").trim() || current.refined_query,
+        }
         : current,
     );
     setFollowUpOpen(true);
@@ -5627,11 +5627,11 @@ function App() {
     <div className="workspace-shell relative min-h-full overflow-x-hidden">
       <div
         className=${cx(
-          "workspace-grid relative z-10 grid min-h-full gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4 xl:px-5 xl:py-5",
-          hasSelectedModule
-            ? "grid-rows-[auto_auto_auto_minmax(0,1fr)]"
-            : "grid-rows-[auto_auto]",
-        )}
+    "workspace-grid relative z-10 grid min-h-full gap-3 px-3 py-3 md:gap-4 md:px-4 md:py-4 xl:px-5 xl:py-5",
+    hasSelectedModule
+      ? "grid-rows-[auto_auto_auto_minmax(0,1fr)]"
+      : "grid-rows-[auto_auto]",
+  )}
       >
         <${WorkspaceHeader}
           currentLocation=${displayMeta.location}
@@ -5644,7 +5644,7 @@ function App() {
         />
 
         ${hasSelectedModule
-          ? html`
+      ? html`
               <${CommandDeck}
                 topic=${topic}
                 section=${section}
@@ -5682,13 +5682,13 @@ function App() {
               />
 
               ${showWorkspacePanels
-                ? html`
+          ? html`
                     <div className="relative min-h-0">
                       <div
                         className=${cx(
-                          "workspace-main grid min-h-0 gap-4 transition-opacity duration-200 xl:grid-cols-[minmax(0,0.56fr)_minmax(0,1.44fr)]",
-                          isWorkspaceTransitioning ? "opacity-0" : "opacity-100",
-                        )}
+            "workspace-main grid min-h-0 gap-4 transition-opacity duration-200 xl:grid-cols-[minmax(0,0.56fr)_minmax(0,1.44fr)]",
+            isWorkspaceTransitioning ? "opacity-0" : "opacity-100",
+          )}
                       >
                         <${FieldNotesPane}
                           analysisState=${analysisState}
@@ -5730,14 +5730,14 @@ function App() {
 
                       <${AnimatePresence} initial=${false}>
                         ${isWorkspaceTransitioning
-                          ? html`<${WorkspaceTransitionShell} key="workspace-transition" />`
-                          : null}
+              ? html`<${WorkspaceTransitionShell} key="workspace-transition" />`
+              : null}
                       </${AnimatePresence}>
                     </div>
                   `
-                : null}
-            `
           : null}
+            `
+      : null}
       </div>
     </div>
   `;
