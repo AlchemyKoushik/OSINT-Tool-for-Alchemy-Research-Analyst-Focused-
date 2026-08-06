@@ -848,6 +848,27 @@ function buildExportResultPayload(result) {
     title: String(normalizedResult?.title || "").trim(),
   };
 
+  if (
+    section === "industry_earnings_snapshot" ||
+    Array.isArray(normalizedResult?.companies) ||
+    (normalizedResult?.scatter_chart && typeof normalizedResult.scatter_chart === "object")
+  ) {
+    payload.report_type = "ies_report";
+    payload.request = normalizedResult?.request && typeof normalizedResult.request === "object" ? normalizedResult.request : {};
+    payload.summary = normalizedResult?.summary && typeof normalizedResult.summary === "object" ? normalizedResult.summary : {};
+    payload.scatter_chart = normalizedResult?.scatter_chart && typeof normalizedResult.scatter_chart === "object"
+      ? {
+          ...normalizedResult.scatter_chart,
+          data: Array.isArray(normalizedResult.scatter_chart.data) ? normalizedResult.scatter_chart.data : [],
+        }
+      : { data: [] };
+    payload.companies = Array.isArray(normalizedResult?.companies) ? normalizedResult.companies : [];
+    payload.metadata = normalizedResult?.metadata && typeof normalizedResult.metadata === "object" ? normalizedResult.metadata : {};
+    payload.meta = normalizedResult?.meta && typeof normalizedResult.meta === "object" ? normalizedResult.meta : {};
+    payload.items = [];
+    return payload;
+  }
+
   if (section === "competitive_landscape") {
     payload.major_players = Array.isArray(normalizedResult?.major_players)
       ? normalizedResult.major_players.map(buildExportItem).filter((item) => item.heading || item.body)

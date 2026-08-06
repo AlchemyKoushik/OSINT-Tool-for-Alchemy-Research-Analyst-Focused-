@@ -1,0 +1,2414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agricultural Inputs | Global</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+  color-scheme: light;
+  --canvas: #f7f2e9;
+  --canvas-warm: #f7f2e9;
+  --surface: #f7f2e9;
+  --surface-strong: rgba(255, 252, 247, 0.96);
+  --surface-muted: rgba(241, 233, 221, 0.86);
+  --border: rgba(62, 69, 63, 0.12);
+  --border-strong: rgba(36, 65, 61, 0.18);
+  --text: #1f2a29;
+  --muted: #65706a;
+  --accent: #27433c;
+  --accent-soft: rgba(39, 67, 60, 0.08);
+  --accent-faint: rgba(39, 67, 60, 0.04);
+  --gold: #b88c52;
+  --rose: #c77b76;
+  --shadow-soft: 0 12px 30px rgba(121, 102, 72, 0.08);
+  --paper-shadow: 0 22px 70px rgba(114, 97, 73, 0.11);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html {
+  font-size: 15px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(188, 226, 213, 0.45), transparent 24%),
+    radial-gradient(circle at 100% 0%, rgba(231, 211, 181, 0.38), transparent 22%),
+    radial-gradient(circle at 84% 84%, rgba(203, 228, 217, 0.28), transparent 24%),
+    linear-gradient(135deg, #fbf7f1 0%, #f4eee4 56%, #eee4d5 100%);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+body {
+  margin: 0;
+  font-family: "Manrope", sans-serif;
+  color: var(--text);
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(188, 226, 213, 0.45), transparent 24%),
+    radial-gradient(circle at 100% 0%, rgba(231, 211, 181, 0.38), transparent 22%),
+    radial-gradient(circle at 84% 84%, rgba(203, 228, 217, 0.28), transparent 24%),
+    linear-gradient(135deg, #fbf7f1 0%, #f4eee4 56%, #eee4d5 100%);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: -2px;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(39, 67, 60, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(39, 67, 60, 0.03) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.7), transparent 95%);
+  opacity: 0.35;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: -2px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.76), transparent 26%),
+    radial-gradient(circle at 84% 8%, rgba(255, 248, 239, 0.72), transparent 18%);
+  opacity: 0.95;
+}
+
+.ui-floating-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 160;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: rgba(39, 67, 60, 0.12);
+  color: var(--text);
+}
+
+.atelier-panel {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.atelier-panel-crisp {
+  background: rgba(255, 251, 245, 0.94);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.atelier-panel-strong {
+  background: var(--surface-strong);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--paper-shadow);
+}
+
+.paper-sheet {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 248, 242, 0.96)),
+    repeating-linear-gradient(
+      180deg,
+      rgba(39, 67, 60, 0.04),
+      rgba(39, 67, 60, 0.04) 1px,
+      transparent 1px,
+      transparent 32px
+    );
+  border: 1px solid rgba(62, 69, 63, 0.1);
+  box-shadow: var(--paper-shadow);
+}
+
+.ies-result-sheet {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 248, 242, 0.96));
+}
+
+.paper-sheet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), transparent 18%),
+    radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.8), transparent 28%);
+}
+
+.editorial-rule {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(39, 67, 60, 0.18), rgba(39, 67, 60, 0.04));
+}
+
+.brief-item-index {
+  background: #27433c;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  position: relative;
+  z-index: 1;
+}
+
+.brief-item-bullets {
+  list-style: disc;
+  color: var(--muted);
+  padding-left: 1.25rem;
+}
+
+.brief-item-bullets li {
+  color: var(--muted);
+}
+
+.brief-item-bullets li::marker {
+  color: var(--accent);
+}
+
+.soft-inset {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(39, 67, 60, 0.04);
+}
+
+.command-deck-grid {
+  align-items: end;
+}
+
+.command-deck-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  position: relative;
+}
+
+.command-control {
+  width: 100%;
+  min-height: 3.5rem;
+  height: 3.5rem;
+  padding: 0 1.2rem;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(62, 69, 63, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(39, 67, 60, 0.04);
+  font-size: 1rem;
+  line-height: 1.2;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.command-control--input {
+  padding: 0 1.35rem;
+  border-radius: 22px;
+}
+
+.command-deck-field input.command-control--input {
+  width: 100%;
+  min-height: 3.5rem;
+  height: 3.5rem;
+  padding: 0 1.35rem;
+  border: 1px solid rgba(62, 69, 63, 0.14);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(39, 67, 60, 0.04);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.command-control::placeholder {
+  color: rgba(101, 112, 106, 0.7);
+}
+
+.command-control:hover {
+  border-color: rgba(39, 67, 60, 0.22);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.command-control:focus {
+  outline: none;
+  border-color: rgba(39, 67, 60, 0.28);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow:
+    0 0 0 4px rgba(39, 67, 60, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(39, 67, 60, 0.05);
+}
+
+.command-control:disabled,
+.soft-inset:disabled,
+.command-select__trigger:disabled,
+.edit-filter-button:disabled,
+.filter-close-button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.ui-disabled-shell {
+  opacity: 0.68;
+}
+
+.ui-disabled-shell,
+.ui-disabled-shell * {
+  cursor: not-allowed !important;
+}
+
+.command-deck-field input.command-control--input:hover {
+  border-color: rgba(39, 67, 60, 0.22);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.command-deck-field input.command-control--input:focus {
+  outline: none;
+  border-color: rgba(39, 67, 60, 0.28);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow:
+    0 0 0 4px rgba(39, 67, 60, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(39, 67, 60, 0.05);
+}
+
+.command-control--select {
+  padding-right: 3rem;
+}
+
+.command-select {
+  position: relative;
+  z-index: 1;
+}
+
+.command-select--open {
+  z-index: 2;
+}
+
+.command-select__trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.command-select__value {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-right: 2.3rem;
+}
+
+.command-select__chevron {
+  width: 1.05rem;
+  height: 1.05rem;
+  position: absolute;
+  top: 50%;
+  right: 1.15rem;
+  flex: 0 0 auto;
+  color: rgba(39, 67, 60, 0.72);
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translate3d(0, -50%, 0);
+  transition:
+    transform 180ms ease,
+    color 180ms ease;
+}
+
+.command-select__chevron--open {
+  transform: translate3d(0, -50%, 0) rotate(180deg);
+  color: var(--accent);
+}
+
+.command-select__menu {
+  position: fixed;
+  z-index: 161;
+  pointer-events: auto;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.command-select__menu-shell {
+  padding: 0.45rem;
+  overflow-y: auto;
+  border: 1px solid rgba(39, 67, 60, 0.14);
+  border-radius: 1.35rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 246, 239, 0.94));
+  box-shadow:
+    0 20px 40px rgba(76, 68, 55, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  -ms-overflow-style: none;
+}
+
+.command-select__menu-shell::-webkit-scrollbar {
+  display: none;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.command-select__menu-shell::-webkit-scrollbar-track,
+.command-select__menu-shell::-webkit-scrollbar-thumb,
+.command-select__menu-shell::-webkit-scrollbar-corner {
+  display: none;
+  background: transparent;
+}
+
+.command-select__option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.82rem 0.9rem;
+  border: none;
+  border-radius: 1rem;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.97rem;
+  font-weight: 600;
+  text-align: left;
+  will-change: transform, background-color, color;
+  backface-visibility: hidden;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.command-select__option:hover,
+.command-select__option:focus-visible {
+  outline: none;
+  background: rgba(39, 67, 60, 0.08);
+  color: var(--accent);
+  transform: translate3d(1px, 0, 0);
+}
+
+.command-select__option--selected {
+  background: linear-gradient(135deg, rgba(39, 67, 60, 0.96), rgba(90, 114, 104, 0.92));
+  color: #fffdf9;
+  box-shadow: 0 10px 22px rgba(39, 67, 60, 0.16);
+}
+
+.command-select__option--selected:hover,
+.command-select__option--selected:focus-visible {
+  background: linear-gradient(135deg, rgba(39, 67, 60, 0.96), rgba(90, 114, 104, 0.92));
+  color: #fffdf9;
+  transform: none;
+}
+
+.command-select__option-label {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.command-select__option-mark {
+  width: 0.62rem;
+  height: 0.62rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid rgba(39, 67, 60, 0.18);
+  background: rgba(39, 67, 60, 0.08);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.command-select__option-mark--selected {
+  border-color: rgba(255, 248, 239, 0.6);
+  background: linear-gradient(135deg, #f5ddad, #cf9f5e);
+  transform: scale(1.08);
+}
+
+.command-deck-action {
+  min-width: 0;
+  display: flex;
+  width: 100%;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+@media (min-width: 1280px) {
+  .command-deck-action {
+    justify-content: flex-end;
+  }
+}
+
+.panel-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: layout paint;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(39, 67, 60, 0.24) transparent;
+}
+
+.panel-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(39, 67, 60, 0.22);
+}
+
+.panel-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(39, 67, 60, 0.34);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #223a34 0%, #557066 42%, #b88c52 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.page-noise {
+  position: relative;
+}
+
+.page-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(39, 67, 60, 0.04), transparent 20%),
+    radial-gradient(circle at 90% 10%, rgba(184, 140, 82, 0.06), transparent 16%);
+}
+
+.progress-ribbon {
+  background: linear-gradient(90deg, rgba(39, 67, 60, 0.74), rgba(184, 140, 82, 0.78));
+  box-shadow: 0 8px 20px rgba(39, 67, 60, 0.14);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.metric-card {
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(62, 69, 63, 0.08);
+  box-shadow: var(--shadow-soft);
+}
+
+.metric-card-shell {
+  min-height: 7rem;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.metric-card-shell:hover {
+  transform: translate3d(0, -1px, 0);
+  box-shadow: 0 20px 40px rgba(121, 102, 72, 0.11);
+}
+
+.ies-hero {
+  position: relative;
+}
+
+.ies-insights-shell {
+  position: relative;
+}
+
+.ies-insight-card {
+  position: relative;
+  border: 1px solid rgba(62, 69, 63, 0.1);
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 14px 34px rgba(121, 102, 72, 0.08);
+}
+
+.ies-insight-card--accent {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(242, 249, 247, 0.9));
+}
+
+.ies-insight-card--gold {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(250, 245, 235, 0.92));
+}
+
+.ies-chart-stage {
+  box-shadow:
+    0 22px 60px rgba(31, 42, 41, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.ies-scatter {
+  overflow: visible;
+}
+
+.ies-scatter-point-group {
+  cursor: pointer;
+  outline: none;
+}
+
+.ies-scatter-point-group:focus-visible .ies-scatter-point {
+  stroke: #27433C;
+  stroke-width: 2.8px;
+}
+
+.ies-scatter-point {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 220ms ease,
+    filter 220ms ease;
+}
+
+.ies-scatter-point-group:hover .ies-scatter-point,
+.ies-scatter-point-group[data-state="active"] .ies-scatter-point,
+.ies-scatter-point-group[data-state="selected"] .ies-scatter-point {
+  transform: scale(1.15);
+  filter: drop-shadow(0 8px 16px rgba(39, 67, 60, 0.28));
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spin-slow 12s linear infinite;
+}
+
+.ies-scatter-tooltip {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.ies-scatter-tooltip__title {
+  margin: 0;
+  font-family: "Manrope", sans-serif;
+  font-size: 1rem;
+  line-height: 1.35;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.ies-scatter-tooltip__ticker {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(101, 112, 106, 0.76);
+}
+
+.ies-scatter-tooltip__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 0.8rem;
+  margin-top: 0.9rem;
+}
+
+.ies-scatter-tooltip__cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ies-scatter-tooltip__label {
+  font-size: 0.63rem;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(101, 112, 106, 0.74);
+}
+
+.ies-scatter-tooltip__value {
+  font-size: 0.88rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ies-universe-table {
+  border-spacing: 0;
+}
+
+.ies-universe-table thead th {
+  border-bottom: 1px solid rgba(62, 69, 63, 0.09);
+}
+
+.ies-universe-row {
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.ies-universe-row:hover {
+  background: rgba(255, 252, 246, 0.92);
+}
+
+.ies-universe-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(39, 67, 60, 0.24);
+  background: rgba(255, 252, 246, 0.98);
+}
+
+.ies-universe-row.is-selected {
+  background: linear-gradient(90deg, rgba(39, 67, 60, 0.05), rgba(184, 140, 82, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(39, 67, 60, 0.08);
+}
+
+.ies-universe-row--outlier {
+  background: rgba(255, 248, 238, 0.72);
+}
+
+.ies-universe-row td {
+  border-bottom: 1px solid rgba(62, 69, 63, 0.08);
+}
+
+.ies-universe-row:last-child td {
+  border-bottom: none;
+}
+
+.ies-drawer__section + .ies-drawer__section {
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(62, 69, 63, 0.08);
+}
+
+.ies-drawer__section {
+  scroll-margin-top: 1rem;
+}
+
+.chip-soft {
+  background: rgba(39, 67, 60, 0.06);
+  border: 1px solid rgba(39, 67, 60, 0.1);
+}
+
+.chip-gold {
+  background: rgba(184, 140, 82, 0.08);
+  border: 1px solid rgba(184, 140, 82, 0.18);
+}
+
+.tone-chip-muted {
+  background: rgba(39, 67, 60, 0.06);
+  border: 1px solid rgba(39, 67, 60, 0.1);
+  color: var(--muted);
+}
+
+.tone-chip-soft {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(62, 69, 63, 0.09);
+  color: var(--muted);
+}
+
+.tone-chip-accent {
+  background: rgba(150, 167, 155, 0.16);
+  border: 1px solid rgba(150, 167, 155, 0.28);
+  color: var(--accent);
+}
+
+.tone-chip-gold {
+  background: rgba(184, 140, 82, 0.1);
+  border: 1px solid rgba(184, 140, 82, 0.18);
+  color: #8d6430;
+}
+
+.tone-chip-danger {
+  background: #fff1f0;
+  border: 1px solid #fecaca;
+  color: #b42318;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid rgba(39, 67, 60, 0.18);
+  box-shadow: 0 18px 34px rgba(39, 67, 60, 0.16);
+}
+
+.btn-primary:hover {
+  background: #223a34;
+}
+
+.btn-neutral {
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--muted);
+  border: 1px solid rgba(62, 69, 63, 0.12);
+}
+
+.metric-accent {
+  background: rgba(150, 167, 155, 0.16);
+  border: 1px solid rgba(150, 167, 155, 0.26);
+}
+
+.metric-gold {
+  background: rgba(184, 140, 82, 0.1);
+  border: 1px solid rgba(184, 140, 82, 0.2);
+}
+
+.quiet-dots {
+  background-image: radial-gradient(rgba(39, 67, 60, 0.14) 0.8px, transparent 0.8px);
+  background-size: 12px 12px;
+}
+
+.lift-on-hover {
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.lift-on-hover:hover {
+  transform: translate3d(0, -1px, 0);
+  box-shadow: 0 16px 32px rgba(121, 102, 72, 0.11);
+}
+
+.skeleton-wash {
+  position: relative;
+  overflow: hidden;
+  background: rgba(39, 67, 60, 0.07);
+}
+
+.skeleton-wash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.68), transparent);
+  will-change: transform;
+  transform: translate3d(-100%, 0, 0);
+  animation: shimmer 1.2s linear infinite;
+}
+
+.pencil-loader-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 12.5rem);
+  min-height: 13rem;
+}
+
+.pencil-loader-frame {
+  width: 12.5rem;
+  height: 12.5rem;
+  border: 0;
+  background: transparent;
+  display: block;
+  pointer-events: none;
+  will-change: transform, opacity;
+  flex: 0 0 auto;
+}
+
+.filter-close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: 1px solid rgba(39, 67, 60, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 241, 232, 0.88));
+  color: rgba(39, 67, 60, 0.72);
+  box-shadow:
+    0 8px 18px rgba(121, 102, 72, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  line-height: 1;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  will-change: transform, box-shadow, background-color, border-color;
+  backface-visibility: hidden;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.filter-close-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  display: block;
+}
+
+.filter-close-button:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(232, 242, 237, 0.92));
+  border-color: rgba(39, 67, 60, 0.22);
+  color: var(--accent);
+  transform: translate3d(0, -1px, 0) scale(1.02);
+  box-shadow:
+    0 12px 22px rgba(39, 67, 60, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.filter-close-button:focus-visible {
+  outline: none;
+  border-color: rgba(39, 67, 60, 0.32);
+  box-shadow:
+    0 0 0 4px rgba(39, 67, 60, 0.12),
+    0 12px 24px rgba(39, 67, 60, 0.1);
+}
+
+.edit-filter-button {
+  --edit-bg: linear-gradient(135deg, #2a463f 0%, #35554c 46%, #b88c52 100%);
+  --edit-bg-hover: linear-gradient(135deg, #b88c52 0%, #9f7a49 34%, #2a463f 100%);
+  --edit-ring: rgba(39, 67, 60, 0.16);
+  --edit-text: #fffdf9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 999px;
+  background: var(--edit-bg);
+  color: var(--edit-text);
+  box-shadow:
+    0 14px 26px rgba(39, 67, 60, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+  text-decoration: none !important;
+  will-change: transform, box-shadow, background, opacity;
+  contain: layout paint;
+  backface-visibility: hidden;
+  transition:
+    width 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    gap 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-radius 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 180ms ease;
+}
+
+.edit-filter-button__label {
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 0.79rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transform: translate3d(8px, 0, 0);
+  transition:
+    opacity 160ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.edit-filter-button__icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  will-change: transform;
+  backface-visibility: hidden;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.edit-filter-button__icon path {
+  fill: currentColor;
+}
+
+.edit-filter-button:hover {
+  width: 11.5rem;
+  gap: 0.42rem;
+  justify-content: flex-start;
+  padding: 0 0.72rem 0 0.96rem;
+  border-radius: 999px;
+  background: var(--edit-bg-hover);
+  transform: translate3d(0, -1px, 0);
+  box-shadow:
+    0 18px 28px rgba(184, 140, 82, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.edit-filter-button:hover .edit-filter-button__label,
+.edit-filter-button:focus-visible .edit-filter-button__label {
+  flex: 1 1 auto;
+  max-width: 8.5rem;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.edit-filter-button:hover .edit-filter-button__icon,
+.edit-filter-button:focus-visible .edit-filter-button__icon {
+  transform: rotate(360deg);
+}
+
+.edit-filter-button:focus-visible {
+  outline: none;
+  width: 11.5rem;
+  gap: 0.42rem;
+  justify-content: flex-start;
+  padding: 0 0.72rem 0 0.96rem;
+  border-radius: 999px;
+  background: var(--edit-bg-hover);
+  box-shadow:
+    0 0 0 4px var(--edit-ring),
+    0 18px 28px rgba(184, 140, 82, 0.2);
+}
+
+.download-results-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.95rem;
+  min-height: 3.65rem;
+  padding: 0.78rem 1.08rem 0.78rem 0.82rem;
+  border: 1px solid rgba(39, 67, 60, 0.14);
+  border-radius: 1.35rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 245, 238, 0.96));
+  box-shadow:
+    0 16px 34px rgba(121, 102, 72, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  color: var(--text);
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    filter 180ms ease;
+}
+
+.download-results-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(39, 67, 60, 0.06), transparent 42%),
+    radial-gradient(circle at 100% 0%, rgba(184, 140, 82, 0.14), transparent 34%);
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+
+.download-results-button::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(39, 67, 60, 0.08), rgba(184, 140, 82, 0.55), rgba(39, 67, 60, 0.08));
+  opacity: 0.85;
+}
+
+.download-results-button:hover,
+.download-results-button:focus-visible {
+  transform: translate3d(0, -1px, 0);
+  border-color: rgba(39, 67, 60, 0.24);
+  box-shadow:
+    0 22px 42px rgba(121, 102, 72, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  filter: saturate(1.03);
+}
+
+.download-results-button:hover::before,
+.download-results-button:focus-visible::before {
+  opacity: 1;
+}
+
+.download-results-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px rgba(150, 167, 155, 0.3),
+    0 22px 42px rgba(121, 102, 72, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+.download-results-button:disabled {
+  opacity: 0.48;
+  transform: none;
+  box-shadow:
+    0 10px 22px rgba(121, 102, 72, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  filter: none;
+}
+
+.download-results-button.is-exporting {
+  pointer-events: none;
+}
+
+.download-results-button__icon-shell {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.55rem;
+  height: 2.55rem;
+  border-radius: 1rem;
+  background:
+    linear-gradient(145deg, #27433c, #36574f);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 12px 22px rgba(39, 67, 60, 0.22);
+}
+
+.download-results-button__icon {
+  width: 1.05rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.download-results-button__icon path {
+  fill: #fffdf9;
+}
+
+.download-results-button__copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.download-results-button__eyebrow {
+  font-size: 0.6rem;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(101, 112, 106, 0.82);
+}
+
+.download-results-button__label {
+  font-size: 0.92rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0.005em;
+  color: var(--text);
+}
+
+.download-results-button__spinner {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 253, 249, 0.24);
+  border-top-color: #fffdf9;
+  animation: download-spin 0.8s linear infinite;
+}
+
+@keyframes download-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .download-results-button {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+@media (max-width: 1280px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+.workspace-shell,
+.workspace-grid {
+  min-height: 100vh;
+  height: auto;
+}
+
+.workspace-grid {
+  grid-template-rows: auto auto auto auto !important;
+  align-content: start;
+}
+
+.sticky-module-bar {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 20;
+}
+
+.module-selector-bar {
+  margin-bottom: 0;
+  position: relative;
+  z-index: 2;
+  background-clip: padding-box;
+}
+
+.module-selector-bar::before,
+.module-selector-bar::after {
+  display: none;
+}
+
+.workspace-main {
+  min-height: auto;
+  align-items: start;
+}
+
+.workspace-main > * {
+  min-width: 0;
+}
+
+.workspace-pane {
+  min-height: 32rem;
+  overflow: visible !important;
+}
+
+.workspace-pane-body {
+  min-height: auto;
+  overflow: visible !important;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1024px) {
+  .ies-scatter-tooltip {
+    max-width: 19rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .ies-drawer {
+    justify-content: stretch;
+  }
+
+  .ies-drawer__panel {
+    max-width: none;
+    width: 100%;
+    border-left: 0;
+    border-top: 1px solid rgba(62, 69, 63, 0.1);
+    border-radius: 1.5rem 1.5rem 0 0;
+    align-self: flex-end;
+  }
+
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    overflow: auto;
+  }
+
+    overflow: auto;
+  }
+
+  html {
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Remove default browser focus outline on scatter chart interactive elements */
+.ies-scatter-point-group,
+.ies-scatter-point-group:focus,
+.ies-scatter-point-group:focus-visible,
+.ies-scatter-point-group:active,
+.ies-scatter-point,
+.ies-scatter-point:focus,
+.ies-scatter-point:focus-visible,
+svg g[role="button"]:focus,
+svg g[role="button"]:focus-visible,
+svg circle:focus,
+svg circle:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Tabular nums for clean financial data alignment */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Optimized Table Scroll Performance & Hidden Scrollbar */
+.ies-universe-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 48px;
+}
+
+.panel-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.panel-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Tooltip Real Frosted Glass Blur */
+.ies-scatter-tooltip > div {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* Loading Select State */
+.command-select.is-loading {
+  opacity: 0.85;
+}
+
+    :root {
+      color-scheme: light;
+      --bg: #F8F5EE;
+      --panel: #FFFDF9;
+      --panel-strong: #FFFDF8;
+      --ink: #1F2A29;
+      --muted: #65706A;
+      --accent: #27433c;
+      --accent-soft: #dce8e1;
+      --line: rgba(62, 69, 63, 0.12);
+      --gold: #B88C52;
+      --shadow: 0 18px 40px rgba(31, 42, 41, 0.08);
+      --font-display: 'Fraunces', Georgia, serif;
+      --font-body: 'Manrope', -apple-system, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      background-color: var(--bg);
+      color: var(--ink);
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .paper-sheet {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 248, 242, 0.96));
+      border: 1px solid rgba(62, 69, 63, 0.12);
+      border-radius: 32px;
+      box-shadow: 0 20px 50px rgba(31, 42, 41, 0.05);
+      padding: 36px;
+    }
+
+    .ies-hero {
+      margin-bottom: 32px;
+    }
+
+    .ies-hero h3 {
+      font-family: var(--font-display);
+      font-size: 38px;
+      font-weight: 600;
+      line-height: 1.05;
+      color: var(--ink);
+      margin: 0;
+    }
+
+    .ies-kpi-ribbon {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(62, 69, 63, 0.14);
+      border-radius: 18px;
+      padding: 16px 20px;
+      margin-bottom: 32px;
+    }
+
+    .ies-kpi-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4px 8px;
+    }
+
+    .ies-kpi-card + .ies-kpi-card {
+      border-left: 1px solid rgba(62, 69, 63, 0.12);
+      padding-left: 16px;
+    }
+
+    .ies-kpi-label {
+      font-family: var(--font-display);
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: rgba(101, 112, 106, 0.75);
+    }
+
+    .ies-kpi-val-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .ies-kpi-value {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    .trend-up { color: #047857; font-weight: 700; font-size: 14px; }
+    .trend-down { color: #be123c; font-weight: 700; font-size: 14px; }
+
+    .ies-scatter-box {
+      border: 1px solid rgba(62, 69, 63, 0.14);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(31, 42, 41, 0.04);
+      margin-bottom: 32px;
+    }
+
+    .ies-scatter-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(62, 69, 63, 0.12);
+      padding-bottom: 16px;
+      margin-bottom: 20px;
+    }
+
+    .ies-scatter-header h4 {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0;
+      color: var(--ink);
+    }
+
+    .ies-scatter-badges {
+      display: flex;
+      gap: 10px;
+    }
+
+    .ies-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 9999px;
+      border: 1px solid rgba(62, 69, 63, 0.14);
+      background: #FFFFFF;
+      padding: 6px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink);
+    }
+
+    .dot-amber { width: 8px; height: 8px; border-radius: 50%; background: #d97706; }
+    .gradient-bar { width: 24px; height: 10px; border-radius: 9999px; background: linear-gradient(to right, #D96B60, #C5BEB5, #4E8764); }
+
+    .ies-chart-stage-container {
+      border-radius: 24px;
+      border: 1px solid rgba(62, 69, 63, 0.12);
+      background: radial-gradient(ellipse at top, #FFFDF8, #FFFFFF 60%, #F9F5EC);
+      padding: 16px;
+    }
+
+    .ies-scatter-svg {
+      width: 100%;
+      height: auto;
+      display: block;
+      overflow: visible;
+    }
+
+    .ies-insights-shell {
+      border: 1px solid rgba(62, 69, 63, 0.14);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 28px;
+      margin-bottom: 32px;
+      box-shadow: 0 20px 50px rgba(31, 42, 41, 0.04);
+    }
+
+    .ies-insights-header h4 {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0;
+      color: var(--ink);
+    }
+
+    .ies-insights-header p {
+      font-family: var(--font-display);
+      font-size: 13px;
+      color: var(--moss);
+      margin: 6px 0 20px 0;
+    }
+
+    .ies-insights-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .ies-insight-card {
+      border-radius: 16px;
+      border: 1px solid rgba(62, 69, 63, 0.12);
+      border-left-width: 4px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.9);
+    }
+
+    .ies-insight-card.tone-accent { border-left-color: #059669; }
+    .ies-insight-card.tone-gold { border-left-color: #d97706; }
+    .ies-insight-card.tone-slate { border-left-color: #64748b; }
+
+    .ies-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .ies-card-label {
+      font-family: var(--font-display);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+      margin: 0;
+    }
+
+    .ies-card-body {
+      font-family: var(--font-display);
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--moss);
+      font-weight: 500;
+      margin: 10px 0 0 0;
+    }
+
+    .ies-table-section {
+      margin-top: 12px;
+    }
+
+    .ies-table-header h4 {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+      color: var(--ink);
+    }
+
+    .ies-table-container {
+      border-radius: 16px;
+      border: 1px solid rgba(62, 69, 63, 0.14);
+      background: rgba(255, 255, 255, 0.9);
+      overflow: hidden;
+      box-shadow: 0 18px 48px rgba(31, 42, 41, 0.04);
+    }
+
+    .ies-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    .ies-table th {
+      background: #FAF6F0;
+      border-bottom: 1px solid rgba(62, 69, 63, 0.14);
+      padding: 12px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: rgba(101, 112, 106, 0.75);
+    }
+
+    .ies-table td {
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(62, 69, 63, 0.08);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    .ies-row-even { background: rgba(250, 247, 242, 0.3); }
+    .ies-row-odd { background: #FFFFFF; }
+    .ies-row-outlier { background: rgba(254, 243, 199, 0.4); }
+
+    .col-num { text-align: center; font-family: var(--font-display); font-weight: 600; color: rgba(101, 112, 106, 0.6); width: 32px; }
+    .col-company { min-width: 200px; }
+    .col-metric { text-align: center; font-family: var(--font-display); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+    .c-name { font-family: var(--font-display); font-weight: 700; color: var(--ink); display: block; line-height: 1.2; }
+    .c-meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 4px; font-size: 10px; color: var(--moss); font-family: var(--font-display); }
+    .ticker-badge { font-weight: 600; color: var(--ink); }
+
+    @media (max-width: 960px) {
+      .ies-kpi-ribbon { grid-template-columns: repeat(3, 1fr); }
+      .ies-insights-grid { grid-template-columns: repeat(1, 1fr); }
+    }
+
+    .memo-shell {
+      width: min(1120px, calc(100% - 32px));
+      margin: 32px auto 48px;
+      display: grid;
+      gap: 28px;
+    }
+
+    .memo-section__hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+    }
+
+    .memo-eyebrow {
+      font: 700 11px/1.3 Arial, sans-serif;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(89, 103, 99, 0.85);
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.06;
+    }
+
+    .memo-topic,
+    .memo-description {
+      margin: 10px 0 0;
+      max-width: 760px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .memo-scope {
+      flex: 0 0 auto;
+      font: 600 14px/1.4 Arial, sans-serif;
+      color: var(--ink);
+      text-align: center;
+    }
+
+    .memo-meta-panel {
+      margin-top: 20px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.72);
+      padding: 18px 20px;
+    }
+
+    .memo-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 210px));
+      gap: 12px;
+      align-items: stretch;
+      justify-content: start;
+    }
+
+    .summary-card {
+      background: rgba(255,255,255,0.84);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 12px 14px;
+      min-width: 0;
+    }
+
+    .summary-card span {
+      display: block;
+      margin-bottom: 8px;
+      font: 700 9px/1.4 Arial, sans-serif;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .summary-card strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--ink);
+    }
+
+    .editorial-rule {
+      height: 1px;
+      margin: 24px 0 0;
+      background: linear-gradient(90deg, transparent, var(--line), transparent);
+    }
+
+    .memo-items {
+      display: grid;
+      gap: 18px;
+      margin-top: 24px;
+    }
+
+    .competitive-group {
+      display: grid;
+      gap: 18px;
+    }
+
+    .competitive-group__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 4px;
+    }
+
+    .competitive-group__header h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.1;
+      color: var(--accent);
+    }
+
+    .competitive-group__header span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 40px;
+      height: 40px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel-strong);
+      color: var(--muted);
+      font: 700 11px/1 Arial, sans-serif;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .memo-item {
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      padding: 20px;
+    }
+
+    .memo-item__header {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .memo-item__index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font: 700 14px/1 Arial, sans-serif;
+    }
+
+    .memo-item__badge {
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 8px;
+    }
+
+    .memo-item__label {
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .memo-item h3 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.02;
+    }
+
+    .memo-item__body {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.9;
+      color: var(--muted);
+    }
+
+    .item-subsection {
+      margin-top: 24px;
+    }
+
+    .item-subsection--first {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .item-subsection h4 {
+      margin: 0 0 10px;
+      font: 700 13px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .example-list,
+    .source-list {
+      margin: 0;
+      padding-left: 22px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .source-list {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .source-item {
+      background: rgba(255,255,255,0.84);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 12px 14px;
+    }
+
+    .example-year {
+      color: var(--gold);
+      font-weight: 700;
+    }
+
+    .source-item + .source-item {
+      margin-top: 8px;
+    }
+
+    .source-meta {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .disclosure {
+      margin-top: 28px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,0.72);
+      overflow: hidden;
+    }
+
+    .disclosure > summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 14px 16px;
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .disclosure > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .disclosure > summary::after {
+      content: "Show";
+      color: var(--accent);
+    }
+
+    .disclosure[open] > summary::after {
+      content: "Hide";
+    }
+
+    .disclosure__body {
+      border-top: 1px solid var(--line);
+      padding: 16px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .disclosure-block h4 {
+      margin: 0 0 10px;
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(89, 103, 99, 0.82);
+    }
+
+    .summary-separator {
+      margin: 0 6px;
+      color: rgba(89, 103, 99, 0.55);
+    }
+
+    .memo-empty-state {
+      border: 1px dashed var(--line);
+      border-radius: 26px;
+      background: rgba(255,255,255,0.76);
+      padding: 24px 20px;
+      font-size: 15px;
+      line-height: 1.8;
+      color: var(--muted);
+    }
+
+    .memo-section--ies .memo-topic {
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .memo-item--outlier {
+      border-color: rgba(159, 111, 47, 0.36);
+      background: rgba(255, 248, 237, 0.9);
+    }
+
+    .memo-item__meta {
+      margin: 10px 0 0;
+      font: 600 12px/1.5 Arial, sans-serif;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .memo-item__badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .memo-badge,
+    .memo-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 6px 10px;
+      font: 700 10px/1 Arial, sans-serif;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--muted);
+    }
+
+    .memo-badge--outlier,
+    .memo-pill--warn {
+      border-color: rgba(159, 111, 47, 0.28);
+      color: var(--gold);
+      background: rgba(255, 248, 237, 0.95);
+    }
+
+    .memo-badge--status {
+      border-color: rgba(39, 67, 60, 0.18);
+      color: var(--accent);
+      background: rgba(220, 232, 225, 0.65);
+    }
+
+    .memo-pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .memo-pill--error {
+      border-color: rgba(185, 28, 28, 0.2);
+      color: #b91c1c;
+      background: rgba(254, 242, 242, 0.95);
+    }
+
+    .memo-error {
+      margin: 14px 0 0;
+      border-radius: 18px;
+      border: 1px solid rgba(185, 28, 28, 0.18);
+      background: rgba(254, 242, 242, 0.95);
+      padding: 12px 14px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #b91c1c;
+    }
+
+    .ies-chart-shell {
+      overflow: hidden;
+    }
+
+    .ies-chart {
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 18px;
+    }
+
+    .ies-chart__header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-bottom: 14px;
+    }
+
+    .ies-chart__header h4 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.06;
+      color: var(--ink);
+    }
+
+    .ies-chart__header p {
+      margin: 0;
+      font: 700 11px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .ies-chart-table {
+      display: grid;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .ies-chart-row {
+      display: grid;
+      grid-template-columns: minmax(72px, 0.7fr) minmax(170px, 1.6fr) repeat(4, minmax(70px, 0.75fr));
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    .ies-chart-row--header {
+      font: 700 10px/1.4 Arial, sans-serif;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(247, 240, 230, 0.88);
+    }
+
+    .ies-chart-row__company {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .ies-chart-row__metric,
+    .ies-chart-row__ticker {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    .ies-company-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 18px;
+    }
+
+    @media (max-width: 960px) {
+      .ies-chart-row {
+        grid-template-columns: minmax(64px, 0.6fr) minmax(120px, 1.2fr) repeat(2, minmax(0, 1fr));
+      }
+
+      .ies-chart-row--header {
+        display: none;
+      }
+
+      .ies-company-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .ies-chart-row {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .ies-company-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 860px) {
+      .memo-section {
+        padding: 22px 18px;
+      }
+
+      .memo-section__hero {
+        flex-direction: column;
+      }
+
+      .memo-scope {
+        min-width: 0;
+      }
+
+      .memo-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .memo-item h3 {
+        font-size: 24px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .memo-shell {
+        width: min(100% - 20px, 1000px);
+        margin: 18px auto 28px;
+      }
+
+      .memo-summary-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .memo-item__header {
+        flex-direction: column;
+      }
+
+      .memo-item__index {
+        min-width: 48px;
+        height: 48px;
+        border-radius: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="memo-shell">
+    <div class="paper-sheet ies-result-sheet flex w-full flex-col rounded-[32px] px-6 py-6 md:px-10 md:py-10 space-y-9 my-auto justify-center"><section class="ies-hero"><div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between"><div class="w-full space-y-2"><h3 class="font-display text-4xl sm:text-5xl font-semibold leading-[0.95] tracking-tight text-atelier-ink">Agricultural Inputs | Global</h3></div></div></section><div class="ies-kpi-ribbon"><div class="ies-kpi-card"><span class="ies-kpi-label">Companies Scanned</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">10</span></div></div><div class="ies-kpi-card"><span class="ies-kpi-label">Companies Fetched</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">10</span></div></div><div class="ies-kpi-card"><span class="ies-kpi-label">Median Rev. Growth (LQ YoY)</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">14.8%</span><span class="trend-up">↑</span></div></div><div class="ies-kpi-card"><span class="ies-kpi-label">Median Op. Margin (TTM)</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">7.7%</span><span class="trend-up">↑</span></div></div><div class="ies-kpi-card"><span class="ies-kpi-label">Median EV / Revenue</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">0.5x</span></div></div><div class="ies-kpi-card"><span class="ies-kpi-label">Median EV / EBITDA</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">6.7x</span></div></div></div><section><div class="rounded-[28px] border border-atelier-line/80 bg-white/80 p-5 md:p-7 shadow-[0_20px_50px_rgba(31,42,41,0.05)]"><div class="flex flex-wrap items-center justify-between gap-4 border-b border-atelier-line/60 pb-4"><div><h4 class="m-0 font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">Peer Positioning</h4></div><div class="flex flex-wrap items-center gap-2.5"><div class="inline-flex items-center gap-2 rounded-full border border-atelier-line/80 bg-white/90 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-ink shadow-2xs"><span class="h-2 w-2 rounded-full bg-amber-600"></span><span>Bubble Size: <strong class="text-atelier-forest">Revenue TTM</strong></span></div><div class="inline-flex items-center gap-2 rounded-full border border-atelier-line/80 bg-white/90 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-ink shadow-2xs"><div class="flex h-2.5 w-6 rounded-full bg-gradient-to-r from-[#D96B60] via-[#C5BEB5] to-[#4E8764]"></div><span>Color: <strong class="text-atelier-forest">Operating Margin</strong></span></div></div></div><div class="ies-chart-stage mt-6 rounded-[24px] border border-atelier-line/60 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#FFFDF8] via-white to-[#F9F5EC] p-4 md:p-6 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),0_20px_50px_rgba(31,42,41,0.04)]" style="position: relative; overflow: visible; min-height: 35rem;"><svg viewBox="0 0 1000 560" class="ies-scatter block h-auto w-full overflow-visible"><defs><radialGradient id="ies-grad-pos" cx="35%" cy="35%" r="65%"><stop offset="0%" stop-color="#6EA383" stop-opacity="0.95" /><stop offset="70%" stop-color="#4E8764" stop-opacity="0.88" /><stop offset="100%" stop-color="#3A6A4E" stop-opacity="0.9" /></radialGradient><radialGradient id="ies-grad-neu" cx="35%" cy="35%" r="65%"><stop offset="0%" stop-color="#DCD5CC" stop-opacity="0.95" /><stop offset="70%" stop-color="#C5BEB5" stop-opacity="0.88" /><stop offset="100%" stop-color="#A8A096" stop-opacity="0.9" /></radialGradient><radialGradient id="ies-grad-neg" cx="35%" cy="35%" r="65%"><stop offset="0%" stop-color="#E88B81" stop-opacity="0.95" /><stop offset="70%" stop-color="#D96B60" stop-opacity="0.88" /><stop offset="100%" stop-color="#B84F45" stop-opacity="0.9" /></radialGradient><filter id="ies-bubble-shadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#1F2A29" flood-opacity="0.16" /></filter><filter id="ies-bubble-glow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#27433C" flood-opacity="0.3" /></filter></defs><g class="quadrant-watermarks pointer-events-none select-none"><text x="740.00" y="139.24" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.22em" fill="rgba(65,80,74,0.07)">HIGH GROWTH • HIGH MARGIN</text><text x="316.00" y="139.24" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.22em" fill="rgba(65,80,74,0.07)">LOW GROWTH • HIGH MARGIN</text><text x="740.00" y="386.76" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.22em" fill="rgba(65,80,74,0.07)">HIGH GROWTH • LOW MARGIN</text><text x="316.00" y="386.76" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.22em" fill="rgba(65,80,74,0.07)">LOW GROWTH • LOW MARGIN</text></g><line x1="104" y1="484.00" x2="952" y2="484.00" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="90" y="488.00" text-anchor="end" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">-3.1%</text><line x1="104" y1="373.50" x2="952" y2="373.50" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="90" y="377.50" text-anchor="end" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">+2.7%</text><line x1="104" y1="263.00" x2="952" y2="263.00" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="90" y="267.00" text-anchor="end" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">+8.4%</text><line x1="104" y1="152.50" x2="952" y2="152.50" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="90" y="156.50" text-anchor="end" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">+14.2%</text><line x1="104" y1="42.00" x2="952" y2="42.00" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="90" y="46.00" text-anchor="end" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">+19.9%</text><line x1="104.00" y1="42" x2="104.00" y2="484" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="104.00" y="504" text-anchor="middle" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">-80.7%</text><line x1="316.00" y1="42" x2="316.00" y2="484" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="316.00" y="504" text-anchor="middle" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">-26.3%</text><line x1="528.00" y1="42" x2="528.00" y2="484" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="528.00" y="504" text-anchor="middle" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">+28.2%</text><line x1="740.00" y1="42" x2="740.00" y2="484" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="740.00" y="504" text-anchor="middle" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">+82.7%</text><line x1="952.00" y1="42" x2="952.00" y2="484" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" /><text x="952.00" y="504" text-anchor="middle" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">+137.1%</text><line x1="104" y1="277.39" x2="952" y2="277.39" stroke="rgba(88,104,101,0.25)" stroke-width="1.2" stroke-dasharray="5 5" /><line x1="475.84" y1="42" x2="475.84" y2="484" stroke="rgba(88,104,101,0.25)" stroke-width="1.2" stroke-dasharray="5 5" /><g class="median-labels pointer-events-none select-none"><text x="942" y="271.39" text-anchor="end" font-size="9" font-weight="700" letter-spacing="0.16em" fill="rgba(88,104,101,0.45)">ABOVE MEDIAN MARGIN</text><text x="942" y="291.39" text-anchor="end" font-size="9" font-weight="700" letter-spacing="0.16em" fill="rgba(88,104,101,0.45)">BELOW MEDIAN MARGIN</text><text x="483.84" y="56" text-anchor="start" font-size="9" font-weight="700" letter-spacing="0.16em" fill="rgba(88,104,101,0.45)">ABOVE MEDIAN GROWTH</text><text x="467.84" y="56" text-anchor="end" font-size="9" font-weight="700" letter-spacing="0.16em" fill="rgba(88,104,101,0.45)">BELOW MEDIAN GROWTH</text></g><line x1="104" y1="484" x2="952" y2="484" stroke="rgba(31,42,41,0.22)" stroke-width="1.2" /><line x1="104" y1="42" x2="104" y2="484" stroke="rgba(31,42,41,0.22)" stroke-width="1.2" /><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="DCM.VN" data-cx="461.83" data-cy="100.50" transform="translate(461.83, 100.50)"><circle class="ies-selection-ring hidden" r="35.00" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="29.00" fill="url(#ies-grad-pos)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>Petrovietnam Camau Fertilizer Corporation (DCM.VN)
+Revenue Growth: 11.2%
+Op. Margin: 16.9%
+Revenue TTM: 19.2T</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">DCM.VN</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="BFC.VN" data-cx="216.24" data-cy="321.68" transform="translate(216.24, 321.68)"><circle class="ies-selection-ring hidden" r="24.69" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="18.69" fill="url(#ies-grad-neg)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>Binh Dien Fertilizer Joint Stock Company (BFC.VN)
+Revenue Growth: -51.9%
+Op. Margin: 5.4%
+Revenue TTM: 9.6T</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">BFC.VN</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="DGWG.JK" data-cx="619.86" data-cy="248.93" transform="translate(619.86, 248.93)"><circle class="ies-selection-ring hidden" r="19.67" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="13.67" fill="url(#ies-grad-pos)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>Delta Giri Wacana Tbk. (DGWG.JK)
+Revenue Growth: 51.8%
+Op. Margin: 9.1%
+Revenue TTM: 4.9T</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">DGWG.JK</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="SAMF.JK" data-cx="343.90" data-cy="230.41" transform="translate(343.90, 230.41)"><circle class="ies-selection-ring hidden" r="18.65" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="12.65" fill="url(#ies-grad-pos)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>PT Saraswanti Anugerah Makmur, Tbk (SAMF.JK)
+Revenue Growth: -19.1%
+Op. Margin: 10.1%
+Revenue TTM: 3.9T</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">SAMF.JK</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="VFG.VN" data-cx="484.41" data-cy="256.07" transform="translate(484.41, 256.07)"><circle class="ies-selection-ring hidden" r="18.42" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="12.42" fill="url(#ies-grad-pos)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>Vietnam Fumigation Joint Stock Company (VFG.VN)
+Revenue Growth: 17.0%
+Op. Margin: 8.8%
+Revenue TTM: 3.7T</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">VFG.VN</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="SFG.VN" data-cx="496.47" data-cy="352.85" transform="translate(496.47, 352.85)"><circle class="ies-selection-ring hidden" r="17.34" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="11.34" fill="url(#ies-grad-neg)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>The Southern Fertilizer Joint Stock Company (SFG.VN)
+Revenue Growth: 20.1%
+Op. Margin: 3.7%
+Revenue TTM: 2.7T</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">SFG.VN</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="BISI.JK" data-cx="503.87" data-cy="132.25" transform="translate(503.87, 132.25)"><circle class="ies-selection-ring hidden" r="16.33" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="10.33" fill="url(#ies-grad-pos)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>PT BISI International Tbk (BISI.JK)
+Revenue Growth: 22.0%
+Op. Margin: 15.2%
+Revenue TTM: 1.8T</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">BISI.JK</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="025860.KS" data-cx="467.28" data-cy="425.50" transform="translate(467.28, 425.50)"><circle class="ies-selection-ring hidden" r="16.21" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="10.21" fill="url(#ies-grad-neg)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>Namhae Chemical Corporation (025860.KS)
+Revenue Growth: 12.6%
+Op. Margin: -0.0%
+Revenue TTM: 1.7T</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">025860.KS</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="VPS.VN" data-cx="839.76" data-cy="396.24" transform="translate(839.76, 396.24)"><circle class="ies-selection-ring hidden" r="15.17" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="9.17" fill="url(#ies-grad-neg)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>Vietnam Pesticide Joint Stock Company (VPS.VN)
+Revenue Growth: 108.3%
+Op. Margin: 1.5%
+Revenue TTM: 682.7B</title></circle><text x="-12" y="-10" text-anchor="end" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">VPS.VN</text></g><g class="ies-scatter-bubble-group cursor-pointer group outline-none" data-key="UPL.BO" data-cx="459.11" data-cy="298.71" transform="translate(459.11, 298.71)"><circle class="ies-selection-ring hidden" r="15.00" fill="none" stroke="#27433C" stroke-width="1.8" stroke-dasharray="4 3" /><circle class="ies-bubble-circle transition-all duration-200" r="9.00" fill="url(#ies-grad-neg)" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)"><title>UPL Limited (UPL.BO)
+Revenue Growth: 10.5%
+Op. Margin: 6.6%
+Revenue TTM: 528.0B</title></circle><text x="12" y="-10" text-anchor="start" font-size="10" font-family="Manrope, sans-serif" font-weight="700" fill="#1F2A29">UPL.BO</text></g><text x="528.00" y="556" text-anchor="middle" font-size="12" font-weight="700" fill="#41504A">Revenue Growth (LQ YoY)</text><text x="18" y="263.00" text-anchor="middle" font-size="12" font-weight="700" fill="#41504A" transform="rotate(-90 18 263.00)">Operating Margin</text></svg><div id="ies-interactive-tooltip" class="ies-scatter-tooltip pointer-events-none absolute z-30 transition-all duration-75 ease-out opacity-0 scale-95 translate-y-2 shadow-2xl rounded-2xl border border-atelier-line/90 bg-[#FFFDF9]/95 backdrop-blur-md p-4 w-64" style="position: absolute; transform: translate(-50%, -100%) translateY(-14px);"><div class="flex items-center gap-2 pb-2 border-b border-atelier-line/60"><div class="flex h-7 w-7 items-center justify-center rounded-lg bg-atelier-forest/10 font-mono text-xs font-bold text-atelier-forest uppercase tt-avatar">CO</div><div class="min-w-0"><h5 class="m-0 truncate font-display text-sm font-bold text-atelier-ink tt-title">Company</h5><div class="mt-0.5 flex flex-wrap gap-1.5"><span class="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-atelier-moss uppercase tt-ticker"></span><span class="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900/80 tt-country"></span></div></div></div><div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs"><div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss/65">Revenue TTM</span><span class="font-mono font-semibold text-atelier-ink tt-rev">—</span></div><div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss/65">Revenue Growth</span><span class="font-mono font-semibold text-atelier-ink tt-growth">—</span></div><div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss/65">Operating Margin</span><span class="font-mono font-semibold text-atelier-ink tt-margin">—</span></div><div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss/65">Reported EPS</span><span class="font-mono font-semibold text-atelier-ink tt-eps">—</span></div><div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss/65">EPS Surprise</span><span class="font-mono font-semibold text-atelier-ink tt-surprise">—</span></div><div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss/65">Forward P/E</span><span class="font-mono font-semibold text-atelier-ink tt-pe">—</span></div></div></div></div></div></section><section class="ies-insights-shell rounded-[28px] border border-atelier-line/80 bg-white/80 p-6 md:p-8 shadow-[0_20px_50px_rgba(31,42,41,0.04)]"><div class="flex flex-col gap-1.5"><h4 class="m-0 font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">Editorial Readout & Market Structure</h4><p class="mt-1 font-display text-xs md:text-sm font-medium leading-relaxed text-atelier-moss">This memo presents peer data for the selected companies to support industry analysis and comparison.</p></div><div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"><div class="ies-insight-card h-full rounded-2xl border border-atelier-line/70 border-l-4 p-5 shadow-2xs hover:shadow-md transition-all duration-200 border-l-emerald-600 bg-gradient-to-br from-emerald-50/40 to-white/90"><div class="flex items-center gap-2"><div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs"><svg class="w-4 h-4 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg></div><p class="m-0 font-display text-[12px] font-semibold text-atelier-ink">Highest Growth</p></div><p class="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium whitespace-pre-line">Vietnam Pesticide Joint Stock Company leads revenue growth at 108.3%.</p></div><div class="ies-insight-card h-full rounded-2xl border border-atelier-line/70 border-l-4 p-5 shadow-2xs hover:shadow-md transition-all duration-200 border-l-amber-500 bg-gradient-to-br from-amber-50/30 to-white/90"><div class="flex items-center gap-2"><div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs"><svg class="w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg></div><p class="m-0 font-display text-[12px] font-semibold text-atelier-ink">Highest Margin</p></div><p class="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium whitespace-pre-line">Petrovietnam Camau Fertilizer Corporation shows the highest operating margin at 16.9%.</p></div><div class="ies-insight-card h-full rounded-2xl border border-atelier-line/70 border-l-4 p-5 shadow-2xs hover:shadow-md transition-all duration-200 border-l-slate-500 bg-gradient-to-br from-slate-50/25 to-white/90"><div class="flex items-center gap-2"><div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs"><svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /></svg></div><p class="m-0 font-display text-[12px] font-semibold text-atelier-ink">Valuation Range</p></div><p class="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium whitespace-pre-line">EV / Revenue spans 0.2x to 1.4x across the universe.<br>EV / EBITDA spans 3.0x to 9.2x across the universe.</p></div></div></section><section><div class="flex flex-wrap items-center justify-between gap-4 mb-4"><div><h4 class="m-0 font-display text-2xl font-semibold leading-tight text-atelier-ink">Company Ranking Table</h4></div></div><div class="overflow-hidden rounded-2xl border border-atelier-line/80 bg-white/80 shadow-[0_18px_48px_rgba(31,42,41,0.04)]"><div class="max-h-[38rem] overflow-y-auto panel-scroll"><table class="w-full text-left border-collapse"><thead class="sticky top-0 z-20 isolate bg-[#FAF6F0] border-b border-atelier-line/80"><tr><th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 pl-3 pr-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70 w-8">#</th><th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Company & Ticker</th><th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue (TTM)</th><th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Rev. Growth (LQ YoY)</th><th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Op. Margin (TTM)</th><th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / Revenue</th><th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / EBITDA</th></tr></thead><tbody class="divide-y divide-atelier-line/40"><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-amber-50/40" data-key="DCM.VN" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">01</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">Petrovietnam Camau Fertilizer Corporation</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">DCM.VN</span> <span>• VSE</span> <span>• Vietnam</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">19.2T</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">11.2%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">16.9%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">0.7x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">4.2x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-amber-50/40" data-key="BFC.VN" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">02</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">Binh Dien Fertilizer Joint Stock Company</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">BFC.VN</span> <span>• VSE</span> <span>• Vietnam</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">9.6T</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">-51.9%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">5.4%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">0.5x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">8.5x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-amber-50/40" data-key="DGWG.JK" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">03</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">Delta Giri Wacana Tbk.</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">DGWG.JK</span> <span>• JKT</span> <span>• Indonesia</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">4.9T</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">51.8%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">9.1%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">0.6x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">5.2x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-amber-50/40" data-key="SAMF.JK" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">04</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">PT Saraswanti Anugerah Makmur, Tbk</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">SAMF.JK</span> <span>• JKT</span> <span>• Indonesia</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">3.9T</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">-19.1%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">10.1%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">1.0x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">8.5x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-white/40" data-key="VFG.VN" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">05</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">Vietnam Fumigation Joint Stock Company</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">VFG.VN</span> <span>• VSE</span> <span>• Vietnam</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">3.7T</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">17.0%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">8.8%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">0.4x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">3.0x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-[#FAF7F2]/30" data-key="SFG.VN" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">06</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">The Southern Fertilizer Joint Stock Company</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">SFG.VN</span> <span>• VSE</span> <span>• Vietnam</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">2.7T</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">20.1%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">3.7%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">0.3x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">9.2x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-white/40" data-key="BISI.JK" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">07</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">PT BISI International Tbk</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">BISI.JK</span> <span>• JKT</span> <span>• Indonesia</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">1.8T</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">22.0%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">15.2%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">1.0x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">5.8x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-[#FAF7F2]/30" data-key="025860.KS" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">08</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">Namhae Chemical Corporation</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">025860.KS</span> <span>• KSC</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">1.7T</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">12.6%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">-0.0%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">0.2x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">7.7x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-amber-50/40" data-key="VPS.VN" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">09</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">Vietnam Pesticide Joint Stock Company</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">VPS.VN</span> <span>• VSE</span> <span>• Vietnam</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">682.7B</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">108.3%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">1.5%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">0.3x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">4.8x</td></tr><tr class="ies-universe-row group cursor-pointer transition-colors duration-75 hover:bg-[#F5EFE6]/80 bg-[#FAF7F2]/30" data-key="UPL.BO" role="button" tabindex="0"><td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">10</td><td class="py-3 px-2.5 align-middle"><div class="flex flex-col min-w-0"><span class="font-display font-bold text-atelier-ink group-hover:text-atelier-forest transition-colors break-words whitespace-normal leading-tight text-xs sm:text-sm">UPL Limited</span><div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]"><span class="font-semibold text-atelier-ink">UPL.BO</span> <span>• BSE</span> <span>• India</span></div></div></td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">528.0B</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">10.5%</td><td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">6.6%</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">1.4x</td><td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">9.0x</td></tr></tbody></table></div></div></section><div id="ies-company-drawer" class="ies-drawer fixed inset-0 z-[190] flex items-stretch justify-end hidden opacity-0 pointer-events-none transition-opacity duration-200"><div id="ies-drawer-backdrop" class="ies-drawer__backdrop absolute inset-0 border-0 bg-[#1a211d]/28 backdrop-blur-[2px] cursor-pointer" aria-label="Close company details"></div><aside id="ies-drawer-panel" class="ies-drawer__panel relative z-10 flex h-full w-full max-w-[44rem] flex-col overflow-hidden border-l border-atelier-line bg-[linear-gradient(180deg,rgba(255,253,248,0.98),rgba(248,242,232,0.98))] shadow-[0_30px_70px_rgba(31,42,41,0.16)] transform translate-x-full transition-transform duration-200 ease-out"><div id="ies-drawer-content" class="flex flex-col h-full overflow-hidden"></div></aside></div><script id="ies-companies-data" type="application/json">[{"canonical_company_id": "", "ticker": "DCM.VN", "company_name": "Petrovietnam Camau Fertilizer Corporation", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "Vietnam", "listing_region": "Asia", "listing_exchange": "VSE", "company_country": "Vietnam", "company_region": "Asia", "company_exchange": "VSE", "country": "Vietnam", "region": "Asia", "exchange": "VSE", "currency": "VND", "revenue_ttm": 19185092526080, "market_cap": 16331989581824, "enterprise_value": 12739131998208, "current_ev": 12739131998208, "ebitda_ttm": 2999588487168, "revenue_growth_lq_yoy": 11.200000000000001, "operating_margin": 16.857, "ebitda_margin": 15.634999999999998, "ev_to_revenue_ttm": 0.664, "ev_to_ebitda_ttm": 4.247, "reported_eps": 1398, "eps_estimate": null, "eps_surprise": null, "forward_pe": 7.6333046, "five_day_price_reaction": -8.28, "latest_earnings_date": "2026-03-31", "earnings_reference_date": "2026-03-31", "last_reported_earnings_date": "2026-03-31", "last_reported_eps": 1398, "last_reported_eps_estimate": null, "last_reported_eps_surprise": null, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "derived_calculation", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "direct_yahoo_field", "eps_estimate": "unavailable", "eps_surprise": "unavailable", "forward_pe": "direct_yahoo_field", "last_reported_earnings_date": "direct_yahoo_field", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "fallback_logic"}, "validation_warnings": [], "outlier_metrics": ["Revenue TTM", "Market Cap", "Enterprise Value", "EBITDA TTM", "5-Day Price Reaction"], "is_outlier": true}, {"canonical_company_id": "", "ticker": "BFC.VN", "company_name": "Binh Dien Fertilizer Joint Stock Company", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "Vietnam", "listing_region": "Asia", "listing_exchange": "VSE", "company_country": "Vietnam", "company_region": "Asia", "company_exchange": "VSE", "country": "Vietnam", "region": "Asia", "exchange": "VSE", "currency": "VND", "revenue_ttm": 9571542237184, "market_cap": 2961302093824, "enterprise_value": 4934506905600, "current_ev": 4934506905600, "ebitda_ttm": 580277960704, "revenue_growth_lq_yoy": -51.9, "operating_margin": 5.367999999999999, "ebitda_margin": 6.063000000000001, "ev_to_revenue_ttm": 0.516, "ev_to_ebitda_ttm": 8.504, "reported_eps": 963, "eps_estimate": null, "eps_surprise": null, "forward_pe": null, "five_day_price_reaction": -0.48, "latest_earnings_date": "2025-09-30", "earnings_reference_date": "2025-09-30", "last_reported_earnings_date": "2025-09-30", "last_reported_eps": 963, "last_reported_eps_estimate": null, "last_reported_eps_surprise": null, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "derived_calculation", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "direct_yahoo_field", "eps_estimate": "unavailable", "eps_surprise": "unavailable", "forward_pe": "unavailable", "last_reported_earnings_date": "direct_yahoo_field", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "fallback_logic"}, "validation_warnings": [], "outlier_metrics": ["Revenue TTM", "Revenue Growth (LQ YoY)"], "is_outlier": true}, {"canonical_company_id": "", "ticker": "DGWG.JK", "company_name": "Delta Giri Wacana Tbk.", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "Indonesia", "listing_region": "Asia", "listing_exchange": "JKT", "company_country": "Indonesia", "company_region": "Asia", "company_exchange": "JKT", "country": "Indonesia", "region": "Asia", "exchange": "JKT", "currency": "IDR", "revenue_ttm": 4885912223744, "market_cap": 1835294130176, "enterprise_value": 2823590772736, "current_ev": 2823590772736, "ebitda_ttm": 545430011904, "revenue_growth_lq_yoy": 51.800000000000004, "operating_margin": 9.147, "ebitda_margin": 11.162999999999998, "ev_to_revenue_ttm": 0.578, "ev_to_ebitda_ttm": 5.177, "reported_eps": null, "eps_estimate": null, "eps_surprise": null, "forward_pe": null, "five_day_price_reaction": null, "latest_earnings_date": "", "earnings_reference_date": "", "last_reported_earnings_date": "", "last_reported_eps": null, "last_reported_eps_estimate": null, "last_reported_eps_surprise": null, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "unavailable", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "unavailable", "eps_estimate": "unavailable", "eps_surprise": "unavailable", "forward_pe": "unavailable", "last_reported_earnings_date": "unavailable", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "fallback_logic"}, "validation_warnings": [], "outlier_metrics": ["Revenue Growth (LQ YoY)"], "is_outlier": true}, {"canonical_company_id": "", "ticker": "SAMF.JK", "company_name": "PT Saraswanti Anugerah Makmur, Tbk", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "Indonesia", "listing_region": "Asia", "listing_exchange": "JKT", "company_country": "Indonesia", "company_region": "Asia", "company_exchange": "JKT", "country": "Indonesia", "region": "Asia", "exchange": "JKT", "currency": "IDR", "revenue_ttm": 3933269393408, "market_cap": 2849500037120, "enterprise_value": 3769211289600, "current_ev": 3769211289600, "ebitda_ttm": 445636542464, "revenue_growth_lq_yoy": -19.1, "operating_margin": 10.109, "ebitda_margin": 11.3299996, "ev_to_revenue_ttm": 0.958, "ev_to_ebitda_ttm": 8.458, "reported_eps": null, "eps_estimate": null, "eps_surprise": null, "forward_pe": null, "five_day_price_reaction": null, "latest_earnings_date": "", "earnings_reference_date": "", "last_reported_earnings_date": "", "last_reported_eps": null, "last_reported_eps_estimate": null, "last_reported_eps_surprise": null, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "unavailable", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "unavailable", "eps_estimate": "unavailable", "eps_surprise": "unavailable", "forward_pe": "unavailable", "last_reported_earnings_date": "unavailable", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "fallback_logic"}, "validation_warnings": [], "outlier_metrics": ["Revenue Growth (LQ YoY)"], "is_outlier": true}, {"canonical_company_id": "", "ticker": "VFG.VN", "company_name": "Vietnam Fumigation Joint Stock Company", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "Vietnam", "listing_region": "Asia", "listing_exchange": "VSE", "company_country": "Vietnam", "company_region": "Asia", "company_exchange": "VSE", "country": "Vietnam", "region": "Asia", "exchange": "VSE", "currency": "VND", "revenue_ttm": 3719529758720, "market_cap": 1904180985856, "enterprise_value": 1392385458176, "current_ev": 1392385458176, "ebitda_ttm": 458039099392, "revenue_growth_lq_yoy": 17, "operating_margin": 8.776, "ebitda_margin": 12.314, "ev_to_revenue_ttm": 0.374, "ev_to_ebitda_ttm": 3.04, "reported_eps": null, "eps_estimate": null, "eps_surprise": null, "forward_pe": null, "five_day_price_reaction": null, "latest_earnings_date": "", "earnings_reference_date": "", "last_reported_earnings_date": "", "last_reported_eps": null, "last_reported_eps_estimate": null, "last_reported_eps_surprise": null, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "unavailable", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "unavailable", "eps_estimate": "unavailable", "eps_surprise": "unavailable", "forward_pe": "unavailable", "last_reported_earnings_date": "unavailable", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "fallback_logic"}, "validation_warnings": [], "outlier_metrics": [], "is_outlier": false}, {"canonical_company_id": "", "ticker": "SFG.VN", "company_name": "The Southern Fertilizer Joint Stock Company", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "Vietnam", "listing_region": "Asia", "listing_exchange": "VSE", "company_country": "Vietnam", "company_region": "Asia", "company_exchange": "VSE", "country": "Vietnam", "region": "Asia", "exchange": "VSE", "currency": "VND", "revenue_ttm": 2712611061760, "market_cap": 517291180032, "enterprise_value": 902344802304, "current_ev": 902344802304, "ebitda_ttm": 97710186496, "revenue_growth_lq_yoy": 20.1, "operating_margin": 3.749, "ebitda_margin": 3.6020000000000003, "ev_to_revenue_ttm": 0.333, "ev_to_ebitda_ttm": 9.235, "reported_eps": 202, "eps_estimate": null, "eps_surprise": null, "forward_pe": null, "five_day_price_reaction": 0, "latest_earnings_date": "2026-03-31", "earnings_reference_date": "2026-03-31", "last_reported_earnings_date": "2026-03-31", "last_reported_eps": 202, "last_reported_eps_estimate": null, "last_reported_eps_surprise": null, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "derived_calculation", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "direct_yahoo_field", "eps_estimate": "unavailable", "eps_surprise": "unavailable", "forward_pe": "unavailable", "last_reported_earnings_date": "direct_yahoo_field", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "fallback_logic"}, "validation_warnings": [], "outlier_metrics": [], "is_outlier": false}, {"canonical_company_id": "", "ticker": "BISI.JK", "company_name": "PT BISI International Tbk", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "Indonesia", "listing_region": "Asia", "listing_exchange": "JKT", "company_country": "Indonesia", "company_region": "Asia", "company_exchange": "JKT", "country": "Indonesia", "region": "Asia", "exchange": "JKT", "currency": "IDR", "revenue_ttm": 1766127960064, "market_cap": 2085000052736, "enterprise_value": 1804294946816, "current_ev": 1804294946816, "ebitda_ttm": 310154002432, "revenue_growth_lq_yoy": 22, "operating_margin": 15.207999999999998, "ebitda_margin": 17.561, "ev_to_revenue_ttm": 1.022, "ev_to_ebitda_ttm": 5.817, "reported_eps": 81.45, "eps_estimate": null, "eps_surprise": null, "forward_pe": null, "five_day_price_reaction": null, "latest_earnings_date": "1970-01-01", "earnings_reference_date": "1970-01-01", "last_reported_earnings_date": "1970-01-01", "last_reported_eps": 81.45, "last_reported_eps_estimate": null, "last_reported_eps_surprise": null, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "unavailable", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "direct_yahoo_field", "eps_estimate": "unavailable", "eps_surprise": "unavailable", "forward_pe": "unavailable", "last_reported_earnings_date": "direct_yahoo_field", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "fallback_logic"}, "validation_warnings": [], "outlier_metrics": [], "is_outlier": false}, {"canonical_company_id": "", "ticker": "025860.KS", "company_name": "Namhae Chemical Corporation", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "", "listing_region": "", "listing_exchange": "KSC", "company_country": "", "company_region": "", "company_exchange": "KSC", "country": "", "region": "", "exchange": "KSC", "currency": "KRW", "revenue_ttm": 1659712438272, "market_cap": 272828088320, "enterprise_value": 396908756992, "current_ev": 396908756992, "ebitda_ttm": 51666497536, "revenue_growth_lq_yoy": 12.6, "operating_margin": -0.025, "ebitda_margin": 3.113, "ev_to_revenue_ttm": 0.239, "ev_to_ebitda_ttm": 7.682, "reported_eps": -23, "eps_estimate": 31.3, "eps_surprise": -173.49, "forward_pe": null, "five_day_price_reaction": 4.79, "latest_earnings_date": "2014-11-14", "earnings_reference_date": "2014-11-14", "last_reported_earnings_date": "2014-11-14", "last_reported_eps": -23, "last_reported_eps_estimate": 31.3, "last_reported_eps_surprise": -173.49, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "derived_calculation", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "direct_yahoo_field", "eps_estimate": "direct_yahoo_field", "eps_surprise": "direct_yahoo_field", "forward_pe": "unavailable", "last_reported_earnings_date": "direct_yahoo_field", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "derived_calculation"}, "validation_warnings": [], "outlier_metrics": [], "is_outlier": false}, {"canonical_company_id": "", "ticker": "VPS.VN", "company_name": "Vietnam Pesticide Joint Stock Company", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "Vietnam", "listing_region": "Asia", "listing_exchange": "VSE", "company_country": "Vietnam", "company_region": "Asia", "company_exchange": "VSE", "country": "Vietnam", "region": "Asia", "exchange": "VSE", "currency": "VND", "revenue_ttm": 682662756352, "market_cap": null, "enterprise_value": 212873527296, "current_ev": 212873527296, "ebitda_ttm": 44199219200, "revenue_growth_lq_yoy": 108.3, "operating_margin": 1.4949999999999999, "ebitda_margin": 6.4750000000000005, "ev_to_revenue_ttm": 0.312, "ev_to_ebitda_ttm": 4.816, "reported_eps": null, "eps_estimate": null, "eps_surprise": null, "forward_pe": null, "five_day_price_reaction": null, "latest_earnings_date": "", "earnings_reference_date": "", "last_reported_earnings_date": "", "last_reported_eps": null, "last_reported_eps_estimate": null, "last_reported_eps_surprise": null, "next_earnings_date": "", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "unavailable", "revenue_ttm": "direct_yahoo_field", "market_cap": "unavailable", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "unavailable", "eps_estimate": "unavailable", "eps_surprise": "unavailable", "forward_pe": "unavailable", "last_reported_earnings_date": "unavailable", "next_earnings_date": "unavailable", "next_eps_estimate": "unavailable", "region": "fallback_logic"}, "validation_warnings": [], "outlier_metrics": ["Revenue Growth (LQ YoY)"], "is_outlier": true}, {"canonical_company_id": "", "ticker": "UPL.BO", "company_name": "UPL Limited", "sector": "Basic Materials", "industry": "Agricultural Inputs", "listing_country": "India", "listing_region": "Asia", "listing_exchange": "BSE", "company_country": "India", "company_region": "Asia Pacific", "company_exchange": "BSE", "country": "India", "region": "Asia Pacific", "exchange": "BSE", "currency": "INR", "revenue_ttm": 528040001536, "market_cap": 487264059392, "enterprise_value": 722235686912, "current_ev": 722235686912, "ebitda_ttm": 79847497728, "revenue_growth_lq_yoy": 10.5, "operating_margin": 6.561, "ebitda_margin": 15.121001, "ev_to_revenue_ttm": 1.368, "ev_to_ebitda_ttm": 9.045, "reported_eps": 0.19, "eps_estimate": -0.17, "eps_surprise": 215.38, "forward_pe": 12.314666, "five_day_price_reaction": null, "latest_earnings_date": "2026-08-03", "earnings_reference_date": "2026-08-03", "last_reported_earnings_date": "2026-08-03", "last_reported_eps": 0.19, "last_reported_eps_estimate": -0.17, "last_reported_eps_surprise": 215.38, "next_earnings_date": "2026-08-03", "next_eps_estimate": null, "enrichment_status": "ok", "enrichment_error": "", "metric_sources": {"five_day_price_reaction": "unavailable", "revenue_ttm": "direct_yahoo_field", "market_cap": "direct_yahoo_field", "enterprise_value": "direct_yahoo_field", "current_ev": "direct_yahoo_field", "ebitda_ttm": "direct_yahoo_field", "revenue_growth_lq_yoy": "direct_yahoo_field", "operating_margin": "direct_yahoo_field", "ebitda_margin": "direct_yahoo_field", "ev_to_revenue_ttm": "direct_yahoo_field", "ev_to_ebitda_ttm": "direct_yahoo_field", "reported_eps": "direct_yahoo_field", "eps_estimate": "direct_yahoo_field", "eps_surprise": "direct_yahoo_field", "forward_pe": "direct_yahoo_field", "last_reported_earnings_date": "direct_yahoo_field", "next_earnings_date": "direct_yahoo_field", "next_eps_estimate": "unavailable", "region": "derived_calculation"}, "validation_warnings": ["region 'Asia' does not match country 'India' and was normalized to 'Asia Pacific'", "region assignment audited for country 'India' and normalized from 'Asia' to 'Asia Pacific'"], "outlier_metrics": [], "is_outlier": false}]</script>
+<script>
+(function() {
+  const companiesData = JSON.parse(document.getElementById('ies-companies-data')?.textContent || '[]');
+  const companyMap = {};
+  companiesData.forEach((c, idx) => {
+    const key = (c.ticker || c.company_name || 'company-' + idx).trim();
+    companyMap[key] = c;
+    companyMap[key.toUpperCase()] = c;
+  });
+
+  const stage = document.querySelector('.ies-chart-stage');
+  const tooltip = document.getElementById('ies-interactive-tooltip');
+  const drawer = document.getElementById('ies-company-drawer');
+  const drawerBackdrop = document.getElementById('ies-drawer-backdrop');
+  const drawerPanel = document.getElementById('ies-drawer-panel');
+  const drawerContent = document.getElementById('ies-drawer-content');
+
+  let selectedKey = '';
+
+  function formatCompactNumber(val) {
+    if (val === null || val === undefined || isNaN(val)) return '—';
+    const num = Number(val);
+    const abs = Math.abs(num);
+    if (abs >= 1e12) return (num / 1e12).toFixed(1) + 'T';
+    if (abs >= 1e9) return (num / 1e9).toFixed(1) + 'B';
+    if (abs >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+    if (abs >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+    return num.toFixed(1);
+  }
+
+  function formatPercent(val) {
+    if (val === null || val === undefined || isNaN(val)) return '—';
+    const num = Number(val);
+    const sign = num > 0 ? '+' : '';
+    return sign + num.toFixed(1) + '%';
+  }
+
+  function formatRatio(val) {
+    if (val === null || val === undefined || isNaN(val)) return '—';
+    return Number(val).toFixed(1) + 'x';
+  }
+
+  function highlightSelection(key) {
+    document.querySelectorAll('.ies-universe-row').forEach(row => {
+      if (row.getAttribute('data-key') === key) {
+        row.classList.add('bg-amber-100/60', 'shadow-xs', 'border-l-4', 'border-l-amber-600');
+        row.setAttribute('aria-selected', 'true');
+      } else {
+        row.classList.remove('bg-amber-100/60', 'shadow-xs', 'border-l-4', 'border-l-amber-600');
+        row.setAttribute('aria-selected', 'false');
+      }
+    });
+
+    document.querySelectorAll('.ies-scatter-bubble-group').forEach(group => {
+      const gKey = group.getAttribute('data-key');
+      const circle = group.querySelector('.ies-bubble-circle');
+      const ring = group.querySelector('.ies-selection-ring');
+      if (gKey === key) {
+        if (circle) circle.setAttribute('filter', 'url(#ies-bubble-glow)');
+        if (ring) ring.classList.remove('hidden');
+      } else {
+        if (circle) circle.setAttribute('filter', 'url(#ies-bubble-shadow)');
+        if (ring) ring.classList.add('hidden');
+      }
+    });
+  }
+
+  function openDrawer(key) {
+    const c = companyMap[key] || companyMap[key.toUpperCase()];
+    if (!c || !drawerContent) return;
+
+    selectedKey = key;
+    highlightSelection(key);
+
+    const name = c.company_name || c.ticker || 'Company';
+    const ticker = c.ticker || '—';
+    const exchange = c.exchange ? ' | ' + c.exchange : '';
+    const country = c.country ? ' | ' + c.country : '';
+
+    drawerContent.innerHTML = `
+      <div class="flex items-start justify-between gap-4 border-b border-atelier-line px-6 py-6 md:px-7">
+        <div class="min-w-0">
+          <p class="m-0 text-[10px] font-bold uppercase tracking-[0.26em] text-atelier-moss/66">Company Dossier</p>
+          <h4 class="mt-3 truncate font-display text-[2.2rem] font-semibold leading-none text-atelier-ink">${name}</h4>
+          <p class="mt-2 text-sm leading-7 text-atelier-moss">${ticker}${exchange}${country}</p>
+        </div>
+        <button id="ies-drawer-close-inner" class="filter-close-button mt-1" aria-label="Close drawer">
+          <svg class="w-5 h-5 text-atelier-moss" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="panel-scroll flex-1 space-y-6 px-6 py-6 md:px-7 overflow-y-auto">
+        <div class="rounded-[26px] border border-atelier-line bg-white/76 px-5 py-5">
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss">Revenue TTM</span><span class="text-xl font-bold font-display text-emerald-700 mt-1">${formatCompactNumber(c.revenue_ttm)}</span></div>
+            <div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss">Market Cap</span><span class="text-xl font-bold font-display text-atelier-ink mt-1">${formatCompactNumber(c.market_cap)}</span></div>
+            <div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss">EV / Revenue</span><span class="text-xl font-bold font-display text-atelier-ink mt-1">${formatRatio(c.ev_to_revenue_ttm)}</span></div>
+            <div class="flex flex-col"><span class="text-[9px] font-bold uppercase tracking-wider text-atelier-moss">EV / EBITDA</span><span class="text-xl font-bold font-display text-amber-700 mt-1">${formatRatio(c.ev_to_ebitda_ttm)}</span></div>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <h5 class="m-0 font-display text-lg font-semibold text-atelier-ink">Financial Performance</h5>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="rounded-xl border border-atelier-line bg-white/60 p-3"><span class="text-[9px] font-bold uppercase text-atelier-moss block">Revenue TTM</span><span class="text-sm font-semibold font-display text-atelier-ink mt-1 block">${formatCompactNumber(c.revenue_ttm)}</span></div>
+            <div class="rounded-xl border border-atelier-line bg-white/60 p-3"><span class="text-[9px] font-bold uppercase text-atelier-moss block">Market Cap</span><span class="text-sm font-semibold font-display text-atelier-ink mt-1 block">${formatCompactNumber(c.market_cap)}</span></div>
+            <div class="rounded-xl border border-atelier-line bg-white/60 p-3"><span class="text-[9px] font-bold uppercase text-atelier-moss block">Rev. Growth YoY</span><span class="text-sm font-semibold font-display text-atelier-ink mt-1 block">${formatPercent(c.revenue_growth_lq_yoy)}</span></div>
+            <div class="rounded-xl border border-atelier-line bg-white/60 p-3"><span class="text-[9px] font-bold uppercase text-atelier-moss block">Op. Margin TTM</span><span class="text-sm font-semibold font-display text-atelier-ink mt-1 block">${formatPercent(c.operating_margin)}</span></div>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <h5 class="m-0 font-display text-lg font-semibold text-atelier-ink">Valuation</h5>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="rounded-xl border border-atelier-line bg-white/60 p-3"><span class="text-[9px] font-bold uppercase text-atelier-moss block">EV / Revenue</span><span class="text-sm font-semibold font-display text-atelier-ink mt-1 block">${formatRatio(c.ev_to_revenue_ttm)}</span></div>
+            <div class="rounded-xl border border-atelier-line bg-white/60 p-3"><span class="text-[9px] font-bold uppercase text-atelier-moss block">EV / EBITDA</span><span class="text-sm font-semibold font-display text-atelier-ink mt-1 block">${formatRatio(c.ev_to_ebitda_ttm)}</span></div>
+            <div class="rounded-xl border border-atelier-line bg-white/60 p-3"><span class="text-[9px] font-bold uppercase text-atelier-moss block">Forward P/E</span><span class="text-sm font-semibold font-display text-atelier-ink mt-1 block">${formatRatio(c.forward_pe)}</span></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('ies-drawer-close-inner')?.addEventListener('click', closeDrawer);
+
+    if (drawer) {
+      drawer.classList.remove('hidden');
+      setTimeout(() => {
+        drawer.classList.remove('opacity-0', 'pointer-events-none');
+        if (drawerPanel) drawerPanel.classList.remove('translate-x-full');
+      }, 10);
+    }
+  }
+
+  function closeDrawer() {
+    selectedKey = '';
+    highlightSelection('');
+    if (drawerPanel) drawerPanel.classList.add('translate-x-full');
+    if (drawer) {
+      drawer.classList.add('opacity-0', 'pointer-events-none');
+      setTimeout(() => drawer.classList.add('hidden'), 200);
+    }
+  }
+
+  document.querySelectorAll('.ies-universe-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const key = row.getAttribute('data-key');
+      openDrawer(key);
+    });
+  });
+
+  document.querySelectorAll('.ies-scatter-bubble-group').forEach(group => {
+    const key = group.getAttribute('data-key');
+    group.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDrawer(key);
+    });
+
+    group.addEventListener('mouseenter', (e) => {
+      const c = companyMap[key] || companyMap[key.toUpperCase()];
+      if (!c || !tooltip || !stage) return;
+      const rect = stage.getBoundingClientRect();
+      const cx = Number(group.getAttribute('data-cx')) || 0;
+      const cy = Number(group.getAttribute('data-cy')) || 0;
+
+      const pointerX = (cx / 1000) * rect.width;
+      const pointerY = (cy / 560) * rect.height;
+
+      tooltip.style.left = pointerX + 'px';
+      tooltip.style.top = pointerY + 'px';
+      tooltip.querySelector('.tt-avatar').textContent = (c.ticker || c.company_name || 'CO').slice(0, 3).toUpperCase();
+      tooltip.querySelector('.tt-title').textContent = c.company_name || c.ticker || 'Company';
+      tooltip.querySelector('.tt-ticker').textContent = c.ticker || '';
+      tooltip.querySelector('.tt-country').textContent = c.country || c.exchange || '';
+
+      tooltip.querySelector('.tt-rev').textContent = formatCompactNumber(c.revenue_ttm);
+      tooltip.querySelector('.tt-growth').textContent = formatPercent(c.revenue_growth_lq_yoy);
+      tooltip.querySelector('.tt-margin').textContent = formatPercent(c.operating_margin);
+      tooltip.querySelector('.tt-eps').textContent = (c.reported_eps !== undefined && c.reported_eps !== null && !isNaN(c.reported_eps)) ? '$' + Number(c.reported_eps).toFixed(2) : '—';
+      tooltip.querySelector('.tt-surprise').textContent = formatPercent(c.eps_surprise);
+      tooltip.querySelector('.tt-pe').textContent = formatRatio(c.forward_pe);
+
+      tooltip.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
+      tooltip.classList.add('opacity-100', 'scale-100');
+    });
+
+    group.addEventListener('mouseleave', () => {
+      if (tooltip) {
+        tooltip.classList.remove('opacity-100', 'scale-100');
+        tooltip.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+      }
+    });
+  });
+
+  drawerBackdrop?.addEventListener('click', closeDrawer);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDrawer();
+  });
+})();
+</script>
+</div>
+    
+  </main>
+</body>
+</html>

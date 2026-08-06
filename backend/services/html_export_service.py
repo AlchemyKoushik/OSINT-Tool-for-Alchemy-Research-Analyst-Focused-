@@ -256,9 +256,15 @@ def _normalize_export_result(payload: Dict[str, Any]) -> Dict[str, Any]:
 def _is_ies_report_payload(payload: Dict[str, Any]) -> bool:
     return bool(
         isinstance(payload, dict)
-        and isinstance(payload.get("summary"), dict)
-        and isinstance(payload.get("scatter_chart"), dict)
-        and isinstance(payload.get("companies"), list)
+        and (
+            payload.get("section") == "industry_earnings_snapshot"
+            or payload.get("report_type") == "ies_report"
+            or (
+                isinstance(payload.get("summary"), dict)
+                and isinstance(payload.get("scatter_chart"), dict)
+                and isinstance(payload.get("companies"), list)
+            )
+        )
     )
 
 
@@ -271,6 +277,14 @@ def _format_ies_percent(value: Any) -> str:
 
 
 def _format_ies_ratio(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "N/A"
+    return f"{numeric:.1f}x"
+
+
+def _format_ies_ratio_text(value: Any) -> str:
     try:
         numeric = float(value)
     except (TypeError, ValueError):
@@ -293,6 +307,763 @@ def _format_ies_compact_number(value: Any) -> str:
     if absolute >= 1_000:
         return f"{numeric / 1_000:.1f}K"
     return f"{numeric:.1f}"
+
+
+def _format_ies_signed_percent(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "N/A"
+    sign = "+" if numeric > 0 else ""
+    return f"{sign}{numeric:.1f}%"
+
+
+def _format_ies_signed_percent_html(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return '<span class="ies-metric-value ies-metric-value--empty">N/A</span>'
+
+    if numeric > 0:
+        tone = "positive"
+    elif numeric < 0:
+        tone = "negative"
+    else:
+        tone = "neutral"
+    return f'<span class="ies-metric-value ies-metric-value--{tone}">{html.escape(_format_ies_signed_percent(numeric))}</span>'
+
+
+def _format_ies_ratio_html(value: Any) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return '<span class="ies-metric-value ies-metric-value--empty">N/A</span>'
+    return f'<span class="ies-metric-value ies-metric-value--neutral">{html.escape(f"{numeric:.1f}x")}</span>'
+
+
+def _format_ies_compact_number_html(value: Any) -> str:
+    formatted = _format_ies_compact_number(value)
+    if formatted == "N/A":
+        return '<span class="ies-metric-value ies-metric-value--empty">N/A</span>'
+    return f'<span class="ies-metric-value ies-metric-value--neutral">{html.escape(formatted)}</span>'
+
+
+def _compute_ies_scatter_geometry(points: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    normalized_points = []
+    for index, point in enumerate(points):
+        try:
+            x = float(point.get("revenue_growth_lq_yoy"))
+            y = float(point.get("operating_margin"))
+        except (TypeError, ValueError):
+            continue
+        bubble = point.get("bubble_size")
+        try:
+            bubble_value = float(bubble)
+        except (TypeError, ValueError):
+            bubble_value = None
+        normalized_points.append(
+            {
+                "index": index,
+                "x": x,
+                "y": y,
+                "bubble": bubble_value,
+                "ticker": _safe_text(point.get("ticker"), ""),
+                "company_name": _safe_text(point.get("company_name"), ""),
+                "country": _safe_text(point.get("country") or point.get("exchange"), ""),
+                "is_outlier": bool(point.get("is_outlier")),
+            }
+        )
+
+    if not normalized_points:
+        return {
+            "points": [],
+            "has_data": False,
+            "width": 1000,
+            "height": 560,
+            "margin": {"top": 42, "right": 48, "bottom": 76, "left": 104},
+            "plot_width": 848,
+            "plot_height": 442,
+            "x_min": 0.0,
+            "x_max": 1.0,
+            "y_min": 0.0,
+            "y_max": 1.0,
+            "bubble_min": 1.0,
+            "bubble_max": 1.0,
+            "x_median": 0.0,
+            "y_median": 0.0,
+        }
+
+    x_values = [point["x"] for point in normalized_points]
+    y_values = [point["y"] for point in normalized_points]
+    bubble_values = [point["bubble"] for point in normalized_points if point["bubble"] is not None]
+    x_min = min(x_values)
+    x_max = max(x_values)
+    y_min = min(y_values)
+    y_max = max(y_values)
+    bubble_min = min(bubble_values) if bubble_values else 1.0
+    bubble_max = max(bubble_values) if bubble_values else 1.0
+
+    def median(values: Sequence[float]) -> float:
+        ordered = sorted(values)
+        if not ordered:
+            return 0.0
+        middle = len(ordered) // 2
+        if len(ordered) % 2:
+            return ordered[middle]
+        return (ordered[middle - 1] + ordered[middle]) / 2
+
+    return {
+        "points": normalized_points,
+        "has_data": True,
+        "width": 1000,
+        "height": 560,
+        "margin": {"top": 42, "right": 48, "bottom": 76, "left": 104},
+        "plot_width": 848,
+        "plot_height": 442,
+        "x_min": x_min,
+        "x_max": x_max,
+        "y_min": y_min,
+        "y_max": y_max,
+        "bubble_min": bubble_min,
+        "bubble_max": bubble_max,
+        "x_median": median(x_values),
+        "y_median": median(y_values),
+    }
+
+
+def _render_ies_scatter_svg(chart: Dict[str, Any]) -> str:
+    points = list(chart.get("data", []) or [])
+    geometry = _compute_ies_scatter_geometry(points)
+    if not geometry["has_data"]:
+        return (
+            '<div class="ies-empty-state">No scatter chart data was returned for this report.</div>'
+        )
+
+    width = geometry["width"]
+    height = geometry["height"]
+    margin = geometry["margin"]
+    plot_width = geometry["plot_width"]
+    plot_height = geometry["plot_height"]
+    x_min = geometry["x_min"]
+    x_max = geometry["x_max"]
+    y_min = geometry["y_min"]
+    y_max = geometry["y_max"]
+    bubble_min = geometry["bubble_min"]
+    bubble_max = geometry["bubble_max"]
+    x_median = geometry["x_median"]
+    y_median = geometry["y_median"]
+    x_pad = (x_max - x_min or 1.0) * 0.18
+    y_pad = (y_max - y_min or 1.0) * 0.18
+    axis_x_min = x_min - x_pad
+    axis_x_max = x_max + x_pad
+    axis_y_min = y_min - y_pad
+    axis_y_max = y_max + y_pad
+
+    def x_scale(value: float) -> float:
+        return margin["left"] + ((value - axis_x_min) / max(1e-9, axis_x_max - axis_x_min)) * plot_width
+
+    def y_scale(value: float) -> float:
+        return margin["top"] + plot_height - ((value - axis_y_min) / max(1e-9, axis_y_max - axis_y_min)) * plot_height
+
+    def radius_for(point: Dict[str, Any]) -> float:
+        bubble_value = point["bubble"] if point["bubble"] is not None else bubble_min
+        bubble_range = max(1.0, bubble_max - bubble_min)
+        scaled = 9 + ((bubble_value - bubble_min) / bubble_range) * 20
+        return max(9.0, min(29.0, scaled))
+
+    def color_for(point: Dict[str, Any]) -> str:
+        diff = point["y"] - y_median
+        spread = max(4.0, abs(y_max - y_min) * 0.4)
+        if diff > spread * 0.08:
+            return "url(#ies-grad-pos)"
+        if diff < -spread * 0.08:
+            return "url(#ies-grad-neg)"
+        return "url(#ies-grad-neu)"
+
+    def format_axis_percent(value: float) -> str:
+        sign = "+" if value > 0 else ""
+        return f"{sign}{value:.1f}%"
+
+    grid_line_count = 4
+    x_ticks = [axis_x_min + ((axis_x_max - axis_x_min) * index) / grid_line_count for index in range(grid_line_count + 1)]
+    y_ticks = [axis_y_min + ((axis_y_max - axis_y_min) * index) / grid_line_count for index in range(grid_line_count + 1)]
+    left_axis_x = margin["left"]
+    right_axis_x = margin["left"] + plot_width
+    top_axis_y = margin["top"]
+    bottom_axis_y = margin["top"] + plot_height
+    median_x = x_scale(x_median)
+    median_y = y_scale(y_median)
+
+    sorted_points = sorted(
+        geometry["points"],
+        key=lambda point: point["bubble"] if point["bubble"] is not None else bubble_min,
+        reverse=True,
+    )
+
+    watermark_positions = [
+        (left_axis_x + plot_width * 0.75, top_axis_y + plot_height * 0.22, "HIGH GROWTH • HIGH MARGIN"),
+        (left_axis_x + plot_width * 0.25, top_axis_y + plot_height * 0.22, "LOW GROWTH • HIGH MARGIN"),
+        (left_axis_x + plot_width * 0.75, top_axis_y + plot_height * 0.78, "HIGH GROWTH • LOW MARGIN"),
+        (left_axis_x + plot_width * 0.25, top_axis_y + plot_height * 0.78, "LOW GROWTH • LOW MARGIN"),
+    ]
+
+    bubbles = []
+    for point in sorted_points:
+        x = x_scale(point["x"])
+        y = y_scale(point["y"])
+        radius = radius_for(point)
+        ticker = html.escape(point.get("ticker") or "")
+        company_name = html.escape(point.get("company_name") or ticker)
+        rev_growth = _format_ies_signed_percent(point.get("x"))
+        op_margin = _format_ies_signed_percent(point.get("y"))
+        bubble_val = _format_ies_compact_number(point.get("bubble"))
+        title_text = f"{company_name} ({ticker})\nRevenue Growth: {rev_growth}\nOp. Margin: {op_margin}\nRevenue TTM: {bubble_val}"
+        bubbles.append(
+            f'<g class="ies-scatter-bubble-group group outline-none" data-key="{ticker}" transform="translate({x:.2f}, {y:.2f})">'
+            f'<circle class="ies-bubble-circle transition-all duration-200" r="{radius:.2f}" fill="{color_for(point)}" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="2" filter="url(#ies-bubble-shadow)">'
+            f'<title>{title_text}</title>'
+            '</circle>'
+            '</g>'
+        )
+
+    y_grid_lines = []
+    for tick in y_ticks:
+        y = top_axis_y + plot_height - ((tick - axis_y_min) / max(1e-9, axis_y_max - axis_y_min)) * plot_height
+        y_grid_lines.append(
+            "<g>"
+            f'<line x1="{left_axis_x:.2f}" y1="{y:.2f}" x2="{right_axis_x:.2f}" y2="{y:.2f}" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" />'
+            f'<text x="{left_axis_x - 14:.2f}" y="{y + 4:.2f}" text-anchor="end" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">{html.escape(format_axis_percent(tick))}</text>'
+            "</g>"
+        )
+
+    x_grid_lines = []
+    for tick in x_ticks:
+        x = left_axis_x + ((tick - axis_x_min) / max(1e-9, axis_x_max - axis_x_min)) * plot_width
+        x_grid_lines.append(
+            "<g>"
+            f'<line x1="{x:.2f}" y1="{top_axis_y:.2f}" x2="{x:.2f}" y2="{bottom_axis_y:.2f}" stroke="rgba(104,117,113,0.12)" stroke-width="0.8" />'
+            f'<text x="{x:.2f}" y="{bottom_axis_y + 20:.2f}" text-anchor="middle" font-size="11" font-family="Manrope, sans-serif" font-weight="600" fill="#65706A">{html.escape(format_axis_percent(tick))}</text>'
+            "</g>"
+        )
+
+    watermark_html = "".join(
+        f'<text x="{x:.2f}" y="{y:.2f}" text-anchor="middle" font-size="11" font-weight="700" letter-spacing="0.22em" fill="rgba(65,80,74,0.07)">{html.escape(label)}</text>'
+        for x, y, label in watermark_positions
+    )
+
+    chart_title = "Peer Positioning"
+    x_label = html.escape(_safe_text(chart.get("x_label"), "Revenue Growth (LQ YoY)"))
+    y_label = html.escape(_safe_text(chart.get("y_label"), "Operating Margin (TTM)"))
+    bubble_label = html.escape(_safe_text(chart.get("bubble_size_label"), "Revenue TTM"))
+
+    return f"""
+<div class="rounded-[28px] border border-atelier-line/80 bg-white/80 p-5 md:p-7 shadow-[0_20px_50px_rgba(31,42,41,0.05)]">
+  <div class="flex flex-wrap items-center justify-between gap-4 border-b border-atelier-line/60 pb-4">
+    <div>
+      <h4 class="m-0 font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">{chart_title}</h4>
+    </div>
+    <div class="flex flex-wrap items-center gap-2.5">
+      <div class="inline-flex items-center gap-2 rounded-full border border-atelier-line/80 bg-white/90 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-ink shadow-2xs">
+        <span class="h-2 w-2 rounded-full bg-amber-600"></span>
+        <span>Bubble Size: <strong class="text-atelier-forest">{bubble_label}</strong></span>
+      </div>
+      <div class="inline-flex items-center gap-2 rounded-full border border-atelier-line/80 bg-white/90 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-atelier-ink shadow-2xs">
+        <div class="flex h-2.5 w-6 rounded-full bg-gradient-to-r from-[#D96B60] via-[#C5BEB5] to-[#4E8764]"></div>
+        <span>Color: <strong class="text-atelier-forest">{y_label}</strong></span>
+      </div>
+    </div>
+  </div>
+  <div class="ies-chart-stage mt-6 rounded-[24px] border border-atelier-line/60 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#FFFDF8] via-white to-[#F9F5EC] p-4 md:p-6 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),0_20px_50px_rgba(31,42,41,0.04)]" style="position: relative; overflow: visible; min-height: 35rem;">
+    <svg viewBox="0 0 {width} {height}" class="ies-scatter block h-auto w-full overflow-visible" role="img" aria-label="{chart_title}">
+      <defs>
+        <radialGradient id="ies-grad-pos" cx="35%" cy="35%" r="65%">
+          <stop offset="0%" stop-color="#6EA383" stop-opacity="0.95" />
+          <stop offset="70%" stop-color="#4E8764" stop-opacity="0.88" />
+          <stop offset="100%" stop-color="#3A6A4E" stop-opacity="0.9" />
+        </radialGradient>
+        <radialGradient id="ies-grad-neu" cx="35%" cy="35%" r="65%">
+          <stop offset="0%" stop-color="#DCD5CC" stop-opacity="0.95" />
+          <stop offset="70%" stop-color="#C5BEB5" stop-opacity="0.88" />
+          <stop offset="100%" stop-color="#A8A096" stop-opacity="0.9" />
+        </radialGradient>
+        <radialGradient id="ies-grad-neg" cx="35%" cy="35%" r="65%">
+          <stop offset="0%" stop-color="#E88B81" stop-opacity="0.95" />
+          <stop offset="70%" stop-color="#D96B60" stop-opacity="0.88" />
+          <stop offset="100%" stop-color="#B84F45" stop-opacity="0.9" />
+        </radialGradient>
+        <filter id="ies-bubble-shadow" x="-40%" y="-40%" width="180%" height="180%">
+          <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#1F2A29" flood-opacity="0.16" />
+        </filter>
+      </defs>
+      <g class="quadrant-watermarks pointer-events-none select-none">
+        {watermark_html}
+      </g>
+      {"".join(y_grid_lines)}
+      {"".join(x_grid_lines)}
+      <line x1="{left_axis_x:.2f}" y1="{median_y:.2f}" x2="{right_axis_x:.2f}" y2="{median_y:.2f}" stroke="rgba(88,104,101,0.25)" stroke-width="1.2" stroke-dasharray="5 5" />
+      <line x1="{median_x:.2f}" y1="{top_axis_y:.2f}" x2="{median_x:.2f}" y2="{bottom_axis_y:.2f}" stroke="rgba(88,104,101,0.25)" stroke-width="1.2" stroke-dasharray="5 5" />
+      <g class="median-labels pointer-events-none select-none">
+        <text x="{right_axis_x - 10:.2f}" y="{median_y - 6:.2f}" text-anchor="end" font-size="9" font-weight="700" letter-spacing="0.16em" fill="rgba(88,104,101,0.45)">ABOVE MEDIAN MARGIN</text>
+        <text x="{right_axis_x - 10:.2f}" y="{median_y + 14:.2f}" text-anchor="end" font-size="9" font-weight="700" letter-spacing="0.16em" fill="rgba(88,104,101,0.45)">BELOW MEDIAN MARGIN</text>
+        <text x="{median_x + 8:.2f}" y="{top_axis_y + 14:.2f}" text-anchor="start" font-size="9" font-weight="700" letter-spacing="0.16em" fill="rgba(88,104,101,0.45)">ABOVE MEDIAN GROWTH</text>
+        <text x="{median_x - 8:.2f}" y="{top_axis_y + 14:.2f}" text-anchor="end" font-size="9" font-weight="700" letter-spacing="0.16em" fill="rgba(88,104,101,0.45)">BELOW MEDIAN GROWTH</text>
+      </g>
+      <line x1="{left_axis_x:.2f}" y1="{bottom_axis_y:.2f}" x2="{right_axis_x:.2f}" y2="{bottom_axis_y:.2f}" stroke="rgba(31,42,41,0.22)" stroke-width="1.2" />
+      <line x1="{left_axis_x:.2f}" y1="{top_axis_y:.2f}" x2="{left_axis_x:.2f}" y2="{bottom_axis_y:.2f}" stroke="rgba(31,42,41,0.22)" stroke-width="1.2" />
+      {"".join(bubbles)}
+      <text x="{(left_axis_x + right_axis_x) / 2:.2f}" y="{height - 4:.2f}" text-anchor="middle" font-size="12" font-weight="700" fill="#41504A">{x_label}</text>
+      <text x="18" y="{(top_axis_y + bottom_axis_y) / 2:.2f}" text-anchor="middle" font-size="12" font-weight="700" fill="#41504A" transform="rotate(-90 18 {(top_axis_y + bottom_axis_y) / 2:.2f})">{y_label}</text>
+    </svg>
+  </div>
+</div>
+"""
+
+
+def _render_ies_insight_cards(result: Dict[str, Any]) -> str:
+    companies = list(result.get("companies", []) or [])
+    summary = dict(result.get("summary", {}) or {})
+
+    highest_growth = None
+    for company in companies:
+        try:
+            float(company.get("revenue_growth_lq_yoy"))
+        except (TypeError, ValueError):
+            continue
+        if highest_growth is None or float(company.get("revenue_growth_lq_yoy")) > float(highest_growth.get("revenue_growth_lq_yoy")):
+            highest_growth = company
+
+    highest_margin = None
+    for company in companies:
+        try:
+            float(company.get("operating_margin"))
+        except (TypeError, ValueError):
+            continue
+        if highest_margin is None or float(company.get("operating_margin")) > float(highest_margin.get("operating_margin")):
+            highest_margin = company
+
+    revenue_candidates = []
+    ebitda_candidates = []
+    for company in companies:
+        try:
+            revenue_candidates.append(float(company.get("ev_to_revenue_ttm")))
+        except (TypeError, ValueError):
+            pass
+        try:
+            ebitda_candidates.append(float(company.get("ev_to_ebitda_ttm")))
+        except (TypeError, ValueError):
+            pass
+
+    highest_growth_label = (
+        f"{_safe_text(highest_growth.get('company_name') or highest_growth.get('ticker'), 'Company')} leads revenue growth at {_format_ies_signed_percent(highest_growth.get('revenue_growth_lq_yoy'))}."
+        if highest_growth
+        else "Revenue growth leadership is not available in the current universe."
+    )
+    highest_margin_label = (
+        f"{_safe_text(highest_margin.get('company_name') or highest_margin.get('ticker'), 'Company')} shows the highest operating margin at {_format_ies_signed_percent(highest_margin.get('operating_margin'))}."
+        if highest_margin
+        else "Operating margin leadership is not available in the current universe."
+    )
+
+    if revenue_candidates:
+        valuation_revenue_text = f"EV / Revenue spans {_format_ies_ratio_text(min(revenue_candidates))} to {_format_ies_ratio_text(max(revenue_candidates))} across the universe."
+    else:
+        valuation_revenue_text = "EV / Revenue could not be derived from the available companies."
+
+    if ebitda_candidates:
+        valuation_ebitda_text = f"EV / EBITDA spans {_format_ies_ratio_text(min(ebitda_candidates))} to {_format_ies_ratio_text(max(ebitda_candidates))} across the universe."
+    else:
+        valuation_ebitda_text = "EV / EBITDA could not be derived from the available companies."
+
+    summary_text = html.escape(
+        _safe_text(
+            summary.get("memo_summary")
+            or summary.get("summary")
+            or "This memo presents peer data for the selected companies to support industry analysis and comparison.",
+            "This memo presents peer data for the selected companies to support industry analysis and comparison.",
+        )
+    )
+
+    return f"""
+<section class="ies-insights-shell rounded-[28px] border border-atelier-line/80 bg-white/80 p-6 md:p-8 shadow-[0_20px_50px_rgba(31,42,41,0.04)]">
+  <div class="flex flex-col gap-1.5">
+    <h4 class="m-0 font-display text-2xl md:text-3xl font-semibold leading-tight text-atelier-ink">Editorial Readout &amp; Market Structure</h4>
+    <p class="mt-1 font-display text-xs md:text-sm font-medium leading-relaxed text-atelier-moss">{summary_text}</p>
+  </div>
+  <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div class="ies-insight-card h-full rounded-2xl border border-atelier-line/70 border-l-4 p-5 shadow-2xs border-l-emerald-600 bg-gradient-to-br from-emerald-50/40 to-white/90">
+      <div class="flex items-center gap-2">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs shrink-0">
+          <svg class="w-4 h-4 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; min-width: 16px; min-height: 16px;"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>
+        </div>
+        <p class="m-0 font-display text-[12px] font-semibold text-atelier-ink">Highest Growth</p>
+      </div>
+      <p class="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium whitespace-pre-line">{html.escape(highest_growth_label)}</p>
+    </div>
+    <div class="ies-insight-card h-full rounded-2xl border border-atelier-line/70 border-l-4 p-5 shadow-2xs border-l-amber-500 bg-gradient-to-br from-amber-50/30 to-white/90">
+      <div class="flex items-center gap-2">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs shrink-0">
+          <svg class="w-4 h-4 text-amber-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; min-width: 16px; min-height: 16px;"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>
+        </div>
+        <p class="m-0 font-display text-[12px] font-semibold text-atelier-ink">Highest Margin</p>
+      </div>
+      <p class="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium whitespace-pre-line">{html.escape(highest_margin_label)}</p>
+    </div>
+    <div class="ies-insight-card h-full rounded-2xl border border-atelier-line/70 border-l-4 p-5 shadow-2xs border-l-slate-500 bg-gradient-to-br from-slate-50/25 to-white/90">
+      <div class="flex items-center gap-2">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 shadow-2xs shrink-0">
+          <svg class="w-4 h-4 text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; min-width: 16px; min-height: 16px;"><line x1="18" y1="20" x2="18" y2="10" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
+        </div>
+        <p class="m-0 font-display text-[12px] font-semibold text-atelier-ink">Valuation Range</p>
+      </div>
+      <p class="mt-2.5 font-display text-xs md:text-sm leading-relaxed text-atelier-moss font-medium whitespace-pre-line">{html.escape(valuation_revenue_text)}<br>{html.escape(valuation_ebitda_text)}</p>
+    </div>
+  </div>
+</section>
+"""
+
+
+def _render_ies_company_table(companies: Sequence[Dict[str, Any]]) -> str:
+    normalized_companies = list(companies or [])
+    if not normalized_companies:
+        return '<div class="ies-empty-state">No companies were returned for this report.</div>'
+
+    rows = []
+    for index, company in enumerate(normalized_companies, start=1):
+        company_name = _safe_text(company.get("company_name") or company.get("ticker"), "Company")
+        ticker = _safe_text(company.get("ticker"), "N/A")
+        exchange = _safe_text(company.get("exchange"), "")
+        country = _safe_text(company.get("country"), "")
+
+        is_outlier = company.get("is_outlier")
+        row_bg = "bg-amber-50/40" if is_outlier else ("bg-[#FAF7F2]/30" if index % 2 == 0 else "bg-white/40")
+
+        location_bits = [part for part in [ticker, exchange, country] if part]
+        location_html = " ".join(
+            f"<span>• {html.escape(part)}</span>" if idx > 0 else f'<span class="font-semibold text-atelier-ink">{html.escape(part)}</span>'
+            for idx, part in enumerate(location_bits)
+        )
+
+        rows.append(
+            f"""
+            <tr class="ies-universe-row group transition-colors duration-75 {row_bg}" data-key="{html.escape(ticker)}">
+              <td class="py-3 pl-3 pr-1 font-display text-xs font-semibold text-atelier-moss/60 align-middle text-center w-8">{index:02d}</td>
+              <td class="py-3 px-2.5 align-middle">
+                <div class="flex flex-col min-w-0">
+                  <span class="font-display font-bold text-atelier-ink break-words whitespace-normal leading-tight text-xs sm:text-sm">{html.escape(company_name)}</span>
+                  <div class="flex flex-wrap items-center gap-1 mt-0.5 text-atelier-moss/80 font-display text-[10px]">{location_html}</div>
+                </div>
+              </td>
+              <td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">{_format_ies_compact_number(company.get("revenue_ttm"))}</td>
+              <td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">{_format_ies_signed_percent(company.get("revenue_growth_lq_yoy"))}</td>
+              <td class="py-3 px-2 text-center font-display tabular-nums font-semibold text-atelier-ink align-middle text-xs sm:text-sm">{_format_ies_signed_percent(company.get("operating_margin"))}</td>
+              <td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">{_format_ies_ratio(company.get("ev_to_revenue_ttm"))}</td>
+              <td class="py-3 px-2 text-center font-display tabular-nums font-medium text-atelier-ink align-middle text-xs sm:text-sm">{_format_ies_ratio(company.get("ev_to_ebitda_ttm"))}</td>
+            </tr>
+            """
+        )
+
+    return f"""
+<section>
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+    <div>
+      <h4 class="m-0 font-display text-2xl font-semibold leading-tight text-atelier-ink">Company Ranking Table</h4>
+    </div>
+  </div>
+  <div class="overflow-hidden rounded-2xl border border-atelier-line/80 bg-white/80 shadow-[0_18px_48px_rgba(31,42,41,0.04)]">
+    <div class="max-h-[38rem] overflow-y-auto panel-scroll">
+      <table class="w-full text-left border-collapse">
+        <thead class="sticky top-0 z-20 isolate bg-[#FAF6F0] border-b border-atelier-line/80">
+          <tr>
+            <th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 pl-3 pr-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70 w-8">#</th>
+            <th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Company &amp; Ticker</th>
+            <th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Revenue (TTM)</th>
+            <th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Rev. Growth (LQ YoY)</th>
+            <th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">Op. Margin (TTM)</th>
+            <th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / Revenue</th>
+            <th class="sticky top-0 z-20 bg-[#FAF6F0] py-3 px-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-atelier-moss/70">EV / EBITDA</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-atelier-line/40">
+          {"".join(rows)}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+"""
+
+
+def _render_ies_export_document(result: Dict[str, Any], meta: Dict[str, Any]) -> str:
+    request = dict(result.get("request", {}) or {})
+    summary = dict(result.get("summary", {}) or {})
+    metadata = dict(result.get("metadata", {}) or {})
+    chart = dict(result.get("scatter_chart", {}) or {})
+    companies = list(result.get("companies", []) or [])
+
+    title = _escape(result.get("title"), "Industry Earnings Snapshot")
+    scatter_html = _render_ies_scatter_svg(chart)
+    table_html = _render_ies_company_table(companies)
+    insights_html = _render_ies_insight_cards(result)
+
+    companies_scanned = summary.get("companies_returned") or len(companies) or 0
+    companies_fetched = summary.get("companies_enriched") or metadata.get("total_companies_successfully_enriched") or len(companies) or 0
+    median_rev_growth = summary.get("median_revenue_growth")
+    median_op_margin = summary.get("median_operating_margin")
+    median_ev_revenue = summary.get("median_ev_to_revenue")
+    median_ev_ebitda = summary.get("median_ev_to_ebitda")
+
+    def _trend_arrow(value: Any) -> str:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return ""
+        if numeric > 0:
+            return '<span class="trend-up">↑</span>'
+        if numeric < 0:
+            return '<span class="trend-down">↓</span>'
+        return ""
+
+    kpi_cards_html = (
+        '<div class="ies-kpi-card"><span class="ies-kpi-label">Companies Scanned</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">'
+        f'{html.escape(str(companies_scanned))}</span></div></div>'
+        '<div class="ies-kpi-card"><span class="ies-kpi-label">Companies Fetched</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">'
+        f'{html.escape(str(companies_fetched))}</span></div></div>'
+        '<div class="ies-kpi-card"><span class="ies-kpi-label">Median Rev. Growth (LQ YoY)</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">'
+        f'{html.escape(_format_ies_percent(median_rev_growth))}</span>{_trend_arrow(median_rev_growth)}</div></div>'
+        '<div class="ies-kpi-card"><span class="ies-kpi-label">Median Op. Margin (TTM)</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">'
+        f'{html.escape(_format_ies_percent(median_op_margin))}</span>{_trend_arrow(median_op_margin)}</div></div>'
+        '<div class="ies-kpi-card"><span class="ies-kpi-label">Median EV / Revenue</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">'
+        f'{html.escape(_format_ies_ratio(median_ev_revenue))}</span></div></div>'
+        '<div class="ies-kpi-card"><span class="ies-kpi-label">Median EV / EBITDA</span><div class="ies-kpi-val-row"><span class="ies-kpi-value">'
+        f'{html.escape(_format_ies_ratio(median_ev_ebitda))}</span></div></div>'
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #F8F5EE;
+      --panel: #FFFDF9;
+      --panel-strong: #FFFDF8;
+      --ink: #1F2A29;
+      --muted: #65706A;
+      --accent: #27433c;
+      --accent-soft: #dce8e1;
+      --line: rgba(62, 69, 63, 0.12);
+      --gold: #B88C52;
+      --shadow: 0 18px 40px rgba(31, 42, 41, 0.08);
+      --font-display: 'Fraunces', Georgia, serif;
+      --font-body: 'Manrope', -apple-system, sans-serif;
+    }}
+
+    * {{
+      box-sizing: border-box;
+    }}
+
+    html, body {{
+      min-height: 100%;
+    }}
+
+    html {{
+      font-size: 15px;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(231, 211, 181, 0.38), transparent 22%),
+        radial-gradient(circle at 84% 84%, rgba(203, 228, 217, 0.28), transparent 24%),
+        linear-gradient(135deg, #fbf7f1 0%, #f4eee4 56%, #eee4d5 100%);
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }}
+
+    body {{
+      margin: 0;
+      font-family: var(--font-body);
+      color: var(--ink);
+      overflow-x: hidden;
+      overflow-y: auto;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(231, 211, 181, 0.38), transparent 22%),
+        radial-gradient(circle at 84% 84%, rgba(203, 228, 217, 0.28), transparent 24%),
+        linear-gradient(135deg, #fbf7f1 0%, #f4eee4 56%, #eee4d5 100%);
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }}
+
+    body::before {{
+      content: "";
+      position: fixed;
+      inset: -2px;
+      z-index: -1;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(39, 67, 60, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(39, 67, 60, 0.03) 1px, transparent 1px);
+      background-size: 26px 26px;
+      mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.7), transparent 95%);
+      opacity: 0.35;
+    }}
+
+    body::after {{
+      content: "";
+      position: fixed;
+      inset: -2px;
+      z-index: -1;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 84% 8%, rgba(255, 248, 239, 0.72), transparent 18%);
+      opacity: 0.95;
+    }}
+
+    .memo-shell {{
+      width: min(1120px, calc(100% - 32px));
+      margin: 32px auto 48px;
+      display: grid;
+      gap: 28px;
+    }}
+
+    .paper-sheet {{
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 248, 242, 0.96));
+      border: 1px solid rgba(62, 69, 63, 0.12);
+      border-radius: 32px;
+      box-shadow: 0 20px 50px rgba(31, 42, 41, 0.05);
+      padding: 36px;
+      position: relative;
+    }}
+
+    .paper-sheet::before {{
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.68), transparent 18%);
+    }}
+
+    .ies-hero {{
+      margin-bottom: 32px;
+      position: relative;
+      z-index: 1;
+    }}
+
+    .ies-hero h3 {{
+      font-family: var(--font-display);
+      font-size: 38px;
+      font-weight: 700;
+      line-height: 1.05;
+      color: #0F172A;
+      margin: 0;
+      opacity: 1 !important;
+    }}
+
+    .ies-kpi-ribbon {{
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(62, 69, 63, 0.14);
+      border-radius: 18px;
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      position: relative;
+      z-index: 1;
+    }}
+
+    .ies-kpi-card {{
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4px 8px;
+    }}
+
+    .ies-kpi-card + .ies-kpi-card {{
+      border-left: 1px solid rgba(62, 69, 63, 0.12);
+      padding-left: 16px;
+    }}
+
+    .ies-kpi-label {{
+      font-family: var(--font-display);
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #1F2937;
+      opacity: 1 !important;
+    }}
+
+    .ies-kpi-val-row {{
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-top: 6px;
+    }}
+
+    .ies-kpi-value {{
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #000000;
+      opacity: 1 !important;
+    }}
+
+    .trend-up {{ color: #047857; font-weight: 700; font-size: 14px; }}
+    .trend-down {{ color: #be123c; font-weight: 700; font-size: 14px; }}
+
+    .panel-scroll {{
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }}
+    .panel-scroll::-webkit-scrollbar {{
+      display: none;
+      width: 0;
+      height: 0;
+    }}
+
+    @media (max-width: 960px) {{
+      .ies-kpi-ribbon {{ grid-template-columns: repeat(3, 1fr); }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="memo-shell">
+    <div class="paper-sheet ies-result-sheet flex w-full flex-col rounded-[32px] px-6 py-6 md:px-10 md:py-10 space-y-9 my-auto justify-center">
+      <section class="ies-hero">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div class="w-full space-y-2">
+            <h3 class="font-display text-4xl sm:text-5xl font-semibold leading-[0.95] tracking-tight text-atelier-ink">{title}</h3>
+          </div>
+        </div>
+      </section>
+
+      <div class="ies-kpi-ribbon">
+        {kpi_cards_html}
+      </div>
+
+      <section>
+        {scatter_html}
+      </section>
+
+      {insights_html}
+
+      {table_html}
+    </div>
+  </main>
+</body>
+</html>
+"""
 
 
 def _render_source_link(source: Dict[str, Any], index: int) -> str:
@@ -575,6 +1346,14 @@ def build_html_export(
         result["scatter_chart"] = dict(result.get("scatter_chart", {}) or {})
         result["companies"] = list(result.get("companies", []) or [])
         result["metadata"] = dict(result.get("metadata", {}) or {})
+        meta = dict(meta_payload or {})
+        location_meta = meta.get("location") if isinstance(meta.get("location"), dict) else {}
+        meta["location"] = {
+            "label": _safe_text(location_meta.get("label"), "Global"),
+        }
+        meta["prepared"] = _safe_text(meta.get("prepared"), "")
+        html_output = _render_ies_export_document(result, meta)
+        return html_output.encode("utf-8"), _build_filename(result, meta)
     else:
         result = _normalize_export_result(result_payload)
     meta = dict(meta_payload or {})
